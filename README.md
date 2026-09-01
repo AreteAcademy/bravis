@@ -7,13 +7,20 @@ execução em pod no Kubernetes.
 Arquitetura e faseamento: [`docs/plan.md`](docs/plan.md).
 Relatórios por fase: [`docs/phases/`](docs/phases/).
 
-**Estado: PHASE 1 concluída.** Workflows em YAML, validação de grafo e execução
-local. Sem fila, persistência de run nem scheduler — ver `docs/phases/`.
+**Estado: PHASE 4 concluída.** Workflows em YAML, fila persistente, scheduler com
+cron e backfill. Sem UI ainda — ver `docs/phases/`.
 
 ```bash
-bravis validate examples/          # valida sem banco, serve na CI
-bravis run examples/pipeline.yaml  # executa na propria instancia
+bravis validate examples/            # valida sem banco, serve na CI
+bravis run examples/pipeline.yaml    # executa agora, na propria instancia
+
+bravis publish examples/*.yaml       # grava workflow e agenda no banco
+bravis scheduler --concurrency 5     # materializa slots e executa
+bravis backfill diario --from 2026-01-01 --to 2026-01-31
 ```
+
+O scheduler **cria** runs; a fila os **executa**. Os dois laços são independentes:
+um pode cair sem afetar o outro.
 
 O YAML aceita `type: chain` (ordem do arquivo) ou `type: dag` com `depends_on`.
 `chain` é açúcar: vira arestas no parser, e o motor conhece apenas DAG.

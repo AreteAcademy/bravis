@@ -34,11 +34,17 @@ func (r *RunRepo) Criar(ctx context.Context, run dom.Run) (dom.Run, error) {
 		run.Status = dom.StatusCreated
 	}
 
+	if run.TriggerType == "" {
+		run.TriggerType = "manual"
+	}
+
 	err := r.pool.QueryRow(ctx, `
-		INSERT INTO runs (id, workflow_slug, idempotency_key, status, attempt, definicao)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO runs (id, workflow_slug, idempotency_key, status, attempt, definicao,
+		                  trigger_type, logical_date)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING criado_em`,
 		run.ID, run.WorkflowSlug, run.IdempotencyKey, run.Status, run.Attempt, run.Definicao,
+		run.TriggerType, run.LogicalDate,
 	).Scan(&run.CriadoEm)
 
 	if err != nil {
@@ -114,10 +120,11 @@ func (r *RunRepo) Buscar(ctx context.Context, id uuid.UUID) (dom.Run, error) {
 	var run dom.Run
 	err := r.pool.QueryRow(ctx, `
 		SELECT id, workflow_slug, idempotency_key, status, attempt, definicao,
-		       erro, criado_em, iniciado_em, terminado_em
+		       trigger_type, logical_date, erro, criado_em, iniciado_em, terminado_em
 		FROM runs WHERE id = $1`, id).
 		Scan(&run.ID, &run.WorkflowSlug, &run.IdempotencyKey, &run.Status, &run.Attempt,
-			&run.Definicao, &run.Erro, &run.CriadoEm, &run.IniciadoEm, &run.TerminadoEm)
+			&run.Definicao, &run.TriggerType, &run.LogicalDate,
+			&run.Erro, &run.CriadoEm, &run.IniciadoEm, &run.TerminadoEm)
 	return run, err
 }
 
@@ -137,6 +144,27 @@ func (r *RunRepo) ContarPorStatus(ctx context.Context) (map[dom.Status]int, erro
 			return nil, err
 		}
 		out[s] = n
+	}
+	return out, linhas.Err()
+}
+
+// ContarPorTrigger mostra a origem dos runs — distinguir backfill de agendado e
+// o que a secao 12 pede ao investigar um incidente.
+func (r *RunRepo) ContarPorTrigger(ctx context.Context) (map[string]int, error) {
+	linhas, err := r.pool.Query(ctx, `SELECT trigger_type, count(*) FROM runs GROUP BY trigger_type`)
+	if err != nil {
+		return nil, err
+	}
+	defer linhas.Close()
+
+	out := map[string]int{}
+	for linhas.Next() {
+		var t string
+		var n int
+		if err := linhas.Scan(&t, &n); err != nil {
+			return nil, err
+		}
+		out[t] = n
 	}
 	return out, linhas.Err()
 }

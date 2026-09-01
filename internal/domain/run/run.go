@@ -18,10 +18,18 @@ type Run struct {
 	Status         Status
 	Attempt        int
 	Definicao      []byte
-	CriadoEm       time.Time
-	IniciadoEm     *time.Time
-	TerminadoEm    *time.Time
-	Erro           string
+
+	// TriggerType diz por que o Run existe (secao 12). Sem ele nao da para
+	// distinguir um backfill de uma execucao agendada ao investigar incidente.
+	TriggerType string
+
+	// LogicalDate e o slot que este Run representa. Nulo em disparo manual, que
+	// nao pertence a slot nenhum.
+	LogicalDate *time.Time
+	CriadoEm    time.Time
+	IniciadoEm  *time.Time
+	TerminadoEm *time.Time
+	Erro        string
 }
 
 // TaskRun e a execucao de um no dentro de um Run.

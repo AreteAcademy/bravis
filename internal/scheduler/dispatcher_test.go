@@ -34,8 +34,10 @@ func banco(t *testing.T) *postgres.Pool {
 	}
 	t.Cleanup(p.Close)
 
-	// Cada teste comeca do zero: fila e runs sao estado global da tabela.
-	if _, err := p.Exec(context.Background(), `TRUNCATE queue_items, task_runs, runs CASCADE`); err != nil {
+	// Cada teste comeca do zero. `schedules` entra na lista mesmo sem FK para
+	// workflows: ela referencia o slug como texto, entao o CASCADE nao a alcanca.
+	if _, err := p.Exec(context.Background(),
+		`TRUNCATE queue_items, task_runs, runs, schedules, workflows, projects CASCADE`); err != nil {
 		t.Fatal(err)
 	}
 	return p

@@ -7,6 +7,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -16,16 +17,20 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 
 	"github.com/zarvhq/bravis/internal/api"
 	app "github.com/zarvhq/bravis/internal/application/execution"
 	spec "github.com/zarvhq/bravis/internal/application/workflow"
 	"github.com/zarvhq/bravis/internal/config"
+	wfdom "github.com/zarvhq/bravis/internal/domain/workflow"
 	"github.com/zarvhq/bravis/internal/execution"
 	"github.com/zarvhq/bravis/internal/execution/local"
 	"github.com/zarvhq/bravis/internal/infrastructure/postgres"
 	"github.com/zarvhq/bravis/internal/observability"
+	"github.com/zarvhq/bravis/internal/queue"
+	"github.com/zarvhq/bravis/internal/scheduler"
 )
 
 func main() {
@@ -42,7 +47,7 @@ func raiz() *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
-	c.AddCommand(cmdServe(), cmdMigrate(), cmdValidate(), cmdRun())
+	c.AddCommand(cmdServe(), cmdMigrate(), cmdValidate(), cmdRun(), cmdPublish(), cmdScheduler(), cmdBackfill())
 	return c
 }
 
@@ -217,6 +222,184 @@ func agenda(cron string) string {
 		return "  (manual)"
 	}
 	return "  cron " + cron
+}
+
+// abrir monta pool e repositorios. Repetido em tres subcomandos; um helper
+// evita divergirem no tratamento de erro.
+func abrir(ctx context.Context) (*postgres.Pool, config.Config, error) {
+	cfg, err := config.Load()
+	if err != nil {
+		return nil, config.Config{}, err
+	}
+	pool, err := postgres.New(ctx, cfg.DatabaseURL)
+	return pool, cfg, err
+}
+
+func cmdPublish() *cobra.Command {
+	var projeto string
+	c := &cobra.Command{
+		Use:   "publish <arquivo.yaml> ...",
+		Short: "Publica workflows e suas agendas no banco",
+		Args:  cobra.MinimumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+			pool, _, err := abrir(ctx)
+			if err != nil {
+				return err
+			}
+			defer pool.Close()
+
+			// Um projeto padrao para o modo local. A secao 4 tem Project como
+			// entidade de primeira classe; ate haver gestao de projetos, este
+			// slug fixo mantem a FK honesta sem inventar hierarquia.
+			var idProjeto uuid.UUID
+			err = pool.QueryRow(ctx, `
+				INSERT INTO projects (id, slug, name) VALUES ($1, $2, $2)
+				ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name
+				RETURNING id`, uuid.New(), projeto).Scan(&idProjeto)
+			if err != nil {
+				return err
+			}
+
+			repo := postgres.NewWorkflowRepo(pool)
+			for _, arq := range args {
+				conteudo, err := os.ReadFile(arq)
+				if err != nil {
+					return err
+				}
+				w, err := spec.Parse(arq, conteudo)
+				if err != nil {
+					return err
+				}
+				if err := repo.Publicar(ctx, w, idProjeto); err != nil {
+					return err
+				}
+				fmt.Printf("  publicado  %-24s %s\n", w.Slug, agenda(w.Schedule))
+			}
+			return nil
+		},
+	}
+	c.Flags().StringVar(&projeto, "project", "default", "slug do projeto")
+	return c
+}
+
+func cmdScheduler() *cobra.Command {
+	var intervalo time.Duration
+	var concorrencia int
+	c := &cobra.Command{
+		Use:   "scheduler",
+		Short: "Materializa agendas em runs e as executa",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+			defer stop()
+
+			pool, cfg, err := abrir(ctx)
+			if err != nil {
+				return err
+			}
+			defer pool.Close()
+
+			log := observability.NewLogger(cfg.Env, cfg.LogLevel)
+			runs := postgres.NewRunRepo(pool)
+			fila := queue.New(pool.Pool)
+
+			sched := scheduler.NewScheduler(
+				postgres.NewScheduleRepo(pool), postgres.NewWorkflowRepo(pool), runs, fila, log,
+				scheduler.OpcoesScheduler{Intervalo: intervalo})
+
+			// O dispatcher precisa saber EXECUTAR um run. Le a definicao gravada
+			// no proprio Run — o snapshot da secao 22 — e nao o YAML em disco,
+			// que pode ter mudado desde o disparo.
+			exec, err := local.New(cfg.Env)
+			if err != nil {
+				return err
+			}
+			executar := func(ctx context.Context, id uuid.UUID) error {
+				r, err := runs.Buscar(ctx, id)
+				if err != nil {
+					return err
+				}
+				var w wfdom.Workflow
+				if err := json.Unmarshal(r.Definicao, &w); err != nil {
+					return err
+				}
+				return app.Runner{
+					Processo: exec,
+					Go:       local.NewGoExecutor(execution.NewRegistry()),
+					Env:      map[string]string{"PATH": os.Getenv("PATH"), "HOME": os.Getenv("HOME")},
+					Report:   consoleReporter{},
+				}.Run(ctx, w)
+			}
+
+			disp := scheduler.New(scheduler.Config{
+				Worker: "local", MaxConcorrente: concorrencia,
+			}, fila, runs, executar, log)
+
+			log.Info("scheduler e dispatcher no ar",
+				"intervalo", intervalo.String(), "concorrencia", concorrencia)
+
+			// Os dois lacos correm juntos, e independentes: o scheduler CRIA, o
+			// dispatcher EXECUTA. E a separacao que a secao 37 exige — um pode
+			// cair sem interromper o outro.
+			erros := make(chan error, 2)
+			go func() { erros <- sched.Run(ctx) }()
+			go func() { erros <- disp.Run(ctx) }()
+
+			<-ctx.Done()
+			log.Info("encerrando")
+			return <-erros
+		},
+	}
+	c.Flags().DurationVar(&intervalo, "interval", 10*time.Second, "intervalo entre ciclos")
+	c.Flags().IntVar(&concorrencia, "concurrency", 5, "runs simultaneos")
+	return c
+}
+
+func cmdBackfill() *cobra.Command {
+	var de, ate string
+	c := &cobra.Command{
+		Use:   "backfill <workflow>",
+		Short: "Materializa slots passados de um workflow",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+			inicio, err := time.Parse("2006-01-02", de)
+			if err != nil {
+				return fmt.Errorf("--from: %w (use AAAA-MM-DD)", err)
+			}
+			fim, err := time.Parse("2006-01-02", ate)
+			if err != nil {
+				return fmt.Errorf("--to: %w (use AAAA-MM-DD)", err)
+			}
+			// Fim do dia: `--to 2026-01-31` deve incluir o dia 31 inteiro.
+			fim = fim.Add(24*time.Hour - time.Second)
+
+			pool, cfg, err := abrir(ctx)
+			if err != nil {
+				return err
+			}
+			defer pool.Close()
+
+			s := scheduler.NewScheduler(
+				postgres.NewScheduleRepo(pool), postgres.NewWorkflowRepo(pool),
+				postgres.NewRunRepo(pool), queue.New(pool.Pool),
+				observability.NewLogger(cfg.Env, cfg.LogLevel), scheduler.OpcoesScheduler{})
+
+			n, err := s.Backfill(ctx, args[0], inicio, fim)
+			if err != nil {
+				return err
+			}
+			fmt.Printf("  %d run(s) de backfill enfileirados para %s (%s a %s)\n",
+				n, args[0], de, ate)
+			fmt.Println("  rode `bravis scheduler` para executa-los")
+			return nil
+		},
+	}
+	c.Flags().StringVar(&de, "from", "", "data inicial (AAAA-MM-DD)")
+	c.Flags().StringVar(&ate, "to", "", "data final (AAAA-MM-DD)")
+	_ = c.MarkFlagRequired("from")
+	_ = c.MarkFlagRequired("to")
+	return c
 }
 
 func serve(ctx context.Context) error {
