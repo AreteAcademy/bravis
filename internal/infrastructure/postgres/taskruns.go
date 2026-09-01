@@ -2,6 +2,8 @@ package postgres
 
 import (
 	"context"
+	"errors"
+	"github.com/jackc/pgx/v5"
 	"time"
 
 	"github.com/google/uuid"
@@ -122,4 +124,27 @@ func (r *RunRepo) LogsDaRun(ctx context.Context, runID uuid.UUID) ([]LogDoPasso,
 		out = append(out, p)
 	}
 	return out, linhas.Err()
+}
+
+// PassoQueFalhou devolve o node e a saida da ultima tentativa que falhou.
+//
+// `ORDER BY iniciado_em DESC` e nao `attempt DESC`: num grafo com varios passos,
+// a maior tentativa pode ser de um passo que ja tinha falhado e sido superado —
+// o que interessa e o que falhou POR ULTIMO, que e onde a execucao parou.
+//
+// Ausencia nao e erro: um run que morreu antes de qualquer passo comecar (imagem
+// inexistente, fila cancelada) nao tem task_run nenhuma, e o alerta sai sem esta
+// parte em vez de nao sair.
+func (r *RunRepo) PassoQueFalhou(ctx context.Context, runID uuid.UUID) (string, string, error) {
+	var passo, log string
+	err := r.pool.QueryRow(ctx, `
+		SELECT node_id, log
+		FROM task_runs
+		WHERE run_id = $1 AND status = $2
+		ORDER BY iniciado_em DESC NULLS LAST, attempt DESC
+		LIMIT 1`, runID, dom.StatusFailed).Scan(&passo, &log)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", "", nil
+	}
+	return passo, log, err
 }

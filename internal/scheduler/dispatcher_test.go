@@ -649,3 +649,135 @@ func TestSemLimiteEntregaTudoQueCabe(t *testing.T) {
 		t.Errorf("claim entregou %d; a vaga global era 4", len(itens))
 	}
 }
+
+// Um run que falha e passa na segunda tentativa NAO alerta.
+//
+// E a outra metade da regra: o alerta existe para falha definitiva. Avisar de
+// uma falha que o proprio retry consertou treina o time a ignorar o canal, e ai
+// o alerta que importa passa batido junto.
+func TestRetryQueDaCertoNaoAlerta(t *testing.T) {
+	pool := banco(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	repo := postgres.NewRunRepo(pool)
+	fila := queue.New(pool.Pool)
+
+	r, err := repo.Criar(ctx, dom.Run{
+		WorkflowSlug: "id_verification", IdempotencyKey: "retry-ok",
+		TriggerType: "schedule", Definicao: []byte(`{"Tags":["zarv","id"]}`),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.Transicionar(ctx, r.ID, dom.StatusQueued); err != nil {
+		t.Fatal(err)
+	}
+	if err := fila.Enqueue(ctx, r.ID, 0, time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+
+	avisos := &alertaFalso{}
+	var chamadas int32
+	d := scheduler.New(scheduler.Config{
+		Worker: "t", MaxConcorrente: 1, MaxTentativas: 3,
+		Intervalo: 10 * time.Millisecond, BackoffBase: time.Millisecond,
+	}, fila, repo, func(context.Context, uuid.UUID) error {
+		if atomic.AddInt32(&chamadas, 1) == 1 {
+			return errors.New(`step "run": saiu com codigo 2`)
+		}
+		return nil // a segunda tentativa passa
+	}, semLog())
+	d.Alertas = avisos
+
+	go func() { _ = d.Run(ctx) }()
+
+	prazo := time.Now().Add(15 * time.Second)
+	for time.Now().Before(prazo) {
+		if atual, _ := repo.Buscar(ctx, r.ID); atual.Status == dom.StatusSuccess {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	cancel()
+	time.Sleep(150 * time.Millisecond)
+
+	if atual, _ := repo.Buscar(context.Background(), r.ID); atual.Status != dom.StatusSuccess {
+		t.Fatalf("o run terminou como %s; o teste precisa que ele passe na segunda", atual.Status)
+	}
+	if n := avisos.total(); n != 0 {
+		t.Errorf("saiu %d alerta(s) para um run que se recuperou sozinho", n)
+	}
+}
+
+// O alerta precisa nomear o passo e trazer o fim do log daquele passo.
+//
+// Sem isto ele diz apenas que algo falhou, e quem esta de plantao as 4h abre a
+// tela para descobrir o que — que e exatamente o trabalho que o alerta deveria
+// poupar.
+func TestAlertaCarregaOPassoEOLog(t *testing.T) {
+	pool := banco(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	repo := postgres.NewRunRepo(pool)
+	fila := queue.New(pool.Pool)
+
+	r, err := repo.Criar(ctx, dom.Run{
+		WorkflowSlug: "vendors_inmet_observation", IdempotencyKey: "com-log",
+		TriggerType: "schedule", Definicao: []byte(`{"Tags":["zarv","vendors"]}`),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.Transicionar(ctx, r.ID, dom.StatusQueued); err != nil {
+		t.Fatal(err)
+	}
+	if err := fila.Enqueue(ctx, r.ID, 0, time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+
+	avisos := &alertaFalso{}
+	d := scheduler.New(scheduler.Config{
+		Worker: "t", MaxConcorrente: 1, MaxTentativas: 1,
+		Intervalo: 10 * time.Millisecond, BackoffBase: time.Millisecond,
+	}, fila, repo, func(ctx context.Context, id uuid.UUID) error {
+		// Grava a task como o runner gravaria, com saida.
+		if err := repo.IniciarTask(ctx, id, "fetch_observations", 0); err != nil {
+			return err
+		}
+		saida := "conectando na api do inmet\nHTTP 503 Service Unavailable\ndesistindo apos 3 tentativas"
+		codigo := 1
+		if err := repo.TerminarTask(ctx, id, "fetch_observations", 0,
+			dom.StatusFailed, &codigo, "saiu com codigo 1", saida); err != nil {
+			return err
+		}
+		return errors.New(`step "fetch_observations": saiu com codigo 1`)
+	}, semLog())
+	d.Alertas = avisos
+
+	go func() { _ = d.Run(ctx) }()
+
+	prazo := time.Now().Add(15 * time.Second)
+	for time.Now().Before(prazo) {
+		if avisos.total() > 0 {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	cancel()
+	time.Sleep(100 * time.Millisecond)
+
+	avisos.mu.Lock()
+	defer avisos.mu.Unlock()
+	if len(avisos.recebido) == 0 {
+		t.Fatal("nenhum alerta saiu")
+	}
+	a := avisos.recebido[0]
+	if a.Passo != "fetch_observations" {
+		t.Errorf("Passo = %q; esperava o node que falhou", a.Passo)
+	}
+	if !strings.Contains(a.TrechoDoLog, "503 Service Unavailable") {
+		t.Errorf("TrechoDoLog nao traz a causa: %q", a.TrechoDoLog)
+	}
+}

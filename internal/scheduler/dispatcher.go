@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -32,6 +33,11 @@ type Repo interface {
 	IncrementarTentativa(ctx context.Context, id uuid.UUID) (int, error)
 	RegistrarErro(ctx context.Context, id uuid.UUID, msg string) error
 	Buscar(ctx context.Context, id uuid.UUID) (dom.Run, error)
+
+	// PassoQueFalhou devolve o node e a saida da ultima tentativa que falhou.
+	// Alimenta o alerta: sem isto ele diz que algo falhou, e quem esta de
+	// plantao precisa abrir a tela para descobrir o que.
+	PassoQueFalhou(ctx context.Context, id uuid.UUID) (passo, log string, err error)
 }
 
 // Config parametriza o dispatcher.
@@ -299,6 +305,15 @@ func (d *Dispatcher) avisar(ctx context.Context, runID uuid.UUID, tentativas int
 		d.log.Warn("alerta sem detalhes do run", "run", runID, "erro", err)
 	}
 
+	// O passo e o log sao um plus: se a consulta falhar, o alerta sai sem eles.
+	// Meia mensagem chega; mensagem nenhuma, nao.
+	if passo, log, err := d.repo.PassoQueFalhou(ctx, runID); err == nil {
+		a.Passo = passo
+		a.TrechoDoLog = ultimasLinhas(log, 15)
+	} else {
+		d.log.Warn("alerta sem o passo que falhou", "run", runID, "erro", err)
+	}
+
 	// Contexto proprio: o da execucao pode estar cancelado (foi o cancelamento
 	// que trouxe ate aqui), e o alerta e justamente sobre isso.
 	ctxAviso, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -306,6 +321,20 @@ func (d *Dispatcher) avisar(ctx context.Context, runID uuid.UUID, tentativas int
 	if err := d.Alertas.Falhou(ctxAviso, a); err != nil {
 		d.log.Error("nao consegui avisar da falha", "run", runID, "erro", err)
 	}
+}
+
+// ultimasLinhas devolve o FIM do log, que e onde um programa costuma dizer por
+// que parou. O comeco fica de fora de proposito: o alerta cabe numa notificacao
+// de celular, e o log inteiro esta a um clique de distancia na tela da execucao.
+func ultimasLinhas(texto string, n int) string {
+	if texto == "" {
+		return ""
+	}
+	linhas := strings.Split(strings.TrimRight(texto, "\n"), "\n")
+	if len(linhas) > n {
+		linhas = linhas[len(linhas)-n:]
+	}
+	return strings.Join(linhas, "\n")
 }
 
 // EmVoo devolve quantas execucoes estao correndo agora.

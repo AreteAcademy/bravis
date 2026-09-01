@@ -32,6 +32,16 @@ type Alerta struct {
 	LogicalDate *time.Time
 	Erro        string
 
+	// Passo e o node que falhou. Vem como campo proprio, e nao so embutido no
+	// texto do erro, porque e a primeira coisa que quem esta de plantao procura:
+	// "qual passo?" antes de "por que?".
+	Passo string
+
+	// TrechoDoLog sao as ultimas linhas da saida daquele passo, lidas de
+	// `task_runs.log`. Sem isto o alerta diz que algo falhou; com isto ele diz o
+	// que falhou e por que, sem ninguem precisar abrir a tela as 4h.
+	TrechoDoLog string
+
 	// Tags do workflow viram os campos "Dominio" e "Pipeline" da mensagem — no
 	// Kestra isso vinha de `labels`, e e o que faz o alerta ser acionavel sem
 	// abrir a tela.
@@ -109,6 +119,9 @@ func (s *Slack) mensagem(a Alerta) map[string]any {
 		campo("*Status:*\n:x: " + strings.ToUpper(a.Status)),
 		campo("*Origem:*\n`" + a.Trigger + "`"),
 	}
+	if a.Passo != "" {
+		campos = append(campos, campo("*Passo:*\n`"+a.Passo+"`"))
+	}
 	if a.Tentativas > 0 {
 		campos = append(campos, campo(fmt.Sprintf("*Tentativas:*\n%d", a.Tentativas)))
 	}
@@ -130,6 +143,14 @@ func (s *Slack) mensagem(a Alerta) map[string]any {
 		// mensagem inteira ser recusada em vez de truncada.
 		blocos = append(blocos, bloco{"type": "section", "text": bloco{
 			"type": "mrkdwn", "text": "```" + truncar(a.Erro, 900) + "```",
+		}})
+	}
+	// O log entra DEPOIS do erro e separado dele: o erro e a conclusao, o log e
+	// a evidencia. Juntos num bloco so, o Slack corta os dois no mesmo limite e
+	// costuma sobrar a evidencia sem a conclusao.
+	if a.TrechoDoLog != "" {
+		blocos = append(blocos, bloco{"type": "section", "text": bloco{
+			"type": "mrkdwn", "text": "*Últimas linhas:*\n```" + truncar(a.TrechoDoLog, 900) + "```",
 		}})
 	}
 	if a.URLBase != "" && a.RunID != "" {
