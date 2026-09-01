@@ -40,6 +40,15 @@ services:
       BRAVIS_HTTP_ADDR: ":8080"
       BRAVIS_DATABASE_URL: postgres://bravis:bravis@postgres:5432/bravis?sslmode=disable
       BRAVIS_LOG_LEVEL: debug
+      # A interface local fica ABERTA. Fora de BRAVIS_ENV=local o processo recusa
+      # subir sem credencial, mas aqui ele escuta a sua propria maquina, e pedir
+      # senha a cada `make up` so ensinaria o time a desligar a autenticacao.
+      #
+      # Para ver a tela de login, gere um hash com `bravis hash`, descomente as
+      # tres linhas e reinicie:
+      BRAVIS_AUTH_USUARIO: operador
+      BRAVIS_AUTH_SENHA_HASH: "pbkdf2-sha256$600000$6ewhY/AG9eqZFyl4FOWz9Q$pGUKCVCWTALSTafMdeS2f8UXS9hNyZRsK9/tlWpzbgU"
+      BRAVIS_AUTH_SEGREDO: "segredo-local-de-desenvolvimento-com-32-bytes"
     ports: ["8080:8080"]
     # Identidade visual do cliente. Comentado porque a instalacao padrao nao tem
     # arquivo nenhum — descomente apos copiar `brand.example.yaml` para

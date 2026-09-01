@@ -119,6 +119,31 @@ body {
   color: var(--color-gold-strong);
 }
 
+/* Anel e halo no acento, para destacar UM cartao sobre o fundo. Mesmo recurso
+   do zarv-lens, com o token daqui. `oklch(from ...)` deriva a transparencia da
+   propria cor do tema, entao um cliente que troque o acento leva o halo junto —
+   sem uma segunda variavel para manter em sincronia. */
+.glow-accent {
+  box-shadow:
+    0 0 0 1px oklch(from var(--color-gold) l c h / 30%),
+    0 0 24px oklch(from var(--color-gold) l c h / 12%);
+}
+
+/* Grade do fundo "mission control": as duas listras cruzadas do zarv-lens. Vive
+   numa camada propria, e nao no body, para ficar sob o conteudo com opacidade
+   sem levar o texto junto. */
+.grade-fundo {
+  background-image:
+    linear-gradient(var(--color-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--color-line) 1px, transparent 1px);
+  background-size: 44px 44px;
+}
+
+.halo-acento {
+  background: radial-gradient(closest-side,
+    oklch(from var(--color-gold) l c h / 14%), transparent);
+}
+
 /* Tabular nums nas colunas numericas: sem isso os digitos dancam quando a
    tabela atualiza, e a leitura de uma coluna de duracoes fica ruim. */
 .tabular-nums {

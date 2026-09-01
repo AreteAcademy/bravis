@@ -16,9 +16,12 @@ type DadosLogin struct {
 	Erro string
 }
 
-// Login e uma pagina inteira, fora do layout Base: a barra lateral navega para
-// telas que esta sessao ainda nao pode ver, e oferecer esses links a quem nao
-// entrou so produz uma volta ao proprio login.
+// Login e a tela de entrada, no mesmo padrao do zarv-lens: fundo de grade com
+// halo no acento, marca centralizada acima, e um cartao unico com anel luminoso.
+//
+// Fica FORA do layout Base: a barra lateral navega para telas que esta sessao
+// ainda nao pode ver, e oferecer esses links a quem nao entrou so produz uma
+// volta ao proprio login.
 templ Login(d DadosLogin) {
 	{{ marca := branding.De(ctx) }}
 	<!DOCTYPE html>
@@ -35,62 +38,72 @@ templ Login(d DadosLogin) {
 			}
 		</head>
 		<body class="h-full bg-parchment font-sans text-ink antialiased">
-			<main class="flex min-h-full items-center justify-center px-6 py-16">
-				<div class="w-full max-w-sm">
-					<div class="mb-9 flex flex-col items-center text-center">
+			<main class="relative flex min-h-full items-center justify-center overflow-hidden p-6">
+				// Fundo: grade discreta e um halo no acento. `pointer-events-none`
+				// porque sao decoracao — sem isso engoliriam o clique do campo.
+				<div class="grade-fundo pointer-events-none absolute inset-0 opacity-[0.35]"></div>
+				<div class="halo-acento pointer-events-none absolute top-1/3 left-1/2 h-96 w-96 -translate-x-1/2 rounded-full"></div>
+				<div class="relative w-full max-w-sm">
+					<div class="mb-6 flex flex-col items-center text-center">
 						if marca.Logo == branding.LogoPadrao {
-							<span class="mb-4 block h-12 w-12 text-gold">
+							// Inline para o simbolo herdar a cor do tema; dentro de
+							// uma <img> o SVG e documento isolado e sairia preto.
+							<span class="block h-11 w-11 text-gold">
 								@templ.Raw(assets.LogoSVG)
 							</span>
 						} else if marca.Logo != "" {
-							<img src={ marca.Logo } alt={ marca.Titulo } class="mb-4 h-12 w-12 rounded-xl object-contain"/>
+							<img src={ marca.Logo } alt={ marca.Titulo } class="h-11 w-11 rounded-xl object-contain"/>
 						}
-						<h1 class="display text-[2.25rem] leading-none tracking-[0.02em] text-ink">{ marca.Titulo }</h1>
+						<h1 class="display mt-3 text-2xl tracking-tight text-ink">{ marca.Titulo }</h1>
 						if marca.Subtitulo != "" {
-							<p class="kicker mt-2">{ marca.Subtitulo }</p>
+							<p class="mt-1 text-sm text-muted">{ marca.Subtitulo }</p>
 						}
 					</div>
-					<form
-						method="post"
-						action="/login"
-						class="rounded-2xl border border-line bg-surface p-7 shadow-sm"
-					>
-						<input type="hidden" name="de" value={ d.Destino }/>
-						if d.Erro != "" {
-							<p
-								class="mb-5 rounded-xl border border-line-soft bg-gold-wash px-4 py-3 text-sm text-state-failed"
-								role="alert"
-							>
-								{ d.Erro }
-							</p>
-						}
-						<label class="mb-1.5 block text-sm font-medium text-ink" for="usuario">Usuário</label>
-						<input
-							id="usuario"
-							name="usuario"
-							type="text"
-							required
-							autofocus
-							autocomplete="username"
-							class="mb-5 w-full rounded-xl border border-line bg-parchment-soft px-4 py-2.5 text-sm text-ink outline-none focus:border-gold"
-						/>
-						<label class="mb-1.5 block text-sm font-medium text-ink" for="senha">Senha</label>
-						<input
-							id="senha"
-							name="senha"
-							type="password"
-							required
-							autocomplete="current-password"
-							class="mb-7 w-full rounded-xl border border-line bg-parchment-soft px-4 py-2.5 text-sm text-ink outline-none focus:border-gold"
-						/>
-						<button
-							type="submit"
-							class="w-full rounded-xl bg-gold px-4 py-2.5 text-sm font-semibold text-surface transition-colors hover:bg-gold-strong"
-						>
-							Entrar
-						</button>
-					</form>
-					<p class="mt-7 text-center text-xs tracking-wide text-muted">{ branding.Atribuicao }</p>
+					<div class="glow-accent w-full rounded-lg border border-line bg-surface">
+						<div class="p-6">
+							if d.Erro != "" {
+								<div
+									class="mb-4 rounded-md border border-state-failed/30 bg-state-failed/5 px-3 py-2.5 text-sm text-state-failed"
+									role="alert"
+								>
+									{ d.Erro }
+								</div>
+							}
+							<form method="post" action="/login" class="flex flex-col gap-4">
+								<input type="hidden" name="de" value={ d.Destino }/>
+								<div class="flex flex-col gap-2">
+									<label for="usuario" class="inline-block text-sm leading-none font-medium">Usuário</label>
+									<input
+										id="usuario"
+										name="usuario"
+										type="text"
+										required
+										autofocus
+										autocomplete="username"
+										class="flex h-9 w-full min-w-0 rounded-md border border-line bg-transparent px-3 py-1 text-base text-ink shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-gold focus-visible:ring-[3px] focus-visible:ring-gold/30 md:text-sm"
+									/>
+								</div>
+								<div class="flex flex-col gap-2">
+									<label for="senha" class="inline-block text-sm leading-none font-medium">Senha</label>
+									<input
+										id="senha"
+										name="senha"
+										type="password"
+										required
+										autocomplete="current-password"
+										class="flex h-9 w-full min-w-0 rounded-md border border-line bg-transparent px-3 py-1 text-base text-ink shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-gold focus-visible:ring-[3px] focus-visible:ring-gold/30 md:text-sm"
+									/>
+								</div>
+								<button
+									type="submit"
+									class="inline-flex h-9 w-full items-center justify-center gap-2 rounded-md bg-gold px-4 py-2 text-sm font-medium whitespace-nowrap text-surface shadow-xs transition-all hover:bg-gold-strong"
+								>
+									Entrar
+								</button>
+							</form>
+						</div>
+					</div>
+					<p class="mt-6 text-center text-xs tracking-wide text-muted">{ branding.Atribuicao }</p>
 				</div>
 			</main>
 		</body>
