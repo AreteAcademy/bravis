@@ -1,0 +1,47 @@
+# Ambiente local da Phase 0: Postgres + API, nada mais.
+#
+# `docker compose up` deve deixar GET /health e GET /ready respondendo, que e o
+# criterio de conclusao da fase (secao 39 do plano).
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: bravis
+      POSTGRES_PASSWORD: bravis
+      POSTGRES_DB: bravis
+    ports: ["5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      # A API so sobe depois que o banco aceita conexao — sem isso o primeiro
+      # start falha por corrida, e o compose fica num restart loop confuso.
+      test: ["CMD-SHELL", "pg_isready -U bravis -d bravis"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  migrate:
+    build: .
+    command: ["migrate", "up"]
+    environment:
+      BRAVIS_DATABASE_URL: postgres://bravis:bravis@postgres:5432/bravis?sslmode=disable
+    depends_on:
+      postgres: {condition: service_healthy}
+    restart: "no"
+
+  api:
+    build: .
+    command: ["serve"]
+    environment:
+      BRAVIS_ENV: local
+      BRAVIS_HTTP_ADDR: ":8080"
+      BRAVIS_DATABASE_URL: postgres://bravis:bravis@postgres:5432/bravis?sslmode=disable
+      BRAVIS_LOG_LEVEL: debug
+    ports: ["8080:8080"]
+    depends_on:
+      postgres: {condition: service_healthy}
+      # Migrar antes de servir: a API nao aplica schema, por decisao (ver
+      # postgres.Migrate).
+      migrate: {condition: service_completed_successfully}
+
+volumes:
+  pgdata:
