@@ -1,0 +1,98 @@
+package pages
+
+import (
+	"github.com/zarvhq/bravis/internal/branding"
+	"github.com/zarvhq/bravis/web/assets"
+)
+
+// DadosLogin e o estado da tela de entrada.
+type DadosLogin struct {
+	// Destino e para onde voltar depois de entrar. Ja saneado por auth.Destino.
+	Destino string
+
+	// Erro aparece acima do formulario. Uma mensagem so, e generica de
+	// proposito: distinguir "usuario nao existe" de "senha errada" entrega a
+	// quem tenta adivinhar qual das duas metades ja acertou.
+	Erro string
+}
+
+// Login e uma pagina inteira, fora do layout Base: a barra lateral navega para
+// telas que esta sessao ainda nao pode ver, e oferecer esses links a quem nao
+// entrou so produz uma volta ao proprio login.
+templ Login(d DadosLogin) {
+	{{ marca := branding.De(ctx) }}
+	<!DOCTYPE html>
+	<html lang="pt-BR" class="h-full">
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<title>Entrar · { marca.Titulo }</title>
+			<link rel="preload" href="/assets/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin/>
+			<link rel="preload" href="/assets/fonts/cormorant-latin.woff2" as="font" type="font/woff2" crossorigin/>
+			<link rel="stylesheet" href="/assets/app.css"/>
+			if css := marca.CSS(); css != "" {
+				@templ.Raw("<style>" + css + "</style>")
+			}
+		</head>
+		<body class="h-full bg-parchment font-sans text-ink antialiased">
+			<main class="flex min-h-full items-center justify-center px-6 py-16">
+				<div class="w-full max-w-sm">
+					<div class="mb-9 flex flex-col items-center text-center">
+						if marca.Logo == branding.LogoPadrao {
+							<span class="mb-4 block h-12 w-12 text-gold">
+								@templ.Raw(assets.LogoSVG)
+							</span>
+						} else if marca.Logo != "" {
+							<img src={ marca.Logo } alt={ marca.Titulo } class="mb-4 h-12 w-12 rounded-xl object-contain"/>
+						}
+						<h1 class="display text-[2.25rem] leading-none tracking-[0.02em] text-ink">{ marca.Titulo }</h1>
+						if marca.Subtitulo != "" {
+							<p class="kicker mt-2">{ marca.Subtitulo }</p>
+						}
+					</div>
+					<form
+						method="post"
+						action="/login"
+						class="rounded-2xl border border-line bg-surface p-7 shadow-sm"
+					>
+						<input type="hidden" name="de" value={ d.Destino }/>
+						if d.Erro != "" {
+							<p
+								class="mb-5 rounded-xl border border-line-soft bg-gold-wash px-4 py-3 text-sm text-state-failed"
+								role="alert"
+							>
+								{ d.Erro }
+							</p>
+						}
+						<label class="mb-1.5 block text-sm font-medium text-ink" for="usuario">Usuário</label>
+						<input
+							id="usuario"
+							name="usuario"
+							type="text"
+							required
+							autofocus
+							autocomplete="username"
+							class="mb-5 w-full rounded-xl border border-line bg-parchment-soft px-4 py-2.5 text-sm text-ink outline-none focus:border-gold"
+						/>
+						<label class="mb-1.5 block text-sm font-medium text-ink" for="senha">Senha</label>
+						<input
+							id="senha"
+							name="senha"
+							type="password"
+							required
+							autocomplete="current-password"
+							class="mb-7 w-full rounded-xl border border-line bg-parchment-soft px-4 py-2.5 text-sm text-ink outline-none focus:border-gold"
+						/>
+						<button
+							type="submit"
+							class="w-full rounded-xl bg-gold px-4 py-2.5 text-sm font-semibold text-surface transition-colors hover:bg-gold-strong"
+						>
+							Entrar
+						</button>
+					</form>
+					<p class="mt-7 text-center text-xs tracking-wide text-muted">{ branding.Atribuicao }</p>
+				</div>
+			</main>
+		</body>
+	</html>
+}

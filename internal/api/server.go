@@ -7,6 +7,7 @@
 package api
 
 import (
+	"github.com/zarvhq/bravis/internal/auth"
 	"log/slog"
 	"net/http"
 	"time"
@@ -17,6 +18,10 @@ type Server struct {
 	log      *slog.Logger
 	checkers map[string]Checker
 	mux      *http.ServeMux
+
+	// portao envolve o mux quando ha credencial. Nulo = interface aberta, que
+	// so acontece em desenvolvimento (config.Load recusa o contrario).
+	portao *auth.Portao
 }
 
 // NewServer monta o roteador. Os checkers sao nomeados para que o /ready diga
@@ -25,11 +30,27 @@ type Server struct {
 // `ui` pode ser nil: um processo que so serve health check nao precisa das
 // paginas, e exigi-las acoplaria o servidor ao banco sem necessidade.
 func NewServer(log *slog.Logger, checkers map[string]Checker, ui *UI) *Server {
+	return NewServerAutenticado(log, checkers, ui, auth.Credencial{}, false)
+}
+
+// NewServerAutenticado e o mesmo, exigindo sessao quando a credencial esta
+// configurada. `inseguro` manda o cookie sem a flag Secure — necessario apenas
+// para http puro em desenvolvimento, porque um cookie Secure nunca chega de
+// volta por http e o login pareceria simplesmente nao funcionar.
+func NewServerAutenticado(log *slog.Logger, checkers map[string]Checker, ui *UI,
+	cred auth.Credencial, inseguro bool,
+) *Server {
 	s := &Server{log: log, checkers: checkers, mux: http.NewServeMux()}
 	s.mux.HandleFunc("GET /health", s.health)
 	s.mux.HandleFunc("GET /ready", s.ready)
 	if ui != nil {
 		ui.Registrar(s.mux)
+	}
+	if cred.Ativa() {
+		s.portao = &auth.Portao{Cred: cred, Proximo: s.mux, Inseguro: inseguro}
+		if ui != nil {
+			ui.RegistrarLogin(s.mux, s.portao)
+		}
 	}
 	return s
 }
@@ -38,7 +59,11 @@ func NewServer(log *slog.Logger, checkers map[string]Checker, ui *UI) *Server {
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	inicio := time.Now()
 	rec := &gravador{ResponseWriter: w, status: http.StatusOK}
-	s.mux.ServeHTTP(rec, r)
+	if s.portao != nil {
+		s.portao.ServeHTTP(rec, r)
+	} else {
+		s.mux.ServeHTTP(rec, r)
+	}
 
 	s.log.Info("http",
 		"method", r.Method, "path", r.URL.Path,

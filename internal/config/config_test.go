@@ -2,6 +2,8 @@ package config
 
 import (
 	"os"
+
+	"github.com/zarvhq/bravis/internal/auth"
 	"strings"
 	"testing"
 	"time"
@@ -136,5 +138,45 @@ func TestLoadLeOAmbienteDeCadaCampo(t *testing.T) {
 	}
 	if len(c.Pods.Toleracoes) != 1 || c.Pods.Toleracoes[0].Efeito != "NoSchedule" {
 		t.Errorf("Toleracoes = %+v", c.Pods.Toleracoes)
+	}
+}
+
+// Fora do local, subir sem credencial e recusado. A interface dispara pipeline
+// que escreve no data warehouse; aberta na internet ela e um controle remoto do
+// warehouse. Um aviso no log nao bastaria — ninguem le o log de um processo que
+// funciona.
+func TestForaDoLocalExigeCredencial(t *testing.T) {
+	t.Setenv("BRAVIS_DATABASE_URL", "postgres://x/y")
+	t.Setenv("BRAVIS_ENV", "prod")
+
+	if _, err := Load(); err == nil {
+		t.Fatal("BRAVIS_ENV=prod subiu sem credencial")
+	}
+
+	h, err := auth.GerarHash("senha-de-teste-longa")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("BRAVIS_AUTH_USUARIO", "operador")
+	t.Setenv("BRAVIS_AUTH_SENHA_HASH", h)
+	t.Setenv("BRAVIS_AUTH_SEGREDO", "um-segredo-de-teste-com-mais-de-32-bytes")
+
+	c, err := Load()
+	if err != nil {
+		t.Fatalf("com credencial completa deveria subir: %v", err)
+	}
+	if !c.Auth.Ativa() {
+		t.Error("a credencial nao chegou na Config")
+	}
+}
+
+// Em local a interface pode ficar aberta: ali o servidor escuta a maquina de
+// quem desenvolve, e pedir senha a cada `make up` empurraria o time a desligar
+// a autenticacao de vez.
+func TestLocalSobeSemCredencial(t *testing.T) {
+	t.Setenv("BRAVIS_DATABASE_URL", "postgres://x/y")
+	t.Setenv("BRAVIS_ENV", "local")
+	if _, err := Load(); err != nil {
+		t.Fatalf("local deveria subir sem credencial: %v", err)
 	}
 }

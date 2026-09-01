@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none" role="img" aria-label="Bravis">
+  <!-- Um grafo que converge: dois nos de origem alimentando um destino.
+       E a forma do que a ferramenta faz, e continua legivel a 20px.
+       Tudo em currentColor de proposito — assim o mesmo arquivo serve
+       qualquer paleta de cliente sem uma variante por tema. -->
+  <path d="M9 9.5 L23 16 M9 22.5 L23 16" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" opacity="0.45"/>
+  <circle cx="9" cy="9.5" r="3.25" fill="currentColor" opacity="0.75"/>
+  <circle cx="9" cy="22.5" r="3.25" fill="currentColor" opacity="0.75"/>
+  <circle cx="23" cy="16" r="4.25" fill="currentColor"/>
+</svg>

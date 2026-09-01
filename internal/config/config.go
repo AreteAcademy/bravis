@@ -9,6 +9,7 @@ package config
 
 import (
 	"fmt"
+	"github.com/zarvhq/bravis/internal/auth"
 	"os"
 	"strconv"
 	"strings"
@@ -36,6 +37,9 @@ type Config struct {
 	// avisado. Vem do ambiente, e nunca do YAML: quem tem a URL posta no canal
 	// como se fosse a plataforma.
 	SlackWebhook string
+
+	// Auth e a credencial de operador que fecha a interface. Ver internal/auth.
+	Auth auth.Credencial
 
 	// UIURL monta o link da execucao no alerta. Sem ela o alerta diz o que
 	// falhou, mas obriga quem le a procurar a run na mao.
@@ -84,6 +88,11 @@ func Load() (Config, error) {
 		TaskEnv:      lista("BRAVIS_TASK_ENV"),
 		SlackWebhook: os.Getenv("BRAVIS_SLACK_WEBHOOK"),
 		UIURL:        os.Getenv("BRAVIS_UI_URL"),
+		Auth: auth.Credencial{
+			Usuario: os.Getenv("BRAVIS_AUTH_USUARIO"),
+			Hash:    os.Getenv("BRAVIS_AUTH_SENHA_HASH"),
+			Segredo: []byte(os.Getenv("BRAVIS_AUTH_SEGREDO")),
+		},
 		Pods: PodsConfig{
 			Modo:              get("BRAVIS_PODS", "auto"),
 			Namespace:         os.Getenv("BRAVIS_POD_NAMESPACE"),
@@ -113,6 +122,27 @@ func Load() (Config, error) {
 	case "auto", "on", "off":
 	default:
 		return Config{}, fmt.Errorf("BRAVIS_PODS: %q invalido (auto, on ou off)", c.Pods.Modo)
+	}
+	if err := c.Auth.Validar(); err != nil {
+		return Config{}, err
+	}
+	// Fora do local, subir sem credencial e recusado.
+	//
+	// A interface dispara pipeline: um POST em /workflows/<slug>/trigger roda um
+	// `dbt build` que escreve no data warehouse. Aberta na internet, ela e um
+	// controle remoto do warehouse para qualquer pessoa — foi exatamente o
+	// estado em que o ambiente de dev subiu, e ninguem percebeu porque nada
+	// falhava. Um aviso no log nao teria bastado: ninguem le o log de um
+	// processo que funciona. Falhar no boot e o que torna o descuido visivel.
+	//
+	// `local` fica de fora porque ali o servidor escuta a maquina de quem
+	// desenvolve, e exigir senha a cada `make up` empurraria o time a desligar
+	// a autenticacao de vez.
+	if c.Env != "local" && !c.Auth.Ativa() {
+		return Config{}, fmt.Errorf(
+			"BRAVIS_ENV=%s exige credencial: defina BRAVIS_AUTH_USUARIO, "+
+				"BRAVIS_AUTH_SENHA_HASH (gere com `bravis hash`) e "+
+				"BRAVIS_AUTH_SEGREDO", c.Env)
 	}
 	return c, nil
 }

@@ -32,6 +32,16 @@ type Marca struct {
 	// preservadas — a quebra faz parte do ritmo do texto.
 	Frase string `yaml:"frase"`
 
+	// Logo e a marca grafica ao lado do titulo. Aceita URL absoluta (a logo
+	// hospedada do cliente) ou caminho interno comecando em `/assets/`.
+	//
+	// Vazio cai no simbolo embutido, e o padrao e interno de proposito: uma
+	// logo que depende de host externo some quando aquele host cai, quando o
+	// cluster nao tem saida para a internet, ou quando o cliente reorganiza o
+	// proprio site. A tela de uma ferramenta de operacao nao pode quebrar por
+	// causa disso.
+	Logo string `yaml:"logo"`
+
 	Tema Tema `yaml:"tema"`
 }
 
@@ -56,6 +66,9 @@ type Tema struct {
 	Aguardando string `yaml:"aguardando"`
 }
 
+// LogoPadrao e o simbolo embutido, servido do proprio binario.
+const LogoPadrao = "/assets/logo.svg"
+
 // Atribuicao e fixa. Nao e campo de configuracao de proposito: e a unica coisa
 // da tela que o cliente nao escolhe.
 const Atribuicao = "Powered by Bravis"
@@ -65,6 +78,7 @@ func Padrao() Marca {
 	return Marca{
 		Titulo:    "Bravis",
 		Subtitulo: "Orquestração",
+		Logo:      LogoPadrao,
 		Frase:     "Clareza, estrutura e virtude\ntambém fazem parte\nde quem constrói.",
 		Tema: Tema{
 			Fundo:         "#f4efe4",
@@ -131,7 +145,31 @@ func (m Marca) Validar() error {
 			return fmt.Errorf("cor %s: %q nao e um hexadecimal (#rgb, #rrggbb ou #rrggbbaa)", nome, cor)
 		}
 	}
+	if err := validarLogo(m.Logo); err != nil {
+		return err
+	}
 	return nil
+}
+
+// validarLogo aceita apenas https://, http:// e caminho interno.
+//
+// Pelo mesmo motivo das cores: o valor vai para o `src` de uma <img>. Um
+// `javascript:` ou um `data:text/html,...` ali executa script na sessao de quem
+// abriu o painel — e quem edita o arquivo de marca pode nao ser quem opera o
+// cluster. A lista e de permissao, nao de bloqueio: recusar `javascript:` por
+// nome deixa passar o proximo esquema que alguem inventar.
+func validarLogo(logo string) error {
+	if logo == "" {
+		return nil
+	}
+	if strings.HasPrefix(logo, "/") && !strings.HasPrefix(logo, "//") {
+		return nil
+	}
+	if strings.HasPrefix(logo, "https://") || strings.HasPrefix(logo, "http://") {
+		return nil
+	}
+	return fmt.Errorf("logo %q: use https://, http:// ou um caminho interno "+
+		"comecando em /", logo)
 }
 
 func (t Tema) cores() map[string]string {

@@ -6,6 +6,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -27,6 +28,7 @@ import (
 	"github.com/zarvhq/bravis/internal/api"
 	app "github.com/zarvhq/bravis/internal/application/execution"
 	spec "github.com/zarvhq/bravis/internal/application/workflow"
+	"github.com/zarvhq/bravis/internal/auth"
 	"github.com/zarvhq/bravis/internal/branding"
 	"github.com/zarvhq/bravis/internal/config"
 	wfdom "github.com/zarvhq/bravis/internal/domain/workflow"
@@ -54,7 +56,7 @@ func raiz() *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
-	c.AddCommand(cmdServe(), cmdMigrate(), cmdValidate(), cmdRun(), cmdPublish(),
+	c.AddCommand(cmdServe(), cmdMigrate(), cmdValidate(), cmdMarca(), cmdHash(), cmdRun(), cmdPublish(),
 		cmdScheduler(), cmdBackfill(), cmdVersion())
 	return c
 }
@@ -207,6 +209,90 @@ func cmdValidate() *cobra.Command {
 			if falhas > 0 {
 				return fmt.Errorf("%d de %d arquivo(s) com erro", falhas, len(arquivos))
 			}
+			return nil
+		},
+	}
+}
+
+// cmdHash gera o hash de senha que vai para a configuracao.
+//
+// A senha e lida do terminal, nao de um argumento: argumento aparece no `ps` de
+// qualquer processo da maquina e fica gravado no historico do shell.
+func cmdHash() *cobra.Command {
+	return &cobra.Command{
+		Use:   "hash",
+		Short: "Gera o hash de BRAVIS_AUTH_SENHA_HASH (le a senha do terminal)",
+		Args:  cobra.NoArgs,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			fmt.Fprint(os.Stderr, "senha: ")
+			senha, err := lerSenha()
+			if err != nil {
+				return err
+			}
+			if len(senha) < 12 {
+				return fmt.Errorf("senha curta demais (%d caracteres); "+
+					"use ao menos 12 — este e o unico acesso ao painel", len(senha))
+			}
+			h, err := auth.GerarHash(senha)
+			if err != nil {
+				return err
+			}
+			// O hash vai para stdout sozinho, para poder ser redirecionado; os
+			// rotulos vao para stderr.
+			fmt.Fprintln(os.Stderr, "\nBRAVIS_AUTH_SENHA_HASH:")
+			fmt.Println(h)
+			fmt.Fprintln(os.Stderr, "\nFalta ainda BRAVIS_AUTH_USUARIO e um "+
+				"BRAVIS_AUTH_SEGREDO de 32+ bytes (openssl rand -base64 48).")
+			return nil
+		},
+	}
+}
+
+// lerSenha le uma linha sem eco quando ha terminal, e da entrada padrao quando
+// nao ha — o segundo caso e o de um script de provisionamento.
+func lerSenha() (string, error) {
+	info, err := os.Stdin.Stat()
+	if err != nil {
+		return "", err
+	}
+	if info.Mode()&os.ModeCharDevice == 0 {
+		// Entrada redirecionada: sem terminal para desligar o eco.
+		linha, err := bufio.NewReader(os.Stdin).ReadString('\n')
+		return strings.TrimRight(linha, "\r\n"), err
+	}
+	return semEco()
+}
+
+// cmdMarca valida um arquivo de marca sem subir o servidor.
+//
+// Existe pelo mesmo motivo do `validate`: hoje um hexadecimal errado no
+// brand.yaml so aparece quando o container sobe, e a mensagem chega pelo log do
+// pod — longe de quem editou o arquivo. A CI da instalacao chama isto e o erro
+// volta no pull request.
+func cmdMarca() *cobra.Command {
+	return &cobra.Command{
+		Use:   "marca <brand.yaml>",
+		Short: "Valida um arquivo de marca (nao precisa de banco)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			// Carregar trata ausencia como "usa o padrao", que e certo no boot
+			// e errado aqui: quem pediu para validar um caminho espera saber
+			// que ele nao existe.
+			if _, err := os.Stat(args[0]); err != nil {
+				return err
+			}
+			m, err := branding.Carregar(args[0])
+			if err != nil {
+				return err
+			}
+			logo := m.Logo
+			if logo == branding.LogoPadrao {
+				logo += "  (simbolo embutido)"
+			}
+			fmt.Printf("  ok    %s · %s\n", m.Titulo, m.Subtitulo)
+			fmt.Printf("        logo      %s\n", logo)
+			fmt.Printf("        destaque  %s\n", m.Tema.Destaque)
+			fmt.Printf("        %s\n", branding.Atribuicao)
 			return nil
 		},
 	}
@@ -719,7 +805,16 @@ func serve(ctx context.Context) error {
 
 	ui := api.NewUI(postgres.NewLeituraRepo(pool), postgres.NewWorkflowRepo(pool),
 		runsRepo, acoesDaUI{agendas: agendas, sched: sched}, marca, log)
-	srv := api.NewServer(log, map[string]api.Checker{"postgres": pool}, ui).HTTPServer(cfg.HTTPAddr)
+	// `inseguro` acompanha o ambiente: em local o servidor escuta http puro, e
+	// um cookie Secure nunca voltaria — o login pareceria nao funcionar.
+	srv := api.NewServerAutenticado(log, map[string]api.Checker{"postgres": pool}, ui,
+		cfg.Auth, cfg.Env == "local").HTTPServer(cfg.HTTPAddr)
+	if cfg.Auth.Ativa() {
+		log.Info("interface protegida", "usuario", cfg.Auth.Usuario)
+	} else {
+		log.Warn("interface ABERTA: qualquer um dispara workflow",
+			"dica", "defina BRAVIS_AUTH_USUARIO e BRAVIS_AUTH_SENHA_HASH")
+	}
 
 	erros := make(chan error, 1)
 	go func() {

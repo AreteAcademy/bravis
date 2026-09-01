@@ -23,5 +23,21 @@ import "embed"
 // bundles: uma UI que depende do Google Fonts troca de tipografia no meio da
 // tela quando a rede nao responde.
 //
-//go:embed app.css ui.js dag.js jsx-shim.js vendor fonts
+//go:embed app.css ui.js dag.js jsx-shim.js logo.svg vendor fonts
 var FS embed.FS
+
+// LogoSVG e a marca padrao ja lida do FS embutido.
+//
+// Existe como string, e nao apenas como arquivo servido, porque o simbolo e
+// desenhado em `currentColor`: dentro de uma <img> o SVG e um documento
+// isolado e nao herda cor nenhuma da pagina, entao sairia preto em qualquer
+// tema. Inline, ele acompanha a paleta do cliente.
+var LogoSVG = func() string {
+	b, err := FS.ReadFile("logo.svg")
+	if err != nil {
+		// Impossivel em producao: o arquivo e embutido no binario e a
+		// compilacao falha sem ele. Vazio degrada para "sem logo".
+		return ""
+	}
+	return string(b)
+}()

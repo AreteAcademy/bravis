@@ -1,6 +1,10 @@
 package layouts
 
-import "github.com/zarvhq/bravis/internal/branding"
+import (
+	"github.com/zarvhq/bravis/internal/auth"
+	"github.com/zarvhq/bravis/internal/branding"
+	"github.com/zarvhq/bravis/web/assets"
+)
 
 // Base e o esqueleto de toda pagina.
 //
@@ -115,7 +119,19 @@ type item struct {
 templ sidebar(ativo string, marca branding.Marca) {
 	<aside class="flex w-60 shrink-0 flex-col border-r border-line bg-surface/60">
 		<div class="px-7 pt-7 pb-8">
-			<a href="/" class="display block text-[2rem] leading-none tracking-[0.02em] text-ink">{ marca.Titulo }</a>
+			<a href="/" class="flex items-center gap-3">
+				// h-9 casa com a altura da caixa do titulo em serifa: a logo
+				// acompanha o texto em vez de competir com ele.
+				if marca.Logo == branding.LogoPadrao {
+					// Inline, para o simbolo herdar a cor do tema.
+					<span class="block h-9 w-9 shrink-0 text-gold">
+						@templ.Raw(assets.LogoSVG)
+					</span>
+				} else if marca.Logo != "" {
+					<img src={ marca.Logo } alt={ marca.Titulo } class="h-9 w-9 shrink-0 rounded-lg object-contain"/>
+				}
+				<span class="display block text-[2rem] leading-none tracking-[0.02em] text-ink">{ marca.Titulo }</span>
+			</a>
 			if marca.Subtitulo != "" {
 				<p class="kicker mt-2">{ marca.Subtitulo }</p>
 			}
@@ -149,6 +165,19 @@ templ sidebar(ativo string, marca branding.Marca) {
 		// Rodape: a frase do cliente e, abaixo dela, a atribuicao. A quebra de
 		// linha da frase e preservada — ela e do autor, e virar espaco mudaria o
 		// ritmo do texto.
+		// Aparece so quando ha sessao: numa instalacao sem credencial, um botao
+		// de sair nao teria de onde sair.
+		if operador := auth.De(ctx); operador != "" {
+			<form method="post" action="/logout" class="px-7 pb-5">
+				<button
+					type="submit"
+					class="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs text-muted transition-colors hover:bg-gold-wash hover:text-ink"
+				>
+					<span class="truncate">{ operador }</span>
+					<span class="ml-3 shrink-0 tracking-wide uppercase">Sair</span>
+				</button>
+			</form>
+		}
 		<div class="border-t border-line-soft px-7 py-6">
 			if linhas := marca.Linhas(); len(linhas) > 0 {
 				<p class="font-serif text-[0.95rem] leading-snug text-muted italic">

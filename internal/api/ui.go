@@ -13,6 +13,7 @@ import (
 	"github.com/a-h/templ"
 	"github.com/google/uuid"
 
+	"github.com/zarvhq/bravis/internal/auth"
 	"github.com/zarvhq/bravis/internal/branding"
 	"github.com/zarvhq/bravis/internal/domain/run"
 	sch "github.com/zarvhq/bravis/internal/domain/schedule"
@@ -599,4 +600,45 @@ func (u *UI) render(w http.ResponseWriter, r *http.Request, c templ.Component) {
 func (u *UI) erro(w http.ResponseWriter, r *http.Request, err error) {
 	u.log.Error("consultando dados da ui", "path", r.URL.Path, "erro", err)
 	http.Error(w, "erro interno", http.StatusInternalServerError)
+}
+
+// RegistrarLogin liga as rotas de sessao. Fica separada de Registrar porque so
+// existe quando ha credencial: sem ela, uma tela de login que sempre aceita
+// seria pior que nenhuma.
+func (u *UI) RegistrarLogin(mux *http.ServeMux, portao *auth.Portao) {
+	mux.HandleFunc("GET /login", func(w http.ResponseWriter, r *http.Request) {
+		u.render(w, r, pages.Login(pages.DadosLogin{
+			Destino: auth.Destino(r.URL.Query().Get("de")),
+		}))
+	})
+
+	mux.HandleFunc("POST /login", func(w http.ResponseWriter, r *http.Request) {
+		destino := auth.Destino(r.FormValue("de"))
+		usuario := r.FormValue("usuario")
+
+		if !portao.Entrar(w, usuario, r.FormValue("senha")) {
+			// Registrado como aviso, com o usuario tentado e a origem: uma
+			// rajada de falhas e o unico sinal de que alguem esta tentando
+			// adivinhar, e sem log ela nao existe. A senha nunca entra aqui.
+			u.log.Warn("login recusado", "usuario", usuario, "origem", r.RemoteAddr)
+
+			// 200, e nao um redirecionamento: o formulario volta preenchido com
+			// o destino e o erro na mesma resposta.
+			w.WriteHeader(http.StatusUnauthorized)
+			u.render(w, r, pages.Login(pages.DadosLogin{
+				Destino: destino,
+				Erro:    "Usuário ou senha inválidos.",
+			}))
+			return
+		}
+		u.log.Info("login", "usuario", usuario)
+		http.Redirect(w, r, destino, http.StatusSeeOther)
+	})
+
+	// POST, nao GET: um <img src="/logout"> numa pagina qualquer derrubaria a
+	// sessao de quem a abrisse.
+	mux.HandleFunc("POST /logout", func(w http.ResponseWriter, r *http.Request) {
+		portao.Sair(w)
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+	})
 }
