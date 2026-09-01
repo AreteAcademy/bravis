@@ -368,3 +368,66 @@ func TestPodarSemDiferencaNaoRemoveNada(t *testing.T) {
 		t.Errorf("removeu %v sem motivo", removidos)
 	}
 }
+
+// Uma agenda recem-publicada (`ultimo_slot` NULL) precisa comecar a disparar.
+//
+// Este e o teste que faltava, e a lacuna tinha forma: TODOS os casos acima
+// chamam `fixarUltimoSlot` antes do ciclo, entao o caminho do marcador nulo
+// nunca era exercitado. Em dev, 18 workflows ficaram registrados por horas sem
+// uma unica execucao automatica — inclusive um `*/30` — porque `Slots` partia do
+// proprio `agora`, o proximo horario do cron era sempre futuro, e o marcador
+// nunca saia de NULL para quebrar o circulo.
+func TestAgendaNovaComecaADisparar(t *testing.T) {
+	s, runs, _, _ := montar(t, "*/30 * * * *", false)
+	ctx := context.Background()
+
+	// Primeiro ciclo: so planta o marco, sem executar o passado.
+	n, err := s.Ciclo(ctx, emUTC("2026-01-01T10:05:00Z"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Errorf("o ciclo de estreia criou %d runs; o slot anterior ao registro nao e nosso", n)
+	}
+
+	// Segundo ciclo, depois que o relogio passou das 10:30: agora dispara.
+	n, err = s.Ciclo(ctx, emUTC("2026-01-01T10:31:00Z"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Fatalf("criou %d runs apos o horario do cron; queria 1", n)
+	}
+	porTrigger, _ := runs.ContarPorTrigger(ctx)
+	if porTrigger["schedule"] != 1 {
+		t.Errorf("trigger = %v; queria schedule", porTrigger)
+	}
+}
+
+// O marco de estreia nao pode ser replantado a cada ciclo: se fosse, `de`
+// avancaria junto com o relogio e a agenda voltaria a nunca disparar.
+func TestMarcoDeEstreiaEPlantadoUmaVezSo(t *testing.T) {
+	s, _, _, pool := montar(t, "*/30 * * * *", false)
+	ctx := context.Background()
+
+	if _, err := s.Ciclo(ctx, emUTC("2026-01-01T10:05:00Z")); err != nil {
+		t.Fatal(err)
+	}
+	var primeiro time.Time
+	if err := pool.QueryRow(ctx,
+		`SELECT ultimo_slot FROM schedules WHERE workflow_slug = 'diario'`).Scan(&primeiro); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := s.Ciclo(ctx, emUTC("2026-01-01T10:10:00Z")); err != nil {
+		t.Fatal(err)
+	}
+	var depois time.Time
+	if err := pool.QueryRow(ctx,
+		`SELECT ultimo_slot FROM schedules WHERE workflow_slug = 'diario'`).Scan(&depois); err != nil {
+		t.Fatal(err)
+	}
+	if !depois.Equal(primeiro) {
+		t.Errorf("o marco andou de %s para %s — a agenda nunca alcancaria um horario", primeiro, depois)
+	}
+}

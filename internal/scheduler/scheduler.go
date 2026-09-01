@@ -101,6 +101,27 @@ func (s *Scheduler) Ciclo(ctx context.Context, agora time.Time) (int, error) {
 }
 
 func (s *Scheduler) materializar(ctx context.Context, a sch.Schedule, agora time.Time) (int, error) {
+	// Agenda nunca materializada precisa de um marco antes de qualquer coisa.
+	//
+	// Sem ele, `Slots` parte do proprio `agora`, e o proximo horario do cron e
+	// sempre estritamente futuro: o laco quebra na primeira volta, nada e
+	// materializado, e como nada e materializado o marcador nunca sai de NULL.
+	// A agenda fica presa nesse ciclo para sempre — foi o que deixou 18
+	// workflows registrados em dev sem UMA execucao automatica, inclusive um
+	// `*/30`, com todas as runs da tela vindo de disparo manual.
+	//
+	// Plantar `agora` diz o que se quer dizer: uma agenda comeca a contar de
+	// quando entrou no ar, e dispara no primeiro horario depois disso. Sem
+	// executar nada neste ciclo — o slot anterior a registro nao e nosso.
+	if a.UltimoSlot == nil {
+		if err := s.agendas.AvancarSlot(ctx, a.WorkflowSlug, agora); err != nil {
+			return 0, err
+		}
+		s.log.Info("agenda iniciada", "workflow", a.WorkflowSlug,
+			"cron", a.Cron, "primeiro_slot_apos", agora.Format(time.RFC3339))
+		return 0, nil
+	}
+
 	slots, truncado, err := a.Slots(agora, s.maxPorCiclo)
 	if err != nil {
 		return 0, err
