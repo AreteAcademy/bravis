@@ -30,13 +30,13 @@ func (r *RunRepo) IniciarTask(ctx context.Context, runID uuid.UUID, nodeID strin
 
 // TerminarTask registra o desfecho.
 func (r *RunRepo) TerminarTask(ctx context.Context, runID uuid.UUID, nodeID string,
-	tentativa int, status dom.Status, exit *int, erro string) error {
+	tentativa int, status dom.Status, exit *int, erro string, log string) error {
 
 	_, err := r.pool.Exec(ctx, `
 		UPDATE task_runs
-		SET status = $4, exit_code = $5, erro = $6, terminado_em = now()
+		SET status = $4, exit_code = $5, erro = $6, log = $7, terminado_em = now()
 		WHERE run_id = $1 AND node_id = $2 AND attempt = $3`,
-		runID, nodeID, tentativa, status, exit, erro)
+		runID, nodeID, tentativa, status, exit, erro, log)
 	return err
 }
 
@@ -82,4 +82,44 @@ type EstadoNo struct {
 	ExitCode  *int   `json:"exit_code,omitempty"`
 	Erro      string `json:"erro,omitempty"`
 	DuracaoMs int64  `json:"duracao_ms"`
+}
+
+// LogDoPasso e a saida de uma tentativa, para a tela da execucao.
+type LogDoPasso struct {
+	NodeID    string
+	Tentativa int
+	Status    string
+	ExitCode  *int
+	Erro      string
+	Log       string
+	DuracaoMs int64
+}
+
+// LogsDaRun devolve a saida de cada tentativa de cada passo, em ordem de
+// execucao.
+//
+// TODAS as tentativas, nao so a ultima: quando um passo passa na segunda, o que
+// explica a primeira falha esta justamente na tentativa que a tela descartaria.
+func (r *RunRepo) LogsDaRun(ctx context.Context, runID uuid.UUID) ([]LogDoPasso, error) {
+	linhas, err := r.pool.Query(ctx, `
+		SELECT node_id, attempt, status, exit_code, erro, log,
+		       COALESCE(EXTRACT(EPOCH FROM (terminado_em - iniciado_em)) * 1000, 0)::bigint
+		FROM task_runs
+		WHERE run_id = $1
+		ORDER BY iniciado_em NULLS LAST, node_id, attempt`, runID)
+	if err != nil {
+		return nil, err
+	}
+	defer linhas.Close()
+
+	var out []LogDoPasso
+	for linhas.Next() {
+		var p LogDoPasso
+		if err := linhas.Scan(&p.NodeID, &p.Tentativa, &p.Status, &p.ExitCode,
+			&p.Erro, &p.Log, &p.DuracaoMs); err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, linhas.Err()
 }

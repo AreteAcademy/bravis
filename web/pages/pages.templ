@@ -811,7 +811,7 @@ templ Workflow(w wf.Workflow, ultimas []postgres.ResumoRun) {
 
 // Run mostra uma execucao. O cabecalho vem do servidor ja renderizado; so a DAG
 // com o estado de cada passo depende de JavaScript.
-templ Run(r run.Run) {
+templ Run(r run.Run, logs []postgres.LogDoPasso) {
 	@layouts.Base(layouts.Pagina{
 		Titulo: r.WorkflowSlug, Kicker: "Execução", Ativo: "runs",
 		Ilha: dagAssets, Largo: true,
@@ -832,6 +832,60 @@ templ Run(r run.Run) {
 			<pre class="mb-5 overflow-auto rounded-[20px] border border-state-failed/20 bg-state-failed/5 px-5 py-4 font-mono text-xs text-state-failed">{ r.Erro }</pre>
 		}
 		@dag("/api/runs/" + r.ID.String() + "/graph")
+		@saidaDosPassos(logs)
+	}
+}
+
+// duracaoMs adapta os milissegundos que a consulta devolve ao formatador
+// existente, que fala em time.Duration.
+func duracaoMs(ms int64) string {
+	d := time.Duration(ms) * time.Millisecond
+	return components.Duracao(&d)
+}
+
+// saidaDosPassos mostra o log de cada tentativa.
+//
+// Existe porque o log vivia so no pod, e o pod e apagado quando o passo termina:
+// uma pipeline que falhava as 4h deixava "falha" na tela e nada mais. Renderizado
+// no servidor dentro de <details>, sem JavaScript e sem uma segunda chamada — o
+// grafo acima ja e polido de segundo em segundo, e anexar log aquele JSON
+// encareceria cada poll.
+templ saidaDosPassos(logs []postgres.LogDoPasso) {
+	if len(logs) > 0 {
+		<section class="mt-8">
+			<h2 class="display mb-4 text-xl text-ink">Saída dos passos</h2>
+			<div class="space-y-2">
+				for _, p := range logs {
+					<details class="group rounded-2xl border border-line bg-surface">
+						<summary class="flex cursor-pointer flex-wrap items-center gap-x-4 gap-y-1 px-5 py-3.5 text-sm">
+							@components.Estado(p.Status)
+							<span class="font-medium text-ink">{ p.NodeID }</span>
+							if p.Tentativa > 0 {
+								<span class="text-xs text-state-retrying">tentativa { fmt.Sprint(p.Tentativa+1) }</span>
+							}
+							if p.ExitCode != nil {
+								<span class="font-mono text-xs text-muted">saída { fmt.Sprint(*p.ExitCode) }</span>
+							}
+							if p.DuracaoMs > 0 {
+								<span class="text-xs text-muted">{ duracaoMs(p.DuracaoMs) }</span>
+							}
+							if p.Log == "" {
+								<span class="text-xs text-muted/70 italic">sem saída registrada</span>
+							}
+						</summary>
+						if p.Erro != "" {
+							<p class="mx-5 mb-3 rounded-xl bg-state-failed/5 px-4 py-2.5 text-xs text-state-failed">{ p.Erro }</p>
+						}
+						if p.Log != "" {
+							// `overflow-auto` com altura maxima: uma saida de dbt
+							// com centenas de linhas nao pode empurrar o resto da
+							// pagina para fora da tela.
+							<pre class="mx-5 mb-5 max-h-[28rem] overflow-auto rounded-xl bg-parchment-soft px-4 py-3 font-mono text-[0.7rem] leading-relaxed whitespace-pre text-ink">{ p.Log }</pre>
+						}
+					</details>
+				}
+			</div>
+		</section>
 	}
 }
 

@@ -54,6 +54,7 @@ type Definicoes interface {
 type Execucoes interface {
 	Buscar(ctx context.Context, id uuid.UUID) (run.Run, error)
 	EstadoDosNos(ctx context.Context, id uuid.UUID) (map[string]postgres.EstadoNo, error)
+	LogsDaRun(ctx context.Context, id uuid.UUID) ([]postgres.LogDoPasso, error)
 }
 
 // Acoes sao os dois efeitos que a tela dispara. Interface pequena de proposito:
@@ -503,7 +504,13 @@ func (u *UI) run(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	u.render(w, r, pages.Run(execucao))
+	// Log ausente nao impede a tela: o resto da pagina continua util, e uma
+	// execucao recem-enfileirada legitimamente ainda nao tem passo nenhum.
+	logs, err := u.execs.LogsDaRun(r.Context(), id)
+	if err != nil {
+		u.log.Warn("logs da execucao indisponiveis", "run", id, "erro", err)
+	}
+	u.render(w, r, pages.Run(execucao, logs))
 }
 
 func (u *UI) alternar(w http.ResponseWriter, r *http.Request) {

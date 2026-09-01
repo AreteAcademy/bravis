@@ -33,7 +33,7 @@ type Reporter interface {
 type Persistidor interface {
 	IniciarTask(ctx context.Context, runID uuid.UUID, nodeID string, tentativa int) error
 	TerminarTask(ctx context.Context, runID uuid.UUID, nodeID string, tentativa int,
-		status run.Status, exit *int, erro string) error
+		status run.Status, exit *int, erro string, log string) error
 }
 
 // Runner executa um workflow inteiro.
@@ -156,8 +156,9 @@ func (r Runner) rodarNo(ctx context.Context, w wf.Workflow, n wf.Node) error {
 			return err
 		}
 		r.marcarInicio(ctx, n.ID, t-1)
-		ultima = r.tentar(ctx, w, n, t-1)
-		r.marcarFim(ctx, n.ID, t-1, ultima)
+		var saida string
+		saida, ultima = r.tentar(ctx, w, n, t-1)
+		r.marcarFim(ctx, n.ID, t-1, ultima, saida)
 		libera()
 		if ultima == nil {
 			return nil
@@ -220,7 +221,7 @@ func (r Runner) marcarInicio(ctx context.Context, nodeID string, tentativa int) 
 	}
 }
 
-func (r Runner) marcarFim(ctx context.Context, nodeID string, tentativa int, causa error) {
+func (r Runner) marcarFim(ctx context.Context, nodeID string, tentativa int, causa error, log string) {
 	if r.Persist == nil || r.RunID == uuid.Nil {
 		return
 	}
@@ -235,7 +236,7 @@ func (r Runner) marcarFim(ctx context.Context, nodeID string, tentativa int, cau
 			exit = &passo.ExitCode
 		}
 	}
-	if err := r.Persist.TerminarTask(ctx, r.RunID, nodeID, tentativa, status, exit, msg); err != nil && r.Report != nil {
+	if err := r.Persist.TerminarTask(ctx, r.RunID, nodeID, tentativa, status, exit, msg, log); err != nil && r.Report != nil {
 		r.Report.Evento(execution.Event{
 			Kind: execution.EventLog, NodeID: nodeID, Stream: "stderr",
 			Message: "nao consegui registrar o fim do passo: " + err.Error(),
@@ -297,19 +298,29 @@ func dicaDoCodigo(c int) string {
 // uma stack trace curta ou a mensagem final de um comando sem afogar a tela.
 const linhasDeContexto = 5
 
-func (r Runner) tentar(ctx context.Context, w wf.Workflow, n wf.Node, tentativa int) error {
+// tentar roda o passo uma vez e devolve a saida completa (com teto) junto com o
+// desfecho. A saida sobe mesmo em caso de sucesso: um passo que terminou bem
+// mas produziu pouca coisa e um sinal, e so se percebe olhando o log.
+func (r Runner) tentar(ctx context.Context, w wf.Workflow, n wf.Node, tentativa int) (string, error) {
 	exec, tarefa, err := r.montar(w, n, tentativa)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	eventos, err := exec.Execute(ctx, tarefa)
 	if err != nil {
-		return fmt.Errorf("step %q: %w", n.ID, err)
+		return "", fmt.Errorf("step %q: %w", n.ID, err)
 	}
 
 	var falha *ErroDePasso
 	var stderr, stdout []string
+
+	// A saida inteira (com teto) vai para o banco. As janelas de 5 linhas
+	// abaixo continuam existindo para a MENSAGEM de erro, que precisa caber num
+	// alerta do Slack; esta guarda o que o operador vai querer ler depois,
+	// quando o pod que a produziu ja nao existe.
+	var completa janela
+
 	for e := range eventos {
 		if r.Report != nil {
 			r.Report.Evento(e)
@@ -324,6 +335,7 @@ func (r Runner) tentar(ctx context.Context, w wf.Workflow, n wf.Node, tentativa 
 		// sem a causa que estava na tela o tempo todo.
 		if e.Kind == execution.EventLog {
 			if linha := strings.TrimSpace(e.Message); linha != "" {
+				completa.Escrever(linha)
 				alvo := &stdout
 				if e.Stream == "stderr" {
 					alvo = &stderr
@@ -339,7 +351,7 @@ func (r Runner) tentar(ctx context.Context, w wf.Workflow, n wf.Node, tentativa 
 		}
 	}
 	if falha == nil {
-		return nil
+		return completa.String(), nil
 	}
 	// stderr primeiro: quando existe, e onde o programa quis reportar erro.
 	// stdout so entra na ausencia dele, para nao encher a mensagem com a saida
@@ -348,7 +360,7 @@ func (r Runner) tentar(ctx context.Context, w wf.Workflow, n wf.Node, tentativa 
 	if len(falha.Saida) == 0 {
 		falha.Saida = stdout
 	}
-	return falha
+	return completa.String(), falha
 }
 
 // montar escolhe o executor e monta a task.

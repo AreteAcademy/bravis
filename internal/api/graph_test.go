@@ -48,6 +48,10 @@ type execsFake struct {
 }
 
 func (e execsFake) Buscar(context.Context, uuid.UUID) (dom.Run, error) { return e.run, e.err }
+func (e execsFake) LogsDaRun(context.Context, uuid.UUID) ([]postgres.LogDoPasso, error) {
+	return nil, nil
+}
+
 func (e execsFake) EstadoDosNos(context.Context, uuid.UUID) (map[string]postgres.EstadoNo, error) {
 	return e.estados, nil
 }
