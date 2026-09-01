@@ -103,3 +103,33 @@ GET /assets/app.css  200  16.372 bytes
 
 **PHASE 6 — REACT FLOW**: visualização e edição de DAG como ilha interativa,
 dentro das páginas SSR que esta fase estabeleceu.
+
+---
+
+## Correção pós-fase — assets em 404 (2026-09-01)
+
+As páginas respondiam 200, mas `/assets/app.css` dava 404 no container: a UI
+aparecia **sem estilo nenhum**, o que parece defeito da página e não do caminho.
+
+Causa: o handler servia do sistema de arquivos, com caminho relativo —
+
+```go
+http.FileServer(http.Dir("web/assets"))
+```
+
+— enquanto o `Dockerfile` é distroless e copia **apenas o binário**. Não existe
+`web/assets` no container. O mesmo quebrava ao rodar o `bravis` de qualquer
+diretório que não a raiz do repositório.
+
+Corrigido embutindo o CSS com `//go:embed`, como as migrations já eram. Verificado
+nos dois caminhos que falhavam: binário rodando de `/tmp` e container distroless
+reconstruído — `/assets/app.css` responde 200 com `content-type: text/css` nos
+dois.
+
+O `Dockerfile` ganhou uma checagem: se `web/assets/app.css` sumir do repositório,
+o build falha ali, com mensagem, em vez de gerar uma imagem que serve páginas sem
+estilo. E `make build` passou a depender de `generate`.
+
+**Lição de método**: testei a UI apenas com o binário rodando da raiz do repo, onde
+o caminho relativo funciona por acidente. O container — que eu mesmo escrevi como
+distroless — nunca foi exercitado com a UI antes de eu declarar a fase concluída.

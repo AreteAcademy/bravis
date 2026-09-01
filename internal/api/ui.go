@@ -8,6 +8,7 @@ import (
 	"github.com/a-h/templ"
 
 	"github.com/zarvhq/bravis/internal/infrastructure/postgres"
+	"github.com/zarvhq/bravis/web/assets"
 	"github.com/zarvhq/bravis/web/pages"
 )
 
@@ -34,7 +35,9 @@ func (u *UI) Registrar(mux *http.ServeMux) {
 	mux.HandleFunc("GET /runs", u.runs)
 	mux.HandleFunc("GET /workflows", u.workflows)
 	mux.HandleFunc("GET /projects", u.projetos)
-	mux.Handle("GET /assets/", http.StripPrefix("/assets/", http.FileServer(http.Dir("web/assets"))))
+	// Servidos do embed, nao do disco: o container e distroless e nao tem
+	// web/assets, e o binario precisa funcionar de qualquer diretorio.
+	mux.Handle("GET /assets/", http.StripPrefix("/assets/", http.FileServerFS(assets.FS)))
 }
 
 func (u *UI) dashboard(w http.ResponseWriter, r *http.Request) {

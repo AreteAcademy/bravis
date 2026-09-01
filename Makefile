@@ -5,7 +5,7 @@ DB_URL := postgres://bravis:bravis@localhost:5432/bravis?sslmode=disable
 help: ## Lista os alvos
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
 
-build: ## Compila o binario em bin/
+build: generate ## Compila o binario em bin/ (gera templ e css antes)
 	@go build -trimpath -o $(BIN) ./cmd/bravis
 
 test: ## Roda os testes (os de integracao pulam sem Postgres)

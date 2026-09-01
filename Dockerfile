@@ -11,6 +11,12 @@ COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod go mod download
 
 COPY . .
+
+# O CSS e embutido no binario (web/assets/embed.go). Ele vai versionado no repo
+# justamente para que a imagem nao precise do Tailwind; se sumir, o //go:embed
+# falha aqui, no build, e nao em producao com a pagina sem estilo.
+RUN test -f web/assets/app.css || { echo "web/assets/app.css ausente — rode 'make generate'"; exit 1; }
+
 # -trimpath e -s -w tiram caminhos absolutos e tabelas de debug.
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
