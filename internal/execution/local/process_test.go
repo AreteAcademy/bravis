@@ -40,7 +40,7 @@ func TestRecusaConstrucaoForaDoLocal(t *testing.T) {
 }
 
 func TestExecutaEReportaSucesso(t *testing.T) {
-	ev, err := executor(t).Execute(context.Background(), execution.Task{
+	ev, err := executor(t).Execute(context.Background(), execution.TaskExec{
 		ExecutionID: "1", NodeID: "hello", Command: "echo ola",
 	})
 	if err != nil {
@@ -63,7 +63,7 @@ func TestExecutaEReportaSucesso(t *testing.T) {
 // stdout e stderr precisam chegar separados: juntar os dois perde de onde a
 // mensagem veio, que foi o que fez o resumo do dbt aparecer como erro no Leoflow.
 func TestSeparaStdoutDeStderr(t *testing.T) {
-	ev, err := executor(t).Execute(context.Background(), execution.Task{
+	ev, err := executor(t).Execute(context.Background(), execution.TaskExec{
 		ExecutionID: "2", NodeID: "n", Command: "echo saida; echo erro >&2",
 	})
 	if err != nil {
@@ -80,7 +80,7 @@ func TestSeparaStdoutDeStderr(t *testing.T) {
 }
 
 func TestReportaFalhaComExitCode(t *testing.T) {
-	ev, err := executor(t).Execute(context.Background(), execution.Task{
+	ev, err := executor(t).Execute(context.Background(), execution.TaskExec{
 		ExecutionID: "3", NodeID: "n", Command: "exit 3",
 	})
 	if err != nil {
@@ -102,7 +102,7 @@ func TestReportaFalhaComExitCode(t *testing.T) {
 func TestNaoHerdaAmbienteDoPai(t *testing.T) {
 	t.Setenv("SEGREDO_DO_ORQUESTRADOR", "nao-vazar")
 
-	ev, err := executor(t).Execute(context.Background(), execution.Task{
+	ev, err := executor(t).Execute(context.Background(), execution.TaskExec{
 		ExecutionID: "4", NodeID: "n",
 		Command: "echo [$SEGREDO_DO_ORQUESTRADOR]",
 		Env:     map[string]string{"PERMITIDA": "sim"},
@@ -119,7 +119,7 @@ func TestNaoHerdaAmbienteDoPai(t *testing.T) {
 
 func TestCancelInterrompe(t *testing.T) {
 	p := executor(t)
-	ev, err := p.Execute(context.Background(), execution.Task{
+	ev, err := p.Execute(context.Background(), execution.TaskExec{
 		ExecutionID: "5", NodeID: "n", Command: "sleep 30",
 	})
 	if err != nil {

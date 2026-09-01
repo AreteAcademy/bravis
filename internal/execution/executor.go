@@ -6,23 +6,39 @@
 // que escreve em stdout.
 package execution
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // Executor roda uma task e reporta o que acontece.
 type Executor interface {
 	Name() string
-	Execute(ctx context.Context, t Task) (<-chan Event, error)
+	Execute(ctx context.Context, t TaskExec) (<-chan Event, error)
 	Cancel(ctx context.Context, execID string) error
 }
 
-// Task e o que se pede para executar. Deliberadamente pobre: o executor nao
-// conhece workflow, dependencia nem agenda — so o comando e seu ambiente.
-type Task struct {
+// TaskExec e o que se pede para executar. Deliberadamente pobre: o executor nao
+// conhece workflow, dependencia nem agenda.
+//
+// `Command` e `Action` sao exclusivos: o primeiro vai para o ProcessExecutor, o
+// segundo resolve no registry de tasks Go. Quem escolhe o executor e o runner,
+// nao o executor.
+type TaskExec struct {
 	ExecutionID string
 	NodeID      string
-	Command     string
-	WorkDir     string
-	Env         map[string]string
+
+	Command string // shell, para o ProcessExecutor
+	Action  string // nome no registry, para o GoExecutor
+	With    map[string]any
+
+	WorkDir string
+	Env     map[string]string
+
+	// Timeout zero significa sem limite. A secao 37 pede timeout na PHASE 3;
+	// deixar o padrao aberto e deliberado — impor um limite arbitrario mataria
+	// tasks legitimamente longas.
+	Timeout time.Duration
 }
 
 // EventKind classifica o que o executor reporta.

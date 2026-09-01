@@ -48,12 +48,18 @@ func (p *ProcessExecutor) Name() string { return "process" }
 
 // Execute dispara o comando e devolve o canal de eventos. O canal fecha quando o
 // processo termina — quem consome pode usar `range` sem coordenacao extra.
-func (p *ProcessExecutor) Execute(ctx context.Context, t execution.Task) (<-chan execution.Event, error) {
+func (p *ProcessExecutor) Execute(ctx context.Context, t execution.TaskExec) (<-chan execution.Event, error) {
 	if t.Command == "" {
 		return nil, fmt.Errorf("task %q sem comando", t.NodeID)
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
+	if t.Timeout > 0 {
+		// CommandContext mata o processo quando o contexto expira, entao o
+		// timeout vale para o comando inteiro, nao so para a espera.
+		ctx, cancel = context.WithTimeout(ctx, t.Timeout)
+	}
+
 	p.mu.Lock()
 	p.rodando[t.ExecutionID] = cancel
 	p.mu.Unlock()

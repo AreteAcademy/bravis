@@ -9,11 +9,11 @@ package execution
 import (
 	"context"
 	"fmt"
-	"sync"
-
 	wf "github.com/zarvhq/bravis/internal/domain/workflow"
 	"github.com/zarvhq/bravis/internal/execution"
 	"github.com/zarvhq/bravis/internal/graph"
+	"sync"
+	"time"
 )
 
 // Reporter recebe os eventos da execucao. Interface pequena para que a CLI, os
@@ -23,11 +23,24 @@ type Reporter interface {
 }
 
 // Runner executa um workflow inteiro.
+//
+// Guarda DOIS executores e escolhe por no: `run:` vai para o de processo,
+// `action:` resolve no registry Go. A escolha e do runner, e nao do executor,
+// para que cada executor continue ignorando a existencia do outro.
 type Runner struct {
-	Exec    execution.Executor
+	Processo execution.Executor // atende `run:`; pode ser nil se so houver tasks Go
+	Go       execution.Executor // atende `action:`; pode ser nil
+
 	WorkDir string
 	Env     map[string]string
 	Report  Reporter
+
+	// Timeout por no. Zero = sem limite.
+	Timeout time.Duration
+
+	// MaxTentativas por no. Zero ou 1 = tentativa unica.
+	MaxTentativas int
+	BackoffBase   time.Duration
 }
 
 // Run percorre o grafo por niveis: tudo dentro de um nivel roda em paralelo, e o
@@ -64,17 +77,6 @@ func (r Runner) rodarNivel(ctx context.Context, w wf.Workflow, nivel []string, p
 	for _, id := range nivel {
 		n := porID[id]
 
-		// `action:` ainda nao tem executor. Falhar explicitamente e melhor que
-		// pular em silencio: um step que nao roda e o workflow reporta sucesso e
-		// pior que um erro.
-		if n.Action != "" {
-			mu.Lock()
-			erros = append(erros, fmt.Errorf("step %q usa `action: %s`, ainda nao implementada "+
-				"(so `run:` funciona hoje)", n.ID, n.Action))
-			mu.Unlock()
-			continue
-		}
-
 		wg.Add(1)
 		go func(n wf.Node) {
 			defer wg.Done()
@@ -93,14 +95,53 @@ func (r Runner) rodarNivel(ctx context.Context, w wf.Workflow, nivel []string, p
 	return nil
 }
 
+// rodarNo executa um no, com retry.
+//
+// O retry e POR NO, e nao apenas por Run como no dispatcher: refazer o workflow
+// inteiro porque um `notify.sh` falhou desperdicaria o trabalho ja concluido.
 func (r Runner) rodarNo(ctx context.Context, w wf.Workflow, n wf.Node) error {
-	eventos, err := r.Exec.Execute(ctx, execution.Task{
-		ExecutionID: w.Slug + ":" + n.ID,
-		NodeID:      n.ID,
-		Command:     n.Run,
-		WorkDir:     r.WorkDir,
-		Env:         r.Env,
-	})
+	tentativas := r.MaxTentativas
+	if tentativas < 1 {
+		tentativas = 1
+	}
+
+	var ultima error
+	for t := 1; t <= tentativas; t++ {
+		ultima = r.tentar(ctx, w, n)
+		if ultima == nil {
+			return nil
+		}
+		if t == tentativas {
+			break
+		}
+		// Nao insiste se o contexto morreu: seria retry contra um cancelamento.
+		if ctx.Err() != nil {
+			break
+		}
+
+		espera := r.BackoffBase * time.Duration(1<<uint(t-1))
+		if r.Report != nil {
+			r.Report.Evento(execution.Event{
+				Kind: execution.EventLog, NodeID: n.ID, Stream: "stderr",
+				Message: fmt.Sprintf("tentativa %d/%d falhou, repetindo em %s", t, tentativas, espera),
+			})
+		}
+		select {
+		case <-time.After(espera):
+		case <-ctx.Done():
+			return ultima
+		}
+	}
+	return ultima
+}
+
+func (r Runner) tentar(ctx context.Context, w wf.Workflow, n wf.Node) error {
+	exec, tarefa, err := r.montar(w, n)
+	if err != nil {
+		return err
+	}
+
+	eventos, err := exec.Execute(ctx, tarefa)
 	if err != nil {
 		return fmt.Errorf("step %q: %w", n.ID, err)
 	}
@@ -111,8 +152,33 @@ func (r Runner) rodarNo(ctx context.Context, w wf.Workflow, n wf.Node) error {
 			r.Report.Evento(e)
 		}
 		if e.Kind == execution.EventFailed {
-			falha = fmt.Errorf("step %q falhou (exit %d)", n.ID, e.ExitCode)
+			falha = fmt.Errorf("step %q: %s", n.ID, e.Message)
 		}
 	}
 	return falha
+}
+
+// montar escolhe o executor e monta a task.
+func (r Runner) montar(w wf.Workflow, n wf.Node) (execution.Executor, execution.TaskExec, error) {
+	t := execution.TaskExec{
+		ExecutionID: w.Slug + ":" + n.ID,
+		NodeID:      n.ID,
+		WorkDir:     r.WorkDir,
+		Env:         r.Env,
+		Timeout:     r.Timeout,
+	}
+
+	if n.Action != "" {
+		if r.Go == nil {
+			return nil, t, fmt.Errorf("step %q usa `action: %s`, mas nenhum executor Go foi configurado", n.ID, n.Action)
+		}
+		t.Action, t.With = n.Action, n.With
+		return r.Go, t, nil
+	}
+
+	if r.Processo == nil {
+		return nil, t, fmt.Errorf("step %q usa `run:`, mas nenhum executor de processo foi configurado", n.ID)
+	}
+	t.Command = n.Run
+	return r.Processo, t, nil
 }

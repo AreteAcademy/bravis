@@ -14,6 +14,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -128,7 +129,11 @@ func cmdValidate() *cobra.Command {
 // cmdRun executa um workflow na propria instancia. Sem fila, sem banco, sem
 // scheduler — e o caminho curto que a emenda a secao 3 habilitou.
 func cmdRun() *cobra.Command {
-	var workDir string
+	var (
+		workDir    string
+		tentativas int
+		timeout    time.Duration
+	)
 	c := &cobra.Command{
 		Use:   "run <arquivo.yaml>",
 		Short: "Executa um workflow localmente",
@@ -158,8 +163,16 @@ func cmdRun() *cobra.Command {
 			fmt.Printf("workflow %s (%s, %d steps) em %s\n\n", w.Slug, w.Kind, len(w.Nodes), workDir)
 
 			runner := app.Runner{
-				Exec:    exec,
-				WorkDir: workDir,
+				Processo: exec,
+				// Registry vazio no `run`: tasks Go sao registradas por quem
+				// compila o binario, e o CLI generico nao conhece nenhuma.
+				// `action:` de uma task nao registrada falha citando as
+				// disponiveis, que e o comportamento util aqui.
+				Go:            local.NewGoExecutor(execution.NewRegistry()),
+				MaxTentativas: tentativas,
+				BackoffBase:   time.Second,
+				Timeout:       timeout,
+				WorkDir:       workDir,
 				// PATH e HOME explicitos: sem eles um `python` ou `./script.sh`
 				// nao resolve. O resto do ambiente NAO e herdado, de proposito.
 				Env:    map[string]string{"PATH": os.Getenv("PATH"), "HOME": os.Getenv("HOME")},
@@ -173,6 +186,8 @@ func cmdRun() *cobra.Command {
 		},
 	}
 	c.Flags().StringVar(&workDir, "workdir", "", "diretorio de trabalho (padrao: o do arquivo)")
+	c.Flags().IntVar(&tentativas, "retries", 1, "tentativas por step (1 = sem retry)")
+	c.Flags().DurationVar(&timeout, "timeout", 0, "timeout por step (0 = sem limite)")
 	return c
 }
 
