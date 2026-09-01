@@ -16,7 +16,7 @@ type checkerFalso struct{ err error }
 func (c checkerFalso) Check(context.Context) error { return c.err }
 
 func servidorDeTeste(checkers map[string]Checker) *Server {
-	return NewServer(slog.New(slog.NewTextHandler(io.Discard, nil)), checkers)
+	return NewServer(slog.New(slog.NewTextHandler(io.Discard, nil)), checkers, nil)
 }
 
 // O liveness nao pode depender do banco: se dependesse, uma oscilacao do

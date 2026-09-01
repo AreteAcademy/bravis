@@ -1,0 +1,163 @@
+package pages
+
+import (
+	"fmt"
+	"time"
+
+	"github.com/zarvhq/bravis/internal/infrastructure/postgres"
+	"github.com/zarvhq/bravis/web/components"
+	"github.com/zarvhq/bravis/web/layouts"
+)
+
+templ Dashboard(status map[string]int, pendentes, reivindicados int, ultimas []postgres.ResumoRun) {
+	@layouts.Base("Dashboard", "dashboard") {
+		<div class="grid grid-cols-2 gap-4 md:grid-cols-5">
+			@components.Metrica("Em execucao", status["running"], "text-sky-400")
+			@components.Metrica("Na fila", status["queued"], "text-amber-400")
+			@components.Metrica("Sucesso", status["success"], "text-emerald-400")
+			@components.Metrica("Falha", status["failed"], "text-red-400")
+			@components.Metrica("Fila (itens)", pendentes+reivindicados, "text-slate-300")
+		</div>
+		<section class="mt-8">
+			<h2 class="mb-3 text-sm font-medium text-slate-300">Execucoes recentes</h2>
+			@tabelaRuns(ultimas)
+		</section>
+	}
+}
+
+templ Runs(runs []postgres.ResumoRun) {
+	@layouts.Base("Execucoes", "runs") {
+		@tabelaRuns(runs)
+	}
+}
+
+templ Workflows(ws []postgres.ResumoWorkflow) {
+	@layouts.Base("Workflows", "workflows") {
+		if len(ws) == 0 {
+			@components.Vazio("Nenhum workflow publicado.", "bravis publish arquivo.yaml")
+		} else {
+			<div class="overflow-hidden rounded-lg border border-slate-800">
+				<table class="w-full text-sm">
+					<thead class="bg-slate-900/60 text-left text-xs uppercase tracking-wide text-slate-500">
+						<tr>
+							<th class="px-4 py-3 font-medium">Workflow</th>
+							<th class="px-4 py-3 font-medium">Projeto</th>
+							<th class="px-4 py-3 font-medium">Agenda</th>
+							<th class="px-4 py-3 font-medium">Ultimo slot</th>
+							<th class="px-4 py-3 font-medium">Ultimo estado</th>
+							<th class="px-4 py-3 text-right font-medium">Runs</th>
+						</tr>
+					</thead>
+					<tbody class="divide-y divide-slate-800">
+						for _, w := range ws {
+							<tr class="hover:bg-slate-900/40">
+								<td class="px-4 py-3 font-medium text-slate-200">{ w.Slug }</td>
+								<td class="px-4 py-3 text-slate-400">{ w.Projeto }</td>
+								<td class="px-4 py-3">
+									if w.Cron == "" {
+										<span class="text-slate-600">manual</span>
+									} else {
+										<span class="font-mono text-xs text-slate-300">{ w.Cron }</span>
+										if w.Catchup {
+											<span class="ml-2 text-xs text-amber-500">catchup</span>
+										}
+									}
+								</td>
+								<td class="px-4 py-3 font-mono text-xs text-slate-400">{ quando(w.UltimoSlot) }</td>
+								<td class="px-4 py-3">
+									if w.UltimoStatus != "" {
+										@components.StatusBadge(w.UltimoStatus)
+									} else {
+										<span class="text-xs text-slate-600">nunca rodou</span>
+									}
+								</td>
+								<td class="px-4 py-3 text-right tabular-nums text-slate-400">{ fmt.Sprint(w.TotalRuns) }</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		}
+	}
+}
+
+templ Projetos(ps []postgres.ResumoProjeto) {
+	@layouts.Base("Projetos", "projects") {
+		if len(ps) == 0 {
+			@components.Vazio("Nenhum projeto.", "bravis publish --project meu-projeto arquivo.yaml")
+		} else {
+			<div class="grid gap-4 md:grid-cols-3">
+				for _, p := range ps {
+					<div class="rounded-lg border border-slate-800 bg-slate-900/40 px-5 py-4">
+						<p class="font-medium text-slate-200">{ p.Nome }</p>
+						<p class="font-mono text-xs text-slate-500">{ p.Slug }</p>
+						<div class="mt-3 flex gap-4 text-xs text-slate-400">
+							<span>{ fmt.Sprint(p.Workflows) } workflows</span>
+							<span>{ fmt.Sprint(p.Runs) } execucoes</span>
+						</div>
+					</div>
+				}
+			</div>
+		}
+	}
+}
+
+templ tabelaRuns(runs []postgres.ResumoRun) {
+	if len(runs) == 0 {
+		@components.Vazio("Nenhuma execucao ainda.", "bravis scheduler")
+	} else {
+		<div class="overflow-hidden rounded-lg border border-slate-800">
+			<table class="w-full text-sm">
+				<thead class="bg-slate-900/60 text-left text-xs uppercase tracking-wide text-slate-500">
+					<tr>
+						<th class="px-4 py-3 font-medium">Estado</th>
+						<th class="px-4 py-3 font-medium">Workflow</th>
+						<th class="px-4 py-3 font-medium">Origem</th>
+						<th class="px-4 py-3 font-medium">Slot</th>
+						<th class="px-4 py-3 font-medium">Duracao</th>
+						<th class="px-4 py-3 font-medium">Criado</th>
+					</tr>
+				</thead>
+				<tbody class="divide-y divide-slate-800">
+					for _, r := range runs {
+						<tr class="hover:bg-slate-900/40">
+							<td class="px-4 py-3">
+								@components.StatusBadge(r.Status)
+								if r.Tentativa > 0 {
+									<span class="ml-2 text-xs text-slate-500">tentativa { fmt.Sprint(r.Tentativa+1) }</span>
+								}
+							</td>
+							<td class="px-4 py-3 font-medium text-slate-200">{ r.WorkflowSlug }</td>
+							<td class="px-4 py-3 text-xs text-slate-400">{ r.TriggerType }</td>
+							<td class="px-4 py-3 font-mono text-xs text-slate-400">{ quando(r.LogicalDate) }</td>
+							<td class="px-4 py-3 tabular-nums text-xs text-slate-400">{ duracao(r.Duracao) }</td>
+							<td class="px-4 py-3 text-xs text-slate-500">{ r.CriadoEm.Format("02/01 15:04") }</td>
+						</tr>
+						if r.Erro != "" {
+							<tr class="bg-red-950/20">
+								<td colspan="6" class="px-4 pb-3 font-mono text-xs text-red-400/80">{ r.Erro }</td>
+							</tr>
+						}
+					}
+				</tbody>
+			</table>
+		</div>
+	}
+}
+
+func quando(t *time.Time) string {
+	if t == nil {
+		return "—"
+	}
+	return t.UTC().Format("02/01 15:04")
+}
+
+func duracao(d *time.Duration) string {
+	if d == nil {
+		return "—"
+	}
+	if *d < time.Second {
+		return fmt.Sprintf("%dms", d.Milliseconds())
+	}
+	return fmt.Sprintf("%.1fs", d.Seconds())
+}

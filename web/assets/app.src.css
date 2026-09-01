@@ -1,0 +1,15 @@
+@import "tailwindcss";
+
+/* Onde procurar classes. Aponta para os .templ (fonte) e para os _templ.go
+   gerados: o Tailwind v4 detecta sozinho na maioria dos casos, mas arquivos
+   gerados costumam ficar de fora das heuristicas padrao, e uma classe nao
+   detectada some do CSS sem aviso. */
+@source "../layouts";
+@source "../pages";
+@source "../components";
+
+/* Tabular nums nas colunas numericas: sem isso os digitos dancam quando a
+   tabela atualiza, e a leitura de uma coluna de duracoes fica ruim. */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}

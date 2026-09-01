@@ -1,0 +1,35 @@
+# Hot reload de desenvolvimento.
+#
+# A cadeia importa: `templ generate` ANTES do `go build`, senao o binario e
+# compilado com os _templ.go antigos e a mudanca no .templ nao aparece. O
+# `full_bin` sobe a API com as variaveis do ambiente local.
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  pre_cmd = [
+    "templ generate",
+    "./bin/tailwindcss -i web/assets/app.src.css -o web/assets/app.css",
+  ]
+  cmd = "go build -o ./tmp/bravis ./cmd/bravis"
+  bin = "./tmp/bravis"
+  full_bin = "BRAVIS_ENV=local BRAVIS_LOG_LEVEL=debug ./tmp/bravis serve"
+
+  include_ext = ["go", "templ", "css", "sql", "yaml"]
+
+  # `_templ.go` e gerado pelo `templ generate` do pre_cmd. Sem excluir, cada
+  # geracao dispara outro rebuild, e o air entra em laco infinito.
+  exclude_regex = ["_test\\.go$", "_templ\\.go$"]
+  exclude_dir  = ["tmp", "bin", "docs", ".git"]
+
+  delay = 200
+  stop_on_error = false
+  send_interrupt = true
+  kill_delay = 2000
+
+[log]
+  main_only = false
+  time = true
+
+[misc]
+  clean_on_exit = true

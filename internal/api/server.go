@@ -21,10 +21,16 @@ type Server struct {
 
 // NewServer monta o roteador. Os checkers sao nomeados para que o /ready diga
 // QUAL dependencia falhou, e nao apenas que algo falhou.
-func NewServer(log *slog.Logger, checkers map[string]Checker) *Server {
+//
+// `ui` pode ser nil: um processo que so serve health check nao precisa das
+// paginas, e exigi-las acoplaria o servidor ao banco sem necessidade.
+func NewServer(log *slog.Logger, checkers map[string]Checker, ui *UI) *Server {
 	s := &Server{log: log, checkers: checkers, mux: http.NewServeMux()}
 	s.mux.HandleFunc("GET /health", s.health)
 	s.mux.HandleFunc("GET /ready", s.ready)
+	if ui != nil {
+		ui.Registrar(s.mux)
+	}
 	return s
 }
 

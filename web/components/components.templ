@@ -1,0 +1,52 @@
+package components
+
+import "fmt"
+
+// StatusBadge pinta o estado de um Run.
+//
+// As cores seguem a maquina de estados da secao 7, e nao o gosto: terminal de
+// sucesso em verde, falha em vermelho, e os intermediarios em tons neutros que
+// nao competem por atencao num painel cheio.
+templ StatusBadge(status string) {
+	<span class={ "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium", corDoStatus(status) }>
+		{ status }
+	</span>
+}
+
+func corDoStatus(s string) string {
+	switch s {
+	case "success":
+		return "bg-emerald-500/10 text-emerald-400 ring-1 ring-inset ring-emerald-500/20"
+	case "failed":
+		return "bg-red-500/10 text-red-400 ring-1 ring-inset ring-red-500/20"
+	case "running":
+		return "bg-sky-500/10 text-sky-400 ring-1 ring-inset ring-sky-500/20"
+	case "queued":
+		return "bg-amber-500/10 text-amber-400 ring-1 ring-inset ring-amber-500/20"
+	case "retrying":
+		return "bg-orange-500/10 text-orange-400 ring-1 ring-inset ring-orange-500/20"
+	case "canceled":
+		return "bg-slate-500/10 text-slate-400 ring-1 ring-inset ring-slate-500/20"
+	default:
+		return "bg-slate-500/10 text-slate-400 ring-1 ring-inset ring-slate-500/20"
+	}
+}
+
+// Metrica e um numero em destaque no dashboard.
+templ Metrica(rotulo string, valor int, matiz string) {
+	<div class="rounded-lg border border-slate-800 bg-slate-900/40 px-5 py-4">
+		<p class="text-xs uppercase tracking-wide text-slate-500">{ rotulo }</p>
+		<p class={ "mt-1 text-2xl font-semibold tabular-nums", matiz }>{ fmt.Sprint(valor) }</p>
+	</div>
+}
+
+// Vazio comunica ausencia de dado sem parecer erro. Uma tabela vazia sem
+// explicacao faz o operador procurar defeito onde nao ha.
+templ Vazio(msg, dica string) {
+	<div class="rounded-lg border border-dashed border-slate-800 px-6 py-10 text-center">
+		<p class="text-sm text-slate-400">{ msg }</p>
+		if dica != "" {
+			<p class="mt-1 font-mono text-xs text-slate-600">{ dica }</p>
+		}
+	</div>
+}

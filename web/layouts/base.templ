@@ -1,0 +1,63 @@
+package layouts
+
+// Base e o esqueleto de toda pagina.
+//
+// A secao 17 do plano pede SSR primeiro, com ilhas interativas apenas onde a
+// interacao justifica (React Flow, na PHASE 6). Nada de SPA: o HTML chega pronto.
+templ Base(titulo string, ativo string) {
+	<!DOCTYPE html>
+	<html lang="pt-BR" class="h-full">
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<title>{ titulo } · Bravis</title>
+			<link rel="stylesheet" href="/assets/app.css"/>
+		</head>
+		<body class="h-full bg-slate-950 text-slate-200 antialiased">
+			<div class="flex h-full">
+				@sidebar(ativo)
+				<main class="flex-1 overflow-y-auto">
+					<header class="border-b border-slate-800 px-8 py-5">
+						<h1 class="text-xl font-semibold text-slate-100">{ titulo }</h1>
+					</header>
+					<div class="px-8 py-6">
+						{ children... }
+					</div>
+				</main>
+			</div>
+		</body>
+	</html>
+}
+
+type item struct {
+	Rota  string
+	Nome  string
+	Chave string
+}
+
+templ sidebar(ativo string) {
+	<aside class="w-56 shrink-0 border-r border-slate-800 bg-slate-900/50">
+		<div class="px-5 py-5">
+			<span class="text-lg font-semibold tracking-tight text-slate-100">Bravis</span>
+			<p class="mt-0.5 text-xs text-slate-500">workflow engine</p>
+		</div>
+		<nav class="px-3">
+			for _, i := range []item{
+				{"/", "Dashboard", "dashboard"},
+				{"/projects", "Projetos", "projects"},
+				{"/workflows", "Workflows", "workflows"},
+				{"/runs", "Execucoes", "runs"},
+			} {
+				if i.Chave == ativo {
+					<a href={ templ.SafeURL(i.Rota) } class="mb-0.5 block rounded-md bg-slate-800 px-3 py-2 text-sm font-medium text-slate-100">
+						{ i.Nome }
+					</a>
+				} else {
+					<a href={ templ.SafeURL(i.Rota) } class="mb-0.5 block rounded-md px-3 py-2 text-sm text-slate-400 hover:bg-slate-800/50 hover:text-slate-200">
+						{ i.Nome }
+					</a>
+				}
+			}
+		</nav>
+	</aside>
+}

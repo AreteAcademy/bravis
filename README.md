@@ -7,8 +7,8 @@ execução em pod no Kubernetes.
 Arquitetura e faseamento: [`docs/plan.md`](docs/plan.md).
 Relatórios por fase: [`docs/phases/`](docs/phases/).
 
-**Estado: PHASE 4 concluída.** Workflows em YAML, fila persistente, scheduler com
-cron e backfill. Sem UI ainda — ver `docs/phases/`.
+**Estado: PHASE 5 concluída.** Workflows em YAML, fila persistente, scheduler com
+cron, backfill e UI server-rendered — ver `docs/phases/`.
 
 ```bash
 bravis validate examples/            # valida sem banco, serve na CI
@@ -28,6 +28,7 @@ O YAML aceita `type: chain` (ordem do arquivo) ou `type: dag` com `depends_on`.
 ## Local
 
 ```bash
+make dev     # hot reload: templ + tailwind + go build a cada mudanca
 make up      # Postgres + API
 make smoke   # confere /health e /ready
 make logs

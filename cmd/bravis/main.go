@@ -419,7 +419,8 @@ func serve(ctx context.Context) error {
 	}
 	defer pool.Close()
 
-	srv := api.NewServer(log, map[string]api.Checker{"postgres": pool}).HTTPServer(cfg.HTTPAddr)
+	ui := api.NewUI(postgres.NewLeituraRepo(pool), log)
+	srv := api.NewServer(log, map[string]api.Checker{"postgres": pool}, ui).HTTPServer(cfg.HTTPAddr)
 
 	erros := make(chan error, 1)
 	go func() {
