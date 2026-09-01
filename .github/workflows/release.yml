@@ -1,0 +1,102 @@
+# Publica as imagens no Docker Hub a cada tag `v*`.
+#
+# Tag e nao push na main: uma imagem publicada e um artefato que outra gente vai
+# consumir, e o momento de publicar deve ser uma decisao explicita — nao o efeito
+# colateral de um merge.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      versao:
+        description: "Versao a publicar (ex.: 0.1.0)"
+        required: true
+
+env:
+  IMAGEM: docker.io/daniel3843/bravis
+
+jobs:
+  imagens:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # O portao antes de publicar. Uma imagem que sai da CI com teste vermelho
+      # e pior que nenhuma imagem: alguem vai roda-la achando que passou.
+      - name: Testes
+        run: go test ./...
+
+      # O CSS e os _templ.go sao embutidos no binario e vao versionados; se
+      # alguem esquecer de rodar `make generate`, a imagem sai com a UI antiga.
+      # Falhar aqui e melhor que descobrir na tela.
+      - name: Conferir artefatos gerados
+        run: |
+          go install github.com/a-h/templ/cmd/templ@latest
+          templ generate
+          git diff --exit-code -- web/ \
+            || { echo "::error::rode 'make generate' e commite os arquivos gerados"; exit 1; }
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Definir versao
+        id: v
+        run: |
+          if [ -n "${{ inputs.versao }}" ]; then
+            echo "versao=${{ inputs.versao }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "versao=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          fi
+
+      # A versao do arquivo VERSION e a da tag precisam bater. Sem esta
+      # checagem, `bravis version` dentro da imagem mentiria sobre a tag que a
+      # publicou — e e por ela que se rastreia um incidente.
+      - name: Conferir VERSION
+        run: |
+          arquivo=$(cat VERSION)
+          if [ "$arquivo" != "${{ steps.v.outputs.versao }}" ]; then
+            echo "::error::VERSION=$arquivo difere da tag ${{ steps.v.outputs.versao }}"
+            exit 1
+          fi
+
+      - name: API (distroless)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: api
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ env.IMAGEM }}:${{ steps.v.outputs.versao }},${{ env.IMAGEM }}:latest
+          build-args: |
+            VERSAO=${{ steps.v.outputs.versao }}
+            COMMIT=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Worker (com shell)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: worker
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ env.IMAGEM }}:${{ steps.v.outputs.versao }}-worker,${{ env.IMAGEM }}:latest-worker
+          build-args: |
+            VERSAO=${{ steps.v.outputs.versao }}
+            COMMIT=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

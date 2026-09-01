@@ -23,6 +23,15 @@ type Run struct {
 	// distinguir um backfill de uma execucao agendada ao investigar incidente.
 	TriggerType string
 
+	// Params sao os valores usados NESTA execucao. Guardados junto do run
+	// porque a pergunta "com que parametros isso rodou?" e a primeira de
+	// qualquer investigacao de backfill.
+	Params map[string]string
+
+	// MaxAtivos e o limite de simultaneidade do workflow no instante do
+	// disparo. Snapshot: baixar o limite depois nao muda runs ja enfileirados.
+	MaxAtivos int
+
 	// LogicalDate e o slot que este Run representa. Nulo em disparo manual, que
 	// nao pertence a slot nenhum.
 	LogicalDate *time.Time

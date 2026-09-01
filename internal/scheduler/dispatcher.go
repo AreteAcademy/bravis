@@ -8,6 +8,8 @@ package scheduler
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"log/slog"
 	"sync"
 	"time"
@@ -15,6 +17,7 @@ import (
 	"github.com/google/uuid"
 
 	dom "github.com/zarvhq/bravis/internal/domain/run"
+	"github.com/zarvhq/bravis/internal/notify"
 	"github.com/zarvhq/bravis/internal/queue"
 )
 
@@ -28,6 +31,7 @@ type Repo interface {
 	Transicionar(ctx context.Context, id uuid.UUID, para dom.Status) error
 	IncrementarTentativa(ctx context.Context, id uuid.UUID) (int, error)
 	RegistrarErro(ctx context.Context, id uuid.UUID, msg string) error
+	Buscar(ctx context.Context, id uuid.UUID) (dom.Run, error)
 }
 
 // Config parametriza o dispatcher.
@@ -37,6 +41,15 @@ type Config struct {
 	Intervalo      time.Duration
 	MaxTentativas  int
 	BackoffBase    time.Duration
+
+	// Visibilidade e quanto tempo um item pode ficar reivindicado sem que o
+	// worker termine antes de ser considerado orfao. Precisa ser MAIOR que a
+	// execucao mais longa esperada: curto demais, o dispatcher rouba de si
+	// mesmo um run que ainda esta rodando.
+	Visibilidade time.Duration
+
+	// IntervaloRecuperacao e a frequencia da varredura de orfaos.
+	IntervaloRecuperacao time.Duration
 }
 
 func (c *Config) padroes() {
@@ -55,6 +68,12 @@ func (c *Config) padroes() {
 	if c.BackoffBase <= 0 {
 		c.BackoffBase = time.Second
 	}
+	if c.Visibilidade <= 0 {
+		c.Visibilidade = 15 * time.Minute
+	}
+	if c.IntervaloRecuperacao <= 0 {
+		c.IntervaloRecuperacao = time.Minute
+	}
 }
 
 // Dispatcher consome a fila respeitando a concorrencia maxima.
@@ -64,6 +83,12 @@ type Dispatcher struct {
 	repo     Repo
 	executar Executar
 	log      *slog.Logger
+
+	// Alertas avisa quando um run desiste. Nulo = ninguem e avisado.
+	Alertas notify.Notificador
+
+	// URLBase da UI, para o link no alerta.
+	URLBase string
 
 	mu    sync.Mutex
 	emVoo int
@@ -81,6 +106,11 @@ func (d *Dispatcher) Run(ctx context.Context) error {
 	tick := time.NewTicker(d.cfg.Intervalo)
 	defer tick.Stop()
 
+	// Varredura de orfaos num ticker proprio, muito mais lento que o de claim:
+	// e uma rede de seguranca, nao caminho quente.
+	recuperacao := time.NewTicker(d.cfg.IntervaloRecuperacao)
+	defer recuperacao.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -90,8 +120,48 @@ func (d *Dispatcher) Run(ctx context.Context) error {
 			if err := d.cicloDeClaim(ctx); err != nil {
 				d.log.Error("ciclo de claim", "erro", err)
 			}
+		case <-recuperacao.C:
+			if n, err := d.RecuperarOrfaos(ctx); err != nil {
+				d.log.Error("recuperando orfaos", "erro", err)
+			} else if n > 0 {
+				d.log.Warn("runs orfas recuperadas", "quantidade", n)
+			}
 		}
 	}
+}
+
+// RecuperarOrfaos devolve a fila o que ficou preso num worker que morreu.
+//
+// Era o modo de falha aberto desde a PHASE 2: `Queue.Recuperar` existia e
+// ninguem a chamava. Na pratica, matar o processo no meio de uma execucao
+// deixava o item reivindicado para sempre E o Run em "running" para sempre — a
+// tela mostrava trabalho em curso que nao existia mais.
+//
+// O orfao e tratado como FALHA daquela tentativa, e nao como reenfileiramento
+// direto, por dois motivos: a maquina de estados nao tem aresta running -> queued
+// (secao 7), e um worker que morre no meio consumiu uma tentativa de verdade —
+// contabiliza-la e o que impede um run venenoso de derrubar workers em ciclo.
+func (d *Dispatcher) RecuperarOrfaos(ctx context.Context) (int, error) {
+	itens, err := d.fila.Recuperar(ctx, d.cfg.Visibilidade)
+	if err != nil {
+		return 0, err
+	}
+	for _, it := range itens {
+		d.falhar(ctx, it, errOrfao{worker: d.cfg.Worker, limite: d.cfg.Visibilidade})
+	}
+	return len(itens), nil
+}
+
+// errOrfao explica na propria mensagem por que o run falhou — e o texto que o
+// operador le na tela, e "erro desconhecido" ali custa uma investigacao inteira.
+type errOrfao struct {
+	worker string
+	limite time.Duration
+}
+
+func (e errOrfao) Error() string {
+	return fmt.Sprintf("execucao orfa: nenhum worker deu sinal em %s "+
+		"(o processo que a reivindicou provavelmente caiu)", e.limite)
 }
 
 // cicloDeClaim pede a fila APENAS as vagas livres.
@@ -174,6 +244,10 @@ func (d *Dispatcher) falhar(ctx context.Context, it queue.Item, causa error) {
 		// Esgotou: sai da fila e fica em FAILED, que nao e terminal na maquina
 		// de estados mas e o fim desta execucao.
 		d.log.Warn("tentativas esgotadas", "run", it.RunID, "tentativas", tentativa)
+		// O alerta sai AQUI, e nao a cada falha: avisar em toda tentativa
+		// transformaria um retry bem-sucedido em dois alertas e um silencio, e
+		// canal que grita a toa deixa de ser lido.
+		d.avisar(ctx, it.RunID, tentativa, causa)
 		_ = d.fila.Done(ctx, it.ID)
 		return
 	}
@@ -195,6 +269,42 @@ func (d *Dispatcher) falhar(ctx context.Context, it queue.Item, causa error) {
 	d.log.Info("reenfileirado", "run", it.RunID, "tentativa", tentativa, "atraso", atraso)
 	if err := d.fila.Release(ctx, it.ID, atraso); err != nil {
 		d.log.Error("devolvendo a fila", "run", it.RunID, "erro", err)
+	}
+}
+
+// avisar manda o alerta de falha definitiva.
+//
+// Nada aqui pode interromper o dispatcher: um webhook fora do ar nao e motivo
+// para parar de consumir a fila. Falha ao avisar vira log, e o estado do run no
+// banco continua sendo a fonte da verdade.
+func (d *Dispatcher) avisar(ctx context.Context, runID uuid.UUID, tentativas int, causa error) {
+	if d.Alertas == nil {
+		return
+	}
+
+	a := notify.Alerta{
+		RunID: runID.String(), Status: string(dom.StatusFailed),
+		Tentativas: tentativas, Erro: causa.Error(), URLBase: d.URLBase,
+	}
+	// Os detalhes vem do banco: o dispatcher so conhece o id. Se a leitura
+	// falhar, o alerta sai mesmo assim — meia mensagem e melhor que nenhuma
+	// quando algo esta quebrado.
+	if r, err := d.repo.Buscar(ctx, runID); err == nil {
+		a.Workflow, a.Trigger, a.LogicalDate = r.WorkflowSlug, r.TriggerType, r.LogicalDate
+		var def struct{ Tags []string }
+		if json.Unmarshal(r.Definicao, &def) == nil {
+			a.Tags = def.Tags
+		}
+	} else {
+		d.log.Warn("alerta sem detalhes do run", "run", runID, "erro", err)
+	}
+
+	// Contexto proprio: o da execucao pode estar cancelado (foi o cancelamento
+	// que trouxe ate aqui), e o alerta e justamente sobre isso.
+	ctxAviso, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := d.Alertas.Falhou(ctxAviso, a); err != nil {
+		d.log.Error("nao consegui avisar da falha", "run", runID, "erro", err)
 	}
 }
 

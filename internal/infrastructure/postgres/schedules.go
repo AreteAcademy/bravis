@@ -79,6 +79,51 @@ func (r *WorkflowRepo) Definicao(ctx context.Context, slug string) (wf.Workflow,
 	return w, json.Unmarshal(bruto, &w)
 }
 
+// Podar remove do projeto os workflows que NAO estao na lista, junto com suas
+// agendas. Devolve os slugs removidos.
+//
+// Existe porque publicar so adicionava: tirar um arquivo da pasta nao tirava
+// nada do banco, e o scheduler continuava materializando runs de um workflow que
+// ninguem enxergava mais. Com agendas de 15 minutos, isso e trabalho invisivel
+// rodando para sempre.
+//
+// O historico (`runs`) NAO e apagado: ele referencia o slug como texto, nao por
+// chave estrangeira, justamente para sobreviver a remocao da definicao. Apagar
+// a execucao junto seria apagar a evidencia do que aconteceu.
+func (r *WorkflowRepo) Podar(ctx context.Context, projeto uuid.UUID, manter []string) ([]string, error) {
+	linhas, err := r.pool.Query(ctx, `
+		DELETE FROM workflows
+		WHERE project_id = $1 AND NOT (slug = ANY($2))
+		RETURNING slug`, projeto, manter)
+	if err != nil {
+		return nil, err
+	}
+	defer linhas.Close()
+
+	var removidos []string
+	for linhas.Next() {
+		var slug string
+		if err := linhas.Scan(&slug); err != nil {
+			return nil, err
+		}
+		removidos = append(removidos, slug)
+	}
+	if err := linhas.Err(); err != nil {
+		return nil, err
+	}
+	if len(removidos) == 0 {
+		return nil, nil
+	}
+
+	// A agenda vive numa tabela separada, ligada por slug em texto — o CASCADE
+	// nao a alcanca, e uma agenda orfa continuaria criando runs.
+	if _, err := r.pool.Exec(ctx,
+		`DELETE FROM schedules WHERE workflow_slug = ANY($1)`, removidos); err != nil {
+		return removidos, err
+	}
+	return removidos, nil
+}
+
 // ScheduleRepo le e atualiza agendas.
 type ScheduleRepo struct{ pool *Pool }
 
@@ -111,6 +156,34 @@ func (r *ScheduleRepo) Ativas(ctx context.Context) ([]sch.Schedule, error) {
 // A condicao `ultimo_slot IS NULL OR ultimo_slot < $2` torna a operacao
 // idempotente e segura sob concorrencia: dois schedulers avaliando a mesma
 // agenda nunca fazem o marcador retroceder.
+// DefinirAtivo pausa ou retoma uma agenda e devolve o estado resultante.
+//
+// Devolve em vez de so gravar porque a UI alterna sem saber o valor atual: sem o
+// retorno, a tela precisaria de uma segunda consulta e ficaria sujeita a corrida
+// entre dois operadores clicando ao mesmo tempo.
+//
+// Pausar NAO cancela o que ja esta na fila: os runs materializados sao trabalho
+// aceito, e descarta-los ao pausar surpreenderia quem so queria parar de criar
+// novos.
+func (r *ScheduleRepo) DefinirAtivo(ctx context.Context, slug string, ativo bool) (bool, error) {
+	var resultado bool
+	err := r.pool.QueryRow(ctx, `
+		UPDATE schedules SET ativo = $2, atualizado_em = now()
+		WHERE workflow_slug = $1
+		RETURNING ativo`, slug, ativo).Scan(&resultado)
+	return resultado, err
+}
+
+// Alternar inverte o estado atual numa unica ida ao banco.
+func (r *ScheduleRepo) Alternar(ctx context.Context, slug string) (bool, error) {
+	var resultado bool
+	err := r.pool.QueryRow(ctx, `
+		UPDATE schedules SET ativo = NOT ativo, atualizado_em = now()
+		WHERE workflow_slug = $1
+		RETURNING ativo`, slug).Scan(&resultado)
+	return resultado, err
+}
+
 func (r *ScheduleRepo) AvancarSlot(ctx context.Context, slug string, slot time.Time) error {
 	_, err := r.pool.Exec(ctx, `
 		UPDATE schedules

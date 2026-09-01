@@ -1,9 +1,15 @@
-# Exemplo do plano, tal como pedido.
+# Exemplo do plano, tal como pedido — ILUSTRATIVO, nao roda como esta.
+#
+# `python fetch.py`, `docker.run` e `./notify.sh` nao existem na imagem do
+# worker: executa-lo termina em "step \"fetch_data\": saiu com codigo 127
+# (comando nao encontrado)". Para ver a stack funcionando de ponta a ponta, use
+# `examples/hello.yaml`.
 #
 # `type: chain` significa que a ordem e a do arquivo: fetch_data -> build_report
 # -> notify. O parser converte isso em arestas, entao o motor so conhece DAG.
 schedule: "0 2 * * *"   # todo dia as 02:00
 type: chain
+tags: [relatorio, diario]
 
 steps:
   - id: fetch_data

@@ -3,3 +3,7 @@
 *.test
 .env
 .DS_Store
+
+# Identidade visual de uma instalacao especifica. O modelo versionado e
+# `brand.example.yaml`; o arquivo real e do cliente, nao do repositorio.
+/brand.yaml

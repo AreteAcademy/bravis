@@ -1,0 +1,51 @@
+# Publicacao dos workflows — o equivalente ao `leoflow deploy` por DAG.
+#
+# A diferenca de desenho: no Leoflow cada DAG e um artefato registrado (e, quando
+# tem codigo proprio, uma imagem construida). Aqui a PASTA e o artefato: um
+# ConfigMap com os YAMLs, e um Job que os aplica. Publicar um workflow novo e
+# atualizar o ConfigMap e rodar o Job de novo — nao ha build por DAG.
+#
+#   kubectl -n dados create configmap bravis-workflows \
+#     --from-file=bravis/workflows/ --dry-run=client -o yaml | kubectl apply -f -
+#   kubectl -n dados delete job bravis-publish --ignore-not-found
+#   kubectl apply -f deployments/kubernetes/publish-job.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: bravis-publish
+  namespace: dados
+spec:
+  # O Job nao repete sozinho: publicar e idempotente, mas um erro aqui e de
+  # CONTEUDO (YAML invalido, cron impossivel) e repetir nao conserta.
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 3600
+  template:
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: publish
+          image: daniel3843/bravis:0.2.1-worker
+          # `--prune` torna a pasta a fonte da verdade: workflow que sai do
+          # ConfigMap sai do banco, junto com a agenda. Sem ele, remover um YAML
+          # deixaria a agenda dele criando runs para sempre.
+          args: ["publish", "/workflows", "--project", "zarv", "--prune"]
+          env:
+            - name: BRAVIS_DATABASE_URL
+              valueFrom: {secretKeyRef: {name: bravis-db, key: url}}
+          volumeMounts:
+            - {name: workflows, mountPath: /workflows, readOnly: true}
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {memory: 128Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: ["ALL"]}
+      volumes:
+        - name: workflows
+          configMap: {name: bravis-workflows}

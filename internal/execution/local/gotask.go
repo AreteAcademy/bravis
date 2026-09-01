@@ -37,7 +37,15 @@ func (g *GoExecutor) Execute(ctx context.Context, t execution.TaskExec) (<-chan 
 	if !ok {
 		// Listar o que existe economiza uma ida a documentacao, e denuncia erro
 		// de digitacao de imediato.
-		return nil, fmt.Errorf("task %q nao registrada (disponiveis: %v)", t.Action, g.reg.Nomes())
+		disponiveis := g.reg.Nomes()
+		if len(disponiveis) == 0 {
+			// Registro vazio e o caso comum hoje: `docker.run` e
+			// `kubernetes.run` estao no plano mas ainda nao existem. Dizer
+			// "disponiveis: []" faz parecer erro de digitacao no nome.
+			return nil, fmt.Errorf("task %q nao registrada: nenhuma acao foi registrada "+
+				"neste worker — use `run:` com um comando, ou registre a acao no binario", t.Action)
+		}
+		return nil, fmt.Errorf("task %q nao registrada (disponiveis: %v)", t.Action, disponiveis)
 	}
 
 	ctx, cancel := context.WithCancel(ctx)

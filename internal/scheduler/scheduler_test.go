@@ -147,7 +147,7 @@ func TestBackfillEntraNaFilaComPrioridadeMenor(t *testing.T) {
 	ctx := context.Background()
 	fixarUltimoSlot(t, pool, emUTC("2026-03-01T02:00:00Z"))
 
-	n, err := s.Backfill(ctx, "diario", emUTC("2026-01-01T00:00:00Z"), emUTC("2026-01-05T23:59:00Z"))
+	n, err := s.Backfill(ctx, "diario", emUTC("2026-01-01T00:00:00Z"), emUTC("2026-01-05T23:59:00Z"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -181,7 +181,7 @@ func TestBackfillNaoAvancaOMarcador(t *testing.T) {
 	marcador := emUTC("2026-03-01T02:00:00Z")
 	fixarUltimoSlot(t, pool, marcador)
 
-	if _, err := s.Backfill(ctx, "diario", emUTC("2026-01-01T00:00:00Z"), emUTC("2026-01-03T23:59:00Z")); err != nil {
+	if _, err := s.Backfill(ctx, "diario", emUTC("2026-01-01T00:00:00Z"), emUTC("2026-01-03T23:59:00Z"), nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -263,11 +263,108 @@ func TestBackfillIncluiOSlotDaBorda(t *testing.T) {
 	fixarUltimoSlot(t, pool, emUTC("2026-06-01T00:00:00Z"))
 
 	n, err := s.Backfill(ctx, "diario",
-		emUTC("2026-01-01T00:00:00Z"), emUTC("2026-01-01T23:59:59Z"))
+		emUTC("2026-01-01T00:00:00Z"), emUTC("2026-01-01T23:59:59Z"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if n != 24 {
 		t.Errorf("backfill criou %d slots, queria 24 (00:00 a 23:00)", n)
+	}
+}
+
+// A pasta e a fonte da verdade — mas publicar so ADICIONAVA. Tirar um arquivo
+// dali nao tirava nada do banco, e o scheduler seguia materializando runs de um
+// workflow que ninguem enxergava mais. Com cron de 15 minutos, isso e trabalho
+// invisivel rodando para sempre.
+func TestPodarRemoveOQueSaiuDaPasta(t *testing.T) {
+	pool := banco(t)
+	ctx := context.Background()
+	repo := postgres.NewWorkflowRepo(pool)
+	agendas := postgres.NewScheduleRepo(pool)
+
+	var projeto uuid.UUID
+	if err := pool.QueryRow(ctx, `
+		INSERT INTO projects (id, slug, name) VALUES ($1,'zarv','zarv') RETURNING id`,
+		uuid.New()).Scan(&projeto); err != nil {
+		t.Fatal(err)
+	}
+
+	fica := wf.Workflow{Slug: "id_verification", Name: "id", Schedule: "0 4 * * *",
+		Nodes: []wf.Node{{ID: "run", Run: "dbt build"}}}
+	sai := wf.Workflow{Slug: "vendors_ana_telemetry", Name: "ana", Schedule: "*/15 * * * *",
+		Nodes: []wf.Node{{ID: "run", Run: "echo x"}}}
+	for _, w := range []wf.Workflow{fica, sai} {
+		if err := repo.Publicar(ctx, w, projeto); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Uma execucao antiga do que vai sair: o historico tem de sobreviver.
+	if _, err := postgres.NewRunRepo(pool).Criar(ctx, dom.Run{
+		WorkflowSlug: sai.Slug, IdempotencyKey: "antiga", Definicao: []byte(`{}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	removidos, err := repo.Podar(ctx, projeto, []string{fica.Slug})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(removidos) != 1 || removidos[0] != sai.Slug {
+		t.Fatalf("removidos = %v, quero apenas %s", removidos, sai.Slug)
+	}
+
+	if _, err := repo.Definicao(ctx, sai.Slug); err == nil {
+		t.Error("o workflow removido ainda tem definicao no banco")
+	}
+	if _, err := repo.Definicao(ctx, fica.Slug); err != nil {
+		t.Errorf("o workflow que ficou sumiu: %v", err)
+	}
+
+	// A agenda vive numa tabela separada, ligada por slug em texto — o CASCADE
+	// nao a alcanca, e uma agenda orfa continuaria criando runs.
+	ativas, err := agendas.Ativas(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range ativas {
+		if a.WorkflowSlug == sai.Slug {
+			t.Error("a agenda do workflow removido sobreviveu e continuaria criando runs")
+		}
+	}
+
+	var historico int
+	if err := pool.QueryRow(ctx,
+		`SELECT count(*) FROM runs WHERE workflow_slug = $1`, sai.Slug).Scan(&historico); err != nil {
+		t.Fatal(err)
+	}
+	if historico != 1 {
+		t.Errorf("historico apagado junto (%d runs); apagar a execucao seria apagar a evidencia", historico)
+	}
+}
+
+// Sem nada para podar, nao mexe em nada.
+func TestPodarSemDiferencaNaoRemoveNada(t *testing.T) {
+	pool := banco(t)
+	ctx := context.Background()
+	repo := postgres.NewWorkflowRepo(pool)
+
+	var projeto uuid.UUID
+	if err := pool.QueryRow(ctx, `
+		INSERT INTO projects (id, slug, name) VALUES ($1,'zarv','zarv') RETURNING id`,
+		uuid.New()).Scan(&projeto); err != nil {
+		t.Fatal(err)
+	}
+	w := wf.Workflow{Slug: "so_esse", Name: "x", Nodes: []wf.Node{{ID: "a", Run: "echo"}}}
+	if err := repo.Publicar(ctx, w, projeto); err != nil {
+		t.Fatal(err)
+	}
+
+	removidos, err := repo.Podar(ctx, projeto, []string{"so_esse"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(removidos) != 0 {
+		t.Errorf("removeu %v sem motivo", removidos)
 	}
 }

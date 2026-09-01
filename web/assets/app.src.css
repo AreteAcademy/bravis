@@ -8,8 +8,207 @@
 @source "../pages";
 @source "../components";
 
+/* ---------------------------------------------------------------------------
+   Tipografia — servida do proprio binario, nao do Google Fonts.
+   Mesma decisao dos bundles UMD do React: a UI tem que funcionar num cluster
+   sem saida para a internet, e uma fonte que nao carrega degrada para uma pilha
+   visualmente diferente no meio da tela.
+   Variaveis: um arquivo cobre 100..900, entao nao ha um woff2 por peso.
+--------------------------------------------------------------------------- */
+@font-face {
+  font-family: "Cormorant Garamond";
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url("/assets/fonts/cormorant-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Cormorant Garamond";
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url("/assets/fonts/cormorant-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+    U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020,
+    U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("/assets/fonts/inter-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("/assets/fonts/inter-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+    U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020,
+    U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+/* ---------------------------------------------------------------------------
+   Paleta — identidade da Arete Academy (areteacademy.com.br).
+   Pergaminho quente + ouro + serifa, no lugar do slate escuro anterior. As
+   variaveis carregam os MESMOS valores do site, nao aproximacoes.
+--------------------------------------------------------------------------- */
+@theme {
+  --color-parchment: #f4efe4;
+  --color-parchment-soft: #fbf8f1;
+  --color-surface: #fffdf8;
+  --color-ink: #21180f;
+  --color-muted: #6e6254;
+  --color-line: #21180f1a;
+  --color-line-soft: #21180f0d;
+  --color-gold: #aa8450;
+  --color-gold-strong: #8a693d;
+  --color-gold-wash: #aa845014;
+
+  /* Estados. Dessaturados de proposito: verde e vermelho de painel puro
+     brigam com o pergaminho e gritam mais alto que a informacao. */
+  --color-state-success: #4c7a56;
+  --color-state-failed: #b0503c;
+  --color-state-running: #3f6d8f;
+  --color-state-queued: #b3822f;
+  --color-state-retrying: #a35f28;
+  --color-state-canceled: #8a8175;
+  --color-state-pending: #a89b8a;
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Cormorant Garamond", Georgia, "Times New Roman", serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+
+  --radius-card: 20px;
+  --radius-panel: 28px;
+}
+
+/* Fundo do site: brilho dourado no topo sobre o degrade de pergaminho. E o que
+   da a sensacao de papel iluminado em vez de bloco de cor chapado. */
+body {
+  background:
+    radial-gradient(circle at top, rgba(170, 132, 80, 0.12), transparent 34%),
+    linear-gradient(180deg, #f8f2e8 0%, #f4efe4 44%, #f8f4ed 100%);
+  background-attachment: fixed;
+}
+
+/* Titulos em serifa com entrelinha curta — o site usa 0.95, que so funciona
+   porque o Cormorant tem altura-x baixa. */
+.display {
+  font-family: var(--font-serif);
+  font-weight: 600;
+  line-height: 1.02;
+  letter-spacing: 0.01em;
+}
+
+/* Rotulo em versalete dourado. No site marca cada secao ("VISAO", "TRILHAS");
+   aqui faz o mesmo papel em cima de cada painel. */
+.kicker {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-gold-strong);
+}
+
 /* Tabular nums nas colunas numericas: sem isso os digitos dancam quando a
    tabela atualiza, e a leitura de uma coluna de duracoes fica ruim. */
 .tabular-nums {
   font-variant-numeric: tabular-nums;
+}
+
+/* Sombra do site: larga, baixa opacidade, tonalizada com a tinta quente em vez
+   de preto puro — preto sobre pergaminho suja. */
+.shadow-warm {
+  box-shadow: 0 20px 60px rgba(33, 24, 15, 0.08);
+}
+.shadow-warm-sm {
+  box-shadow: 0 8px 24px rgba(33, 24, 15, 0.06);
+}
+
+/* Dica dos graficos. Fora do fluxo e sem transicao de posicao: seguir o cursor
+   com animacao gera arrasto e a dica chega depois do olho. */
+.grafico-dica {
+  position: fixed;
+  z-index: 50;
+  display: none;
+  pointer-events: none;
+  max-width: 260px;
+  padding: 0.5rem 0.7rem;
+  border-radius: 12px;
+  border: 1px solid var(--color-line);
+  background: var(--color-surface);
+  box-shadow: 0 8px 24px rgba(33, 24, 15, 0.12);
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: var(--color-ink);
+}
+
+/* Alvos clicaveis do grafico. O realce no hover e o que comunica que a barra
+   leva a algum lugar — sem ele, so o cursor denuncia, e tarde demais. */
+.grafico-alvo {
+  cursor: pointer;
+}
+.grafico-alvo:hover rect,
+.grafico-alvo:focus-visible rect {
+  opacity: 0.78;
+}
+.grafico-alvo:hover circle,
+.grafico-alvo:focus-visible circle {
+  opacity: 0.82;
+}
+.grafico-faixa {
+  fill: transparent;
+}
+.grafico-alvo:hover .grafico-faixa {
+  fill: rgba(170, 132, 80, 0.09);
+}
+
+/* O reset do Tailwind zera a margem de todo elemento, e com isso o <dialog>
+   perde o `margin: auto` que o navegador usa para centraliza-lo — ele nascia
+   colado no canto superior esquerdo. */
+dialog {
+  margin: auto;
+}
+
+/* O foco cai no proprio <dialog> quando ele abre, e o contorno padrao do
+   navegador (azul) destoa da paleta. O foco visivel continua existindo nos
+   controles de dentro, que e onde ele importa. */
+dialog:focus {
+  outline: none;
+}
+
+/* Controles do React Flow.
+   O bundle do xyflow traz cores fixas (branco no botao, preto no icone) e e
+   carregado DEPOIS da folha compilada, entao vence em especificidade igual —
+   por isso os seletores aqui sao duplos. Sem isto, um tema escuro fica com um
+   bloco branco no canto do grafo. */
+.react-flow .react-flow__controls-button {
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-line);
+  fill: var(--color-ink);
+  color: var(--color-ink);
+}
+.react-flow .react-flow__controls-button:hover {
+  background: var(--color-parchment-soft);
+}
+.react-flow .react-flow__controls {
+  box-shadow: 0 8px 24px rgba(33, 24, 15, 0.08);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.react-flow .react-flow__attribution {
+  background: transparent;
+}
+.react-flow .react-flow__attribution a {
+  color: var(--color-muted);
+  opacity: 0.7;
 }

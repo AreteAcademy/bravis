@@ -2,99 +2,697 @@ package pages
 
 import (
 	"fmt"
+	"net/url"
+	"strings"
 	"time"
 
+	"github.com/zarvhq/bravis/internal/domain/run"
+	wf "github.com/zarvhq/bravis/internal/domain/workflow"
 	"github.com/zarvhq/bravis/internal/infrastructure/postgres"
 	"github.com/zarvhq/bravis/web/components"
 	"github.com/zarvhq/bravis/web/layouts"
 )
 
-templ Dashboard(status map[string]int, pendentes, reivindicados int, ultimas []postgres.ResumoRun) {
-	@layouts.Base("Dashboard", "dashboard") {
-		<div class="grid grid-cols-2 gap-4 md:grid-cols-5">
-			@components.Metrica("Em execucao", status["running"], "text-sky-400")
-			@components.Metrica("Na fila", status["queued"], "text-amber-400")
-			@components.Metrica("Sucesso", status["success"], "text-emerald-400")
-			@components.Metrica("Falha", status["failed"], "text-red-400")
-			@components.Metrica("Fila (itens)", pendentes+reivindicados, "text-slate-300")
+// ---------------------------------------------------------------------------
+// Overview
+// ---------------------------------------------------------------------------
+
+// DadosOverview e tudo que a tela inicial mostra. Um struct em vez de sete
+// parametros: a assinatura ja estava ilegivel com quatro.
+type DadosOverview struct {
+	Janela    time.Duration
+	Ind       postgres.Indicadores
+	Baldes    []postgres.Balde
+	EmCurso   []postgres.ResumoRun
+	Proximas  []ProximaExecucao
+	Recentes  []postgres.ResumoRun
+	Pendentes int
+}
+
+// ProximaExecucao e um disparo futuro, ja calculado a partir do cron.
+type ProximaExecucao struct {
+	Workflow string
+	Cron     string
+	Timezone string
+	Quando   time.Time
+}
+
+templ Overview(d DadosOverview) {
+	@layouts.Base(layouts.Pagina{Titulo: "Overview", Kicker: "Dashboard", Ativo: "overview"}) {
+		<div class="grid grid-cols-2 gap-5 lg:grid-cols-4">
+			@components.Indicador("Taxa de sucesso", pct(d.Ind.Razao(d.Ind.Sucesso)),
+				fmt.Sprintf("%d de %d concluídas", d.Ind.Sucesso, d.Ind.Sucesso+d.Ind.Falha), "text-state-success")
+			@components.Indicador("Taxa de falha", pct(d.Ind.Razao(d.Ind.Falha)),
+				notaFalha(d.Ind.Falha), matizFalha(d.Ind.Falha))
+			@components.Indicador("Em execução", fmt.Sprint(d.Ind.EmExecucao),
+				duracaoMedia(d.Ind.DuracaoMedia), "text-state-running")
+			@components.Indicador("Na fila", fmt.Sprint(d.Ind.Pendentes),
+				fmt.Sprintf("%d itens na fila", d.Pendentes), "text-state-queued")
 		</div>
-		<section class="mt-8">
-			<h2 class="mb-3 text-sm font-medium text-slate-300">Execucoes recentes</h2>
-			@tabelaRuns(ultimas)
+		<div class="mt-6 grid grid-cols-1 gap-5 xl:grid-cols-[1fr_320px]">
+			@components.Cartao("Execuções por hora") {
+				<p class="-mt-2 mb-5 text-sm text-muted">
+					Contagem e duração média nas últimas { fmt.Sprint(int(d.Janela.Hours())) } horas.
+				</p>
+				@components.Execucoes(d.Baldes)
+			}
+			@components.Cartao("Distribuição") {
+				@components.Rosca(d.Ind)
+				<dl class="mt-4 space-y-1.5 text-sm">
+					@linhaDist("Sucesso", d.Ind.Sucesso, "bg-state-success")
+					@linhaDist("Falha", d.Ind.Falha, "bg-state-failed")
+					@linhaDist("Executando", d.Ind.EmExecucao, "bg-state-running")
+					@linhaDist("Na fila", d.Ind.Pendentes, "bg-state-queued")
+				</dl>
+			}
+		</div>
+		<div class="mt-6 grid grid-cols-1 gap-5 xl:grid-cols-2">
+			@components.Cartao("Em andamento") {
+				if len(d.EmCurso) == 0 {
+					@components.Vazio("Nada em execução agora.", "")
+				} else {
+					<table class="w-full text-sm">
+						<thead>
+							<tr class="border-b border-line text-left">
+								@th("Workflow", "")
+								@th("Origem", "")
+								@th("Início", "")
+								@th("Estado", "text-right")
+							</tr>
+						</thead>
+						<tbody class="divide-y divide-line-soft">
+							for _, r := range d.EmCurso {
+								<tr>
+									<td class="py-2.5 pr-3">
+										<a href={ templ.SafeURL("/runs/" + r.ID) } class="font-medium text-ink hover:text-gold-strong">
+											{ r.WorkflowSlug }
+										</a>
+									</td>
+									<td class="py-2.5 pr-3 text-xs text-muted">{ r.TriggerType }</td>
+									<td class="py-2.5 pr-3 text-xs text-muted tabular-nums">
+										{ components.Quando(inicioOuCriacao(r)) }
+									</td>
+									<td class="py-2.5 text-right">
+										@components.Estado(r.Status)
+									</td>
+								</tr>
+							}
+						</tbody>
+					</table>
+				}
+			}
+			@components.Cartao("Próximas execuções") {
+				if len(d.Proximas) == 0 {
+					@components.Vazio("Nenhuma agenda ativa.", "bravis publish arquivo.yaml")
+				} else {
+					<table class="w-full text-sm">
+						<thead>
+							<tr class="border-b border-line text-left">
+								@th("Workflow", "")
+								@th("Agenda", "")
+								@th("Próximo disparo", "text-right")
+							</tr>
+						</thead>
+						<tbody class="divide-y divide-line-soft">
+							for _, p := range d.Proximas {
+								<tr>
+									<td class="py-2.5 pr-3">
+										<a href={ templ.SafeURL("/workflows/" + p.Workflow) } class="font-medium text-ink hover:text-gold-strong">
+											{ p.Workflow }
+										</a>
+									</td>
+									<td class="py-2.5 pr-3 font-mono text-xs text-muted">{ p.Cron }</td>
+									<td class="py-2.5 text-right text-xs tabular-nums text-muted">
+										<span class="text-ink">{ components.Instante(&p.Quando) }</span>
+										<span class="ml-2 text-gold-strong">{ components.Quando(&p.Quando) }</span>
+									</td>
+								</tr>
+							}
+						</tbody>
+					</table>
+				}
+			}
+		</div>
+		<section class="mt-6">
+			<div class="mb-3 flex items-baseline justify-between">
+				<h2 class="kicker">Execuções recentes</h2>
+				<a href="/runs" class="text-xs text-gold-strong hover:underline">ver todas</a>
+			</div>
+			@tabelaRuns(d.Recentes, Paginacao{})
 		</section>
 	}
 }
 
-templ Runs(runs []postgres.ResumoRun) {
-	@layouts.Base("Execucoes", "runs") {
-		@tabelaRuns(runs)
+templ linhaDist(rotulo string, valor int, matiz string) {
+	<div class="flex items-center gap-2">
+		<span class={ "h-2 w-2 shrink-0 rounded-full", matiz }></span>
+		<dt class="flex-1 text-muted">{ rotulo }</dt>
+		<dd class="font-medium tabular-nums text-ink">{ fmt.Sprint(valor) }</dd>
+	</div>
+}
+
+// th e o cabecalho de coluna. O respiro vertical (py-4) e deliberado: colado no
+// titulo, o cabecalho competia com a primeira linha em vez de separar dela.
+templ th(texto, extra string) {
+	<th class={ "px-3 py-4 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-muted", extra }>{ texto }</th>
+}
+
+// thOrdenavel e a mesma coluna, clicavel. A seta so aparece na coluna ativa —
+// mostrar uma em cada cabecalho vira ruido.
+templ thOrdenavel(texto, campo string, f Filtro, extra string) {
+	<th class={ "px-3 py-4 text-[0.7rem] font-semibold uppercase tracking-[0.12em]", extra, corDaColuna(f, campo) }>
+		<a href={ templ.SafeURL(f.ComOrdem(campo)) } class="inline-flex items-center gap-1 hover:text-gold-strong">
+			{ texto }
+			if s := f.Seta(campo); s != "" {
+				<span class="text-gold">{ s }</span>
+			} else {
+				<span class="text-line">↕</span>
+			}
+		</a>
+	</th>
+}
+
+func corDaColuna(f Filtro, campo string) string {
+	if f.Ordem == campo {
+		return "text-ink"
+	}
+	return "text-muted"
+}
+
+// paginacao e o rodape das listas.
+templ paginacao(p Paginacao) {
+	if p.Total > 0 {
+		<div class="flex flex-wrap items-center justify-between gap-4 border-t border-line px-6 py-4 text-xs text-muted">
+			<span>
+				{ fmt.Sprintf("%d–%d de %d", p.Primeiro(), p.Ultimo(), p.Total) }
+			</span>
+			if p.Paginas() > 1 {
+				<nav class="flex items-center gap-1">
+					if p.Pagina > 1 {
+						<a href={ templ.SafeURL(p.LinkPagina(p.Pagina - 1)) } class="rounded-full border border-line px-3 py-1 transition-colors hover:border-gold hover:text-ink">anterior</a>
+					} else {
+						<span class="rounded-full border border-line-soft px-3 py-1 text-line">anterior</span>
+					}
+					for _, n := range p.Janela() {
+						if n == p.Pagina {
+							<span class="rounded-full border border-ink bg-ink px-3 py-1 font-semibold text-parchment-soft">{ fmt.Sprint(n) }</span>
+						} else {
+							<a href={ templ.SafeURL(p.LinkPagina(n)) } class="rounded-full border border-line px-3 py-1 transition-colors hover:border-gold hover:text-ink">{ fmt.Sprint(n) }</a>
+						}
+					}
+					if p.Pagina < p.Paginas() {
+						<a href={ templ.SafeURL(p.LinkPagina(p.Pagina + 1)) } class="rounded-full border border-line px-3 py-1 transition-colors hover:border-gold hover:text-ink">próxima</a>
+					} else {
+						<span class="rounded-full border border-line-soft px-3 py-1 text-line">próxima</span>
+					}
+				</nav>
+			}
+		</div>
 	}
 }
 
-templ Workflows(ws []postgres.ResumoWorkflow) {
-	@layouts.Base("Workflows", "workflows") {
+// ---------------------------------------------------------------------------
+// Workflows — a lista de DAGs
+// ---------------------------------------------------------------------------
+
+// Filtro guarda o estado da barra de busca. Vive na URL, nao em memoria: assim
+// um filtro aplicado pode ser colado no chat de plantao e abre igual do outro
+// lado.
+type Filtro struct {
+	Busca  string
+	Estado string // ultimo estado: failed, queued, running, success
+	Ativo  string // active | paused
+	Tag    string
+
+	// Ordem e o campo de ordenacao; Desc inverte. Vivem na URL pelo mesmo motivo
+	// dos filtros: uma tela ordenada precisa poder ser colada para outra pessoa.
+	Ordem string
+	Desc  bool
+
+	Pagina    int
+	PorPagina int
+}
+
+// Com devolve a mesma URL trocando um campo — como cada chip vira link, o resto
+// do filtro precisa sobreviver ao clique.
+//
+// Trocar filtro sempre volta para a primeira pagina: continuar na pagina 7 de um
+// resultado que agora tem duas seria uma tela vazia sem explicacao.
+func (f Filtro) Com(campo, valor string) string {
+	return f.url(campo, valor, true)
+}
+
+// ComPagina navega sem tocar em mais nada.
+func (f Filtro) ComPagina(n int) string {
+	return f.url("pagina", fmt.Sprint(n), false)
+}
+
+// ComOrdem alterna a direcao quando o campo ja e o ordenado, e comeca ascendente
+// quando e outro — o comportamento que qualquer tabela ensina.
+func (f Filtro) ComOrdem(campo string) string {
+	if f.Ordem == campo && !f.Desc {
+		return f.url("dir", "desc", true)
+	}
+	if f.Ordem == campo && f.Desc {
+		// Terceiro clique remove a ordenacao e volta a ordem natural.
+		g := f
+		g.Ordem, g.Desc = "", false
+		return g.url("pagina", "", true)
+	}
+	g := f
+	g.Desc = false
+	return g.url("ordem", campo, true)
+}
+
+// Seta e o indicador de direcao no cabecalho.
+func (f Filtro) Seta(campo string) string {
+	if f.Ordem != campo {
+		return ""
+	}
+	if f.Desc {
+		return "↓"
+	}
+	return "↑"
+}
+
+func (f Filtro) url(campo, valor string, reiniciaPagina bool) string {
+	q := url.Values{}
+	poe := func(k, v string) {
+		if v != "" {
+			q.Set(k, v)
+		}
+	}
+	poe("q", f.Busca)
+	poe("estado", f.Estado)
+	poe("ativo", f.Ativo)
+	poe("tag", f.Tag)
+	poe("ordem", f.Ordem)
+	if f.Desc {
+		poe("dir", "desc")
+	}
+	if !reiniciaPagina && f.Pagina > 1 {
+		poe("pagina", fmt.Sprint(f.Pagina))
+	}
+	if f.PorPagina > 0 && f.PorPagina != PorPaginaPadrao {
+		poe("por", fmt.Sprint(f.PorPagina))
+	}
+	if valor == "" {
+		q.Del(campo)
+	} else {
+		q.Set(campo, valor)
+	}
+	if len(q) == 0 {
+		return "/workflows"
+	}
+	return "/workflows?" + q.Encode()
+}
+
+// PorPaginaPadrao e o tamanho de pagina das listas. Vinte e cinco cabe numa tela
+// de laptop sem rolagem interminavel e sem obrigar a paginar a cada olhada.
+const PorPaginaPadrao = 25
+
+// Paginacao e o rodape de qualquer lista paginada.
+type Paginacao struct {
+	Pagina    int
+	PorPagina int
+	Total     int
+
+	// LinkPagina monta a URL de cada pagina. Injetado para que o mesmo
+	// componente sirva /workflows e /runs, que tem filtros diferentes.
+	LinkPagina func(int) string
+}
+
+func (p Paginacao) Paginas() int {
+	if p.PorPagina <= 0 {
+		return 1
+	}
+	n := (p.Total + p.PorPagina - 1) / p.PorPagina
+	if n < 1 {
+		return 1
+	}
+	return n
+}
+
+func (p Paginacao) Primeiro() int {
+	if p.Total == 0 {
+		return 0
+	}
+	return (p.Pagina-1)*p.PorPagina + 1
+}
+
+func (p Paginacao) Ultimo() int {
+	fim := p.Pagina * p.PorPagina
+	if fim > p.Total {
+		return p.Total
+	}
+	return fim
+}
+
+// Janela devolve os numeros de pagina a mostrar, centrados no atual. Listar
+// todas quebraria o rodape com cem paginas.
+func (p Paginacao) Janela() []int {
+	total := p.Paginas()
+	de, ate := p.Pagina-2, p.Pagina+2
+	if de < 1 {
+		ate += 1 - de
+		de = 1
+	}
+	if ate > total {
+		de -= ate - total
+		ate = total
+	}
+	if de < 1 {
+		de = 1
+	}
+	var out []int
+	for i := de; i <= ate; i++ {
+		out = append(out, i)
+	}
+	return out
+}
+
+templ Workflows(ws []postgres.ResumoWorkflow, tags []string, f Filtro, total, filtrados int) {
+	@layouts.Base(layouts.Pagina{Titulo: "Workflows", Kicker: "Orquestração", Ativo: "workflows", Largo: true}) {
+		<form method="get" action="/workflows" class="mb-5">
+			<div class="flex items-center gap-3 rounded-full border border-line bg-surface px-5 py-3 shadow-warm-sm">
+				<svg class="h-4 w-4 shrink-0 text-muted" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6">
+					<circle cx="9" cy="9" r="6"></circle>
+					<path d="M13.5 13.5 17 17" stroke-linecap="round"></path>
+				</svg>
+				<input
+					type="search"
+					name="q"
+					value={ f.Busca }
+					placeholder="Buscar workflow"
+					class="w-full bg-transparent text-sm text-ink placeholder:text-muted focus:outline-none"
+				/>
+				// Os demais filtros seguem como campos ocultos: buscar nao pode
+				// apagar o estado que o operador ja tinha escolhido.
+				<input type="hidden" name="estado" value={ f.Estado }/>
+				<input type="hidden" name="ativo" value={ f.Ativo }/>
+				<input type="hidden" name="tag" value={ f.Tag }/>
+				<button type="submit" class="shrink-0 rounded-full bg-ink px-4 py-1.5 text-xs font-semibold text-parchment-soft transition-transform hover:-translate-y-px">
+					Buscar
+				</button>
+			</div>
+		</form>
+		<div class="mb-6 flex flex-wrap items-center gap-2">
+			@chip(f.Com("estado", ""), "Todos", f.Estado == "", "")
+			@chip(f.Com("estado", "success"), "Sucesso", f.Estado == "success", "bg-state-success")
+			@chip(f.Com("estado", "failed"), "Falha", f.Estado == "failed", "bg-state-failed")
+			@chip(f.Com("estado", "running"), "Executando", f.Estado == "running", "bg-state-running")
+			@chip(f.Com("estado", "queued"), "Na fila", f.Estado == "queued", "bg-state-queued")
+			<span class="mx-2 h-5 w-px bg-line"></span>
+			@chip(f.Com("ativo", ""), "Todos", f.Ativo == "", "")
+			@chip(f.Com("ativo", "active"), "Ativos", f.Ativo == "active", "")
+			@chip(f.Com("ativo", "paused"), "Pausados", f.Ativo == "paused", "")
+			if len(tags) > 0 {
+				<span class="mx-2 h-5 w-px bg-line"></span>
+				for _, t := range tags {
+					@chip(f.Com("tag", alterna(f.Tag, t)), t, f.Tag == t, "")
+				}
+			}
+		</div>
+		<p class="mb-3 font-serif text-xl text-ink">
+			{ contagem(filtrados, "workflow", "workflows") }
+			if filtrados != total {
+				<span class="ml-2 text-sm text-muted">de { fmt.Sprint(total) }</span>
+				<a href="/workflows" class="ml-3 text-xs text-gold-strong hover:underline">limpar filtros</a>
+			}
+		</p>
 		if len(ws) == 0 {
-			@components.Vazio("Nenhum workflow publicado.", "bravis publish arquivo.yaml")
+			@components.Vazio("Nenhum workflow com esses filtros.", "bravis publish arquivo.yaml")
 		} else {
-			<div class="overflow-hidden rounded-lg border border-slate-800">
+			<div class="overflow-hidden rounded-[20px] border border-line bg-surface shadow-warm-sm">
 				<table class="w-full text-sm">
-					<thead class="bg-slate-900/60 text-left text-xs uppercase tracking-wide text-slate-500">
-						<tr>
-							<th class="px-4 py-3 font-medium">Workflow</th>
-							<th class="px-4 py-3 font-medium">Projeto</th>
-							<th class="px-4 py-3 font-medium">Agenda</th>
-							<th class="px-4 py-3 font-medium">Ultimo slot</th>
-							<th class="px-4 py-3 font-medium">Ultimo estado</th>
-							<th class="px-4 py-3 text-right font-medium">Runs</th>
+					<thead>
+						<tr class="border-b border-line bg-parchment-soft/60 text-left">
+							@th("", "w-16 pl-6")
+							@thOrdenavel("Workflow", "workflow", f, "")
+							@thOrdenavel("Agenda", "agenda", f, "")
+							@thOrdenavel("Próxima execução", "proxima", f, "")
+							@thOrdenavel("Última execução", "ultima", f, "")
+							@th("Tags", "")
+							@th("", "w-24 pr-6 text-right")
 						</tr>
 					</thead>
-					<tbody class="divide-y divide-slate-800">
+					<tbody class="divide-y divide-line-soft">
 						for _, w := range ws {
-							<tr class="hover:bg-slate-900/40">
-								<td class="px-4 py-3 font-medium text-slate-200">{ w.Slug }</td>
-								<td class="px-4 py-3 text-slate-400">{ w.Projeto }</td>
-								<td class="px-4 py-3">
+							<tr class="transition-colors hover:bg-gold-wash">
+								<td class="py-3 pl-6">
+									@interruptor(w)
+								</td>
+								<td class="py-3 pr-3">
+									<a href={ templ.SafeURL("/workflows/" + w.Slug) } class="font-medium text-ink hover:text-gold-strong">
+										{ w.Slug }
+									</a>
+									<p class="text-xs text-muted">{ w.Projeto }</p>
+								</td>
+								<td class="py-3 pr-3">
 									if w.Cron == "" {
-										<span class="text-slate-600">manual</span>
+										<span class="text-xs text-muted">só disparo manual</span>
 									} else {
-										<span class="font-mono text-xs text-slate-300">{ w.Cron }</span>
+										<span class="inline-flex items-center gap-1.5 font-mono text-xs text-ink">
+											<svg class="h-3.5 w-3.5 text-gold" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+												<rect x="2" y="3" width="12" height="11" rx="2"></rect>
+												<path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3" stroke-linecap="round"></path>
+											</svg>
+											{ w.Cron }
+										</span>
 										if w.Catchup {
-											<span class="ml-2 text-xs text-amber-500">catchup</span>
+											<span class="ml-2 text-[0.7rem] text-gold-strong">catchup</span>
 										}
 									}
 								</td>
-								<td class="px-4 py-3 font-mono text-xs text-slate-400">{ quando(w.UltimoSlot) }</td>
-								<td class="px-4 py-3">
-									if w.UltimoStatus != "" {
-										@components.StatusBadge(w.UltimoStatus)
+								<td class="py-3 pr-3 text-xs tabular-nums">
+									if w.ProximaRun != nil {
+										<span class="text-ink">{ components.Instante(w.ProximaRun) }</span>
+										<span class="ml-1.5 text-muted">{ components.Quando(w.ProximaRun) }</span>
+									} else if w.TemAgenda && !w.Ativo {
+										<span class="text-muted">pausado</span>
 									} else {
-										<span class="text-xs text-slate-600">nunca rodou</span>
+										<span class="text-muted">—</span>
 									}
 								</td>
-								<td class="px-4 py-3 text-right tabular-nums text-slate-400">{ fmt.Sprint(w.TotalRuns) }</td>
+								<td class="py-3 pr-3">
+									if w.UltimaRunID != nil {
+										<a href={ templ.SafeURL("/runs/" + *w.UltimaRunID) } class="inline-flex items-center gap-2">
+											<span class="text-xs tabular-nums text-ink hover:text-gold-strong">
+												{ components.Instante(w.UltimaRunEm) }
+											</span>
+											@components.Ponto(w.UltimoStatus)
+										</a>
+										<p class="text-[0.7rem] text-muted">{ fmt.Sprint(w.TotalRuns) } execuções</p>
+									} else {
+										<span class="text-xs text-muted">nunca rodou</span>
+									}
+								</td>
+								<td class="py-3 pr-3">
+									<div class="flex flex-wrap gap-1">
+										for _, t := range w.Tags {
+											@components.Etiqueta(t, f.Com("tag", alterna(f.Tag, t)))
+										}
+									</div>
+								</td>
+								<td class="py-3 pr-6 text-right">
+									@disparar(w.Slug)
+								</td>
 							</tr>
 						}
 					</tbody>
 				</table>
+				@paginacao(Paginacao{
+					Pagina: f.Pagina, PorPagina: f.PorPagina, Total: filtrados,
+					LinkPagina: f.ComPagina,
+				})
 			</div>
 		}
 	}
 }
 
+// interruptor pausa e retoma a agenda. E um form, e nao um checkbox com JS: sem
+// script a pagina continua operavel, e um POST deixa claro que ha efeito.
+templ interruptor(w postgres.ResumoWorkflow) {
+	if w.TemAgenda {
+		<form method="post" action={ templ.SafeURL("/workflows/" + w.Slug + "/toggle") }>
+			if w.Ativo {
+				<button
+					type="submit"
+					title="Pausar a agenda"
+					aria-label={ "Pausar " + w.Slug }
+					class="flex h-5 w-9 items-center rounded-full bg-state-success/80 px-0.5 transition-colors hover:bg-state-success"
+				>
+					<span class="ml-auto h-4 w-4 rounded-full bg-surface shadow-sm"></span>
+				</button>
+			} else {
+				<button
+					type="submit"
+					title="Retomar a agenda"
+					aria-label={ "Retomar " + w.Slug }
+					class="flex h-5 w-9 items-center rounded-full bg-line px-0.5 transition-colors hover:bg-muted/40"
+				>
+					<span class="h-4 w-4 rounded-full bg-surface shadow-sm"></span>
+				</button>
+			}
+		</form>
+	} else {
+		<span class="block h-5 w-9" title="Sem agenda: só disparo manual"></span>
+	}
+}
+
+// disparar e o botao sem parametros — usado na LISTA, onde nao ha espaco para
+// um formulario e onde os padroes sao a escolha certa.
+templ disparar(slug string) {
+	<form method="post" action={ templ.SafeURL("/workflows/" + slug + "/trigger") } class="inline">
+		<button
+			type="submit"
+			title="Executar agora"
+			aria-label={ "Executar " + slug }
+			class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-line text-gold-strong transition-colors hover:border-gold hover:bg-gold-wash"
+		>
+			<svg class="h-3.5 w-3.5" viewBox="0 0 12 12" fill="currentColor"><path d="M2.5 1.6v8.8L10 6z"></path></svg>
+		</button>
+	</form>
+}
+
+templ chip(rota, texto string, ativo bool, ponto string) {
+	if ativo {
+		<a href={ templ.SafeURL(rota) } class="inline-flex items-center gap-1.5 rounded-full border border-ink bg-ink px-3.5 py-1.5 text-xs font-semibold text-parchment-soft">
+			if ponto != "" {
+				<span class={ "h-1.5 w-1.5 rounded-full", ponto }></span>
+			}
+			{ texto }
+		</a>
+	} else {
+		<a href={ templ.SafeURL(rota) } class="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-3.5 py-1.5 text-xs text-muted transition-colors hover:border-gold hover:text-ink">
+			if ponto != "" {
+				<span class={ "h-1.5 w-1.5 rounded-full", ponto }></span>
+			}
+			{ texto }
+		</a>
+	}
+}
+
+// alterna faz o chip de tag funcionar como liga/desliga: clicar na tag ja ativa
+// remove o filtro em vez de reaplicar o mesmo valor.
+func alterna(atual, valor string) string {
+	if atual == valor {
+		return ""
+	}
+	return valor
+}
+
+// ---------------------------------------------------------------------------
+// Execuções, projetos e detalhe
+// ---------------------------------------------------------------------------
+
+// FiltroRuns e o recorte da tela de execucoes. Chega por query string, entao um
+// grafico do dashboard pode apontar para "as execucoes daquela hora" com um link.
+type FiltroRuns struct {
+	Estado   string
+	Workflow string
+	De       string // AAAA-MM-DDTHH, o mesmo formato que o grafico emite
+	Ate      string
+	Rotulo   string // descricao legivel do periodo, montada no servidor
+
+	Pagina    int
+	PorPagina int
+}
+
+func (f FiltroRuns) url(campo, valor string, reiniciaPagina bool) string {
+	q := url.Values{}
+	poe := func(k, v string) {
+		if v != "" {
+			q.Set(k, v)
+		}
+	}
+	poe("estado", f.Estado)
+	poe("workflow", f.Workflow)
+	poe("de", f.De)
+	poe("ate", f.Ate)
+	if !reiniciaPagina && f.Pagina > 1 {
+		poe("pagina", fmt.Sprint(f.Pagina))
+	}
+	if valor == "" {
+		q.Del(campo)
+	} else {
+		q.Set(campo, valor)
+	}
+	if len(q) == 0 {
+		return "/runs"
+	}
+	return "/runs?" + q.Encode()
+}
+
+func (f FiltroRuns) Com(campo, valor string) string { return f.url(campo, valor, true) }
+func (f FiltroRuns) ComPagina(n int) string         { return f.url("pagina", fmt.Sprint(n), false) }
+
+// Ativo diz se ha algum recorte — sem isso a tela mostraria a barra de "filtros
+// aplicados" vazia.
+func (f FiltroRuns) Ativo() bool {
+	return f.Estado != "" || f.Workflow != "" || f.De != "" || f.Ate != ""
+}
+
+templ Runs(runs []postgres.ResumoRun, f FiltroRuns, total int) {
+	@layouts.Base(layouts.Pagina{Titulo: "Execuções", Kicker: "Histórico", Ativo: "runs"}) {
+		<div class="mb-5 flex flex-wrap items-center gap-2">
+			@chip(f.Com("estado", ""), "Todos", f.Estado == "", "")
+			@chip(f.Com("estado", "success"), "Sucesso", f.Estado == "success", "bg-state-success")
+			@chip(f.Com("estado", "failed"), "Falha", f.Estado == "failed", "bg-state-failed")
+			@chip(f.Com("estado", "running"), "Executando", f.Estado == "running", "bg-state-running")
+			@chip(f.Com("estado", "queued"), "Na fila", f.Estado == "queued", "bg-state-queued")
+			if f.Workflow != "" {
+				<span class="mx-2 h-5 w-px bg-line"></span>
+				@filtroAplicado("workflow", f.Workflow, f.Com("workflow", ""))
+			}
+			if f.Rotulo != "" {
+				@filtroAplicado("período", f.Rotulo, f.Com("de", "")+"&ate=")
+			}
+		</div>
+		<p class="mb-3 font-serif text-xl text-ink">
+			{ contagem(total, "execução", "execuções") }
+			if f.Ativo() {
+				<a href="/runs" class="ml-3 text-xs text-gold-strong hover:underline">limpar filtros</a>
+			}
+		</p>
+		@tabelaRuns(runs, Paginacao{
+			Pagina: f.Pagina, PorPagina: f.PorPagina, Total: total, LinkPagina: f.ComPagina,
+		})
+	}
+}
+
+// filtroAplicado mostra um recorte vindo de outra tela (o clique no grafico, por
+// exemplo) com o jeito de remove-lo ao lado — um filtro que so se tira mexendo
+// na URL nao e um filtro, e uma armadilha.
+templ filtroAplicado(rotulo, valor, remover string) {
+	<span class="inline-flex items-center gap-2 rounded-full border border-gold/40 bg-gold-wash px-3 py-1.5 text-xs text-ink">
+		<span class="text-gold-strong">{ rotulo }:</span>
+		<span class="font-medium">{ valor }</span>
+		<a href={ templ.SafeURL(remover) } class="text-muted hover:text-ink" aria-label="remover filtro">×</a>
+	</span>
+}
+
 templ Projetos(ps []postgres.ResumoProjeto) {
-	@layouts.Base("Projetos", "projects") {
+	@layouts.Base(layouts.Pagina{Titulo: "Projetos", Kicker: "Organização", Ativo: "projects"}) {
 		if len(ps) == 0 {
-			@components.Vazio("Nenhum projeto.", "bravis publish --project meu-projeto arquivo.yaml")
+			@components.Vazio("Nenhum projeto ainda.", "bravis publish --project meu-projeto")
 		} else {
-			<div class="grid gap-4 md:grid-cols-3">
+			<div class="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
 				for _, p := range ps {
-					<div class="rounded-lg border border-slate-800 bg-slate-900/40 px-5 py-4">
-						<p class="font-medium text-slate-200">{ p.Nome }</p>
-						<p class="font-mono text-xs text-slate-500">{ p.Slug }</p>
-						<div class="mt-3 flex gap-4 text-xs text-slate-400">
-							<span>{ fmt.Sprint(p.Workflows) } workflows</span>
-							<span>{ fmt.Sprint(p.Runs) } execucoes</span>
-						</div>
+					<div class="rounded-[20px] border border-line bg-surface p-6 shadow-warm-sm">
+						<p class="kicker">{ p.Slug }</p>
+						<h3 class="display mt-1 text-2xl text-ink">{ p.Nome }</h3>
+						<dl class="mt-5 flex gap-6 text-sm">
+							<div>
+								<dt class="text-xs text-muted">Workflows</dt>
+								<dd class="font-serif text-2xl text-ink">{ fmt.Sprint(p.Workflows) }</dd>
+							</div>
+							<div>
+								<dt class="text-xs text-muted">Execuções</dt>
+								<dd class="font-serif text-2xl text-ink">{ fmt.Sprint(p.Runs) }</dd>
+							</div>
+						</dl>
+						<p class="mt-5 text-xs text-muted">criado em { p.CriadoEm.Local().Format("02/01/2006") }</p>
 					</div>
 				}
 			</div>
@@ -102,62 +700,271 @@ templ Projetos(ps []postgres.ResumoProjeto) {
 	}
 }
 
-templ tabelaRuns(runs []postgres.ResumoRun) {
+templ tabelaRuns(runs []postgres.ResumoRun, p Paginacao) {
 	if len(runs) == 0 {
-		@components.Vazio("Nenhuma execucao ainda.", "bravis scheduler")
+		@components.Vazio("Nenhuma execução ainda.", "bravis scheduler")
 	} else {
-		<div class="overflow-hidden rounded-lg border border-slate-800">
+		<div class="overflow-hidden rounded-[20px] border border-line bg-surface shadow-warm-sm">
 			<table class="w-full text-sm">
-				<thead class="bg-slate-900/60 text-left text-xs uppercase tracking-wide text-slate-500">
-					<tr>
-						<th class="px-4 py-3 font-medium">Estado</th>
-						<th class="px-4 py-3 font-medium">Workflow</th>
-						<th class="px-4 py-3 font-medium">Origem</th>
-						<th class="px-4 py-3 font-medium">Slot</th>
-						<th class="px-4 py-3 font-medium">Duracao</th>
-						<th class="px-4 py-3 font-medium">Criado</th>
+				<thead>
+					<tr class="border-b border-line bg-parchment-soft/60 text-left">
+						@th("Estado", "pl-6")
+						@th("Workflow", "")
+						@th("Origem", "")
+						@th("Slot", "")
+						@th("Duração", "")
+						@th("Criado", "text-right")
+						@th("", "w-16 pr-6")
 					</tr>
 				</thead>
-				<tbody class="divide-y divide-slate-800">
+				<tbody class="divide-y divide-line-soft">
 					for _, r := range runs {
-						<tr class="hover:bg-slate-900/40">
-							<td class="px-4 py-3">
-								@components.StatusBadge(r.Status)
+						<tr class="transition-colors hover:bg-gold-wash">
+							<td class="px-3 py-3 pl-6">
+								@components.Estado(r.Status)
 								if r.Tentativa > 0 {
-									<span class="ml-2 text-xs text-slate-500">tentativa { fmt.Sprint(r.Tentativa+1) }</span>
+									<span class="ml-2 text-[0.7rem] text-state-retrying">tentativa { fmt.Sprint(r.Tentativa+1) }</span>
 								}
 							</td>
-							<td class="px-4 py-3 font-medium text-slate-200">{ r.WorkflowSlug }</td>
-							<td class="px-4 py-3 text-xs text-slate-400">{ r.TriggerType }</td>
-							<td class="px-4 py-3 font-mono text-xs text-slate-400">{ quando(r.LogicalDate) }</td>
-							<td class="px-4 py-3 tabular-nums text-xs text-slate-400">{ duracao(r.Duracao) }</td>
-							<td class="px-4 py-3 text-xs text-slate-500">{ r.CriadoEm.Format("02/01 15:04") }</td>
+							<td class="px-3 py-3">
+								<a href={ templ.SafeURL("/runs/" + r.ID) } class="font-medium text-ink hover:text-gold-strong">
+									{ r.WorkflowSlug }
+								</a>
+							</td>
+							<td class="px-3 py-3 text-xs text-muted">{ r.TriggerType }</td>
+							<td class="px-3 py-3 text-xs tabular-nums text-muted">{ components.Instante(r.LogicalDate) }</td>
+							<td class="px-3 py-3 text-xs tabular-nums text-muted">{ components.Duracao(r.Duracao) }</td>
+							<td class="px-3 py-3 text-right text-xs text-muted">
+								{ components.Quando(&r.CriadoEm) }
+							</td>
+							<td class="px-3 py-3 pr-6 text-right">
+								if r.Erro != "" {
+									@components.BotaoErro(r.ID)
+								}
+							</td>
 						</tr>
-						if r.Erro != "" {
-							<tr class="bg-red-950/20">
-								<td colspan="6" class="px-4 pb-3 font-mono text-xs text-red-400/80">{ r.Erro }</td>
-							</tr>
-						}
 					}
 				</tbody>
 			</table>
+			@paginacao(p)
 		</div>
+		// Os dialogos ficam FORA da tabela: <dialog> dentro de <tbody> e HTML
+		// invalido, e o navegador o move para fora — quebrando o layout da linha.
+		for _, r := range runs {
+			if r.Erro != "" {
+				@components.DialogoErro(r.ID, r.WorkflowSlug, r.Status, r.Erro)
+			}
+		}
 	}
 }
 
-func quando(t *time.Time) string {
-	if t == nil {
-		return "—"
-	}
-	return t.UTC().Format("02/01 15:04")
+// dagAssets e a ordem exata de carregamento da ilha. A ordem nao e estilo: o
+// shim referencia `React` no instante em que roda, e o bundle do React Flow
+// referencia `jsxRuntime` no dele. Trocar duas linhas aqui deixa a tela branca.
+var dagAssets = layouts.Ilha{
+	CSS: []string{"/assets/vendor/xyflow.css"},
+	JS: []string{
+		"/assets/vendor/react.js",
+		"/assets/vendor/react-dom.js",
+		"/assets/jsx-shim.js",
+		"/assets/vendor/xyflow.js",
+		"/assets/dag.js",
+	},
 }
 
-func duracao(d *time.Duration) string {
-	if d == nil {
-		return "—"
+// Workflow mostra a definicao publicada. Sem estado de execucao: e a tela de
+// "como este workflow e", e precisa servir tambem um workflow que nunca rodou.
+templ Workflow(w wf.Workflow, ultimas []postgres.ResumoRun) {
+	@layouts.Base(layouts.Pagina{
+		Titulo: w.Slug, Kicker: "Workflow", Ativo: "workflows",
+		Ilha: dagAssets, Largo: true, Acoes: disparar(w.Slug),
+	}) {
+		<div class="mb-5 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-muted">
+			<span>{ fmt.Sprint(len(w.Nodes)) } passos</span>
+			<span>{ fmt.Sprint(len(w.Edges)) } dependências</span>
+			if w.Schedule != "" {
+				<span class="font-mono text-xs text-ink">{ w.Schedule }</span>
+			} else {
+				<span>só disparo manual</span>
+			}
+			for _, t := range w.Tags {
+				@components.Etiqueta(t, "/workflows?tag="+t)
+			}
+		</div>
+		if len(w.Params) > 0 {
+			@formularioDeParams(w)
+		}
+		@dag("/api/workflows/" + w.Slug + "/graph")
+		if len(ultimas) > 0 {
+			<section class="mt-6">
+				<div class="mb-3 flex items-baseline justify-between">
+					<h2 class="kicker">Execuções deste workflow</h2>
+					<a href={ templ.SafeURL("/runs?workflow=" + w.Slug) } class="text-xs text-gold-strong hover:underline">
+						ver todas
+					</a>
+				</div>
+				@tabelaRuns(ultimas, Paginacao{})
+			</section>
+		}
 	}
-	if *d < time.Second {
-		return fmt.Sprintf("%dms", d.Milliseconds())
+}
+
+// Run mostra uma execucao. O cabecalho vem do servidor ja renderizado; so a DAG
+// com o estado de cada passo depende de JavaScript.
+templ Run(r run.Run) {
+	@layouts.Base(layouts.Pagina{
+		Titulo: r.WorkflowSlug, Kicker: "Execução", Ativo: "runs",
+		Ilha: dagAssets, Largo: true,
+	}) {
+		<div class="mb-5 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
+			@components.Estado(string(r.Status))
+			<span class="text-muted">{ r.TriggerType }</span>
+			if r.LogicalDate != nil {
+				<span class="font-mono text-xs text-muted">slot { components.Instante(r.LogicalDate) }</span>
+			}
+			if r.Attempt > 0 {
+				<span class="text-xs text-state-retrying">tentativa { fmt.Sprint(r.Attempt+1) }</span>
+			}
+			<a href={ templ.SafeURL("/workflows/" + r.WorkflowSlug) } class="text-xs text-gold-strong hover:underline">ver definição</a>
+			<span class="font-mono text-[0.7rem] text-muted/70">{ r.ID.String() }</span>
+		</div>
+		if r.Erro != "" {
+			<pre class="mb-5 overflow-auto rounded-[20px] border border-state-failed/20 bg-state-failed/5 px-5 py-4 font-mono text-xs text-state-failed">{ r.Erro }</pre>
+		}
+		@dag("/api/runs/" + r.ID.String() + "/graph")
 	}
-	return fmt.Sprintf("%.1fs", d.Seconds())
+}
+
+// dag e o ponto de montagem da ilha. A altura e fixa de proposito: com `h-full`
+// dentro de um container que rola, o canvas do React Flow nasce com 0px e o
+// grafo some.
+templ dag(src string) {
+	<div
+		id="dag"
+		data-src={ src }
+		class="rounded-[20px] border border-line bg-surface shadow-warm-sm"
+		style="height: calc(100vh - 320px); min-height: 420px;"
+	></div>
+}
+
+// ---------------------------------------------------------------------------
+// Formatadores locais
+// ---------------------------------------------------------------------------
+
+func pct(v float64) string { return fmt.Sprintf("%.1f%%", v) }
+
+// contagem concorda o substantivo com o numero. "1 workflows" e o tipo de
+// detalhe que faz a tela parecer gerada, nao escrita.
+func contagem(n int, singular, plural string) string {
+	if n == 1 {
+		return fmt.Sprintf("1 %s", singular)
+	}
+	return fmt.Sprintf("%d %s", n, plural)
+}
+
+// matizFalha deixa o numero neutro quando nao ha falha nenhuma: pintar de
+// vermelho um "0.0%" ensina o olho a ignorar a cor justamente na tela em que ela
+// precisa significar alguma coisa.
+func matizFalha(n int) string {
+	if n == 0 {
+		return "text-ink"
+	}
+	return "text-state-failed"
+}
+
+func notaFalha(n int) string {
+	if n == 0 {
+		return "nenhuma falha na janela"
+	}
+	if n == 1 {
+		return "1 execução falhou"
+	}
+	return fmt.Sprintf("%d execuções falharam", n)
+}
+
+func duracaoMedia(d time.Duration) string {
+	if d == 0 {
+		return "sem duração medida"
+	}
+	return "duração média " + components.Duracao(&d)
+}
+
+// inicioOuCriacao mostra quando o trabalho comecou de fato; para quem ainda esta
+// na fila, o que importa e ha quanto tempo espera.
+func inicioOuCriacao(r postgres.ResumoRun) *time.Time {
+	if r.IniciadoEm != nil {
+		return r.IniciadoEm
+	}
+	return &r.CriadoEm
+}
+
+var _ = strings.TrimSpace
+
+
+// formularioDeParams e o disparo COM valores — a diferenca entre rodar o
+// workflow e reprocessar uma janela.
+//
+// Os campos vem da declaracao do YAML, e o `name` leva o prefixo `param.` para
+// nao colidir com campos futuros do proprio form. Tipos viram controles: boolean
+// e um select, integer e um number, enum e um select — cada um recusando no
+// navegador o que o servidor recusaria de novo depois.
+templ formularioDeParams(w wf.Workflow) {
+	<form
+		method="post"
+		action={ templ.SafeURL("/workflows/" + w.Slug + "/trigger") }
+		class="mb-5 rounded-[20px] border border-line bg-surface p-6 shadow-warm-sm"
+	>
+		<p class="kicker mb-4">Executar com parâmetros</p>
+		<div class="flex flex-wrap items-end gap-4">
+			for _, p := range w.Params {
+				<label class="flex min-w-[180px] flex-col gap-1">
+					<span class="text-xs font-medium text-ink">{ p.Nome }</span>
+					if p.Descricao != "" {
+						<span class="text-[0.7rem] text-muted">{ p.Descricao }</span>
+					}
+					if p.Tipo == wf.ParamBool {
+						<select name={ "param." + p.Nome } class="rounded-xl border border-line bg-parchment-soft px-3 py-2 text-sm text-ink">
+							@opcao("false", p.Padrao)
+							@opcao("true", p.Padrao)
+						</select>
+					} else if len(p.Enum) > 0 {
+						<select name={ "param." + p.Nome } class="rounded-xl border border-line bg-parchment-soft px-3 py-2 text-sm text-ink">
+							for _, v := range p.Enum {
+								@opcao(v, p.Padrao)
+							}
+						</select>
+					} else {
+						<input
+							type={ tipoDeCampo(p) }
+							name={ "param." + p.Nome }
+							value={ p.Padrao }
+							placeholder={ p.Pattern }
+							class="rounded-xl border border-line bg-parchment-soft px-3 py-2 font-mono text-sm text-ink placeholder:text-muted/60"
+						/>
+					}
+				</label>
+			}
+			<button
+				type="submit"
+				class="rounded-full bg-ink px-5 py-2.5 text-xs font-semibold text-parchment-soft transition-transform hover:-translate-y-px"
+			>Executar</button>
+		</div>
+	</form>
+}
+
+templ opcao(valor, padrao string) {
+	if valor == padrao {
+		<option value={ valor } selected>{ valor }</option>
+	} else {
+		<option value={ valor }>{ valor }</option>
+	}
+}
+
+// tipoDeCampo escolhe o controle do navegador. `number` para inteiro faz o
+// teclado do celular abrir certo e barra letra antes do servidor precisar.
+func tipoDeCampo(p wf.Param) string {
+	if p.Tipo == wf.ParamInteiro {
+		return "number"
+	}
+	return "text"
 }

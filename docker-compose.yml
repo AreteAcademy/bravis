@@ -20,7 +20,9 @@ services:
       retries: 15
 
   migrate:
-    build: .
+    build:
+      context: .
+      target: api
     command: ["migrate", "up"]
     environment:
       BRAVIS_DATABASE_URL: postgres://bravis:bravis@postgres:5432/bravis?sslmode=disable
@@ -29,7 +31,9 @@ services:
     restart: "no"
 
   api:
-    build: .
+    build:
+      context: .
+      target: api
     command: ["serve"]
     environment:
       BRAVIS_ENV: local
@@ -37,11 +41,35 @@ services:
       BRAVIS_DATABASE_URL: postgres://bravis:bravis@postgres:5432/bravis?sslmode=disable
       BRAVIS_LOG_LEVEL: debug
     ports: ["8080:8080"]
+    # Identidade visual do cliente. Comentado porque a instalacao padrao nao tem
+    # arquivo nenhum — descomente apos copiar `brand.example.yaml` para
+    # `brand.yaml`. Somente leitura: a API nunca escreve nele.
+    # volumes:
+    #   - ./brand.yaml:/etc/bravis/brand.yaml:ro
+    # environment tambem precisa de BRAVIS_BRAND_FILE: /etc/bravis/brand.yaml
     depends_on:
       postgres: {condition: service_healthy}
       # Migrar antes de servir: a API nao aplica schema, por decisao (ver
       # postgres.Migrate).
       migrate: {condition: service_completed_successfully}
+
+  # Sem este servico a stack local ACEITA trabalho e nunca o executa: o botao
+  # "executar agora" cria o Run, ele entra na fila e fica la para sempre. A API
+  # nao executa nada por decisao (secao 37: quem cria nao e quem executa), entao
+  # alguem precisa consumir a fila — e este alguem.
+  scheduler:
+    build:
+      context: .
+      target: worker
+    command: ["scheduler", "--interval", "5s", "--concurrency", "4"]
+    environment:
+      BRAVIS_ENV: local
+      BRAVIS_DATABASE_URL: postgres://bravis:bravis@postgres:5432/bravis?sslmode=disable
+      BRAVIS_LOG_LEVEL: debug
+    depends_on:
+      postgres: {condition: service_healthy}
+      migrate: {condition: service_completed_successfully}
+    restart: unless-stopped
 
 volumes:
   pgdata:

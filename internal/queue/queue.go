@@ -39,12 +39,24 @@ func New(pool *pgxpool.Pool) *Queue { return &Queue{pool: pool} }
 // `ON CONFLICT DO NOTHING` na unique de run_id: enfileirar duas vezes o mesmo
 // run e no-op, nao erro. E o comportamento que a secao 29 pede — a operacao
 // tolera repeticao.
+// Enqueue poe o run na fila. `disponivelEm` zero significa AGORA, medido pelo
+// relogio do BANCO.
+//
+// A diferenca importa: o relogio do processo pode estar alguns milissegundos a
+// frente do relogio do Postgres, e um item gravado com `time.Now()` do
+// aplicativo fica invisivel ate o banco alcanca-lo. Nao e perda — o proximo
+// ciclo pega —, mas e latencia inexplicavel, e foi o que fez um teste de
+// concorrencia entregar 4 itens onde 5 estavam prontos.
 func (q *Queue) Enqueue(ctx context.Context, runID uuid.UUID, prioridade int, disponivelEm time.Time) error {
+	var quando any = disponivelEm
+	if disponivelEm.IsZero() {
+		quando = nil // COALESCE resolve para now() do banco
+	}
 	_, err := q.pool.Exec(ctx, `
 		INSERT INTO queue_items (run_id, prioridade, disponivel_em)
-		VALUES ($1, $2, $3)
+		VALUES ($1, $2, COALESCE($3::timestamptz, now()))
 		ON CONFLICT (run_id) DO NOTHING`,
-		runID, prioridade, disponivelEm)
+		runID, prioridade, quando)
 	if err != nil {
 		return fmt.Errorf("enfileirando run %s: %w", runID, err)
 	}
@@ -61,16 +73,54 @@ func (q *Queue) Claim(ctx context.Context, worker string, limite int) ([]Item, e
 		return nil, nil
 	}
 
+	// O limite por workflow e imposto AQUI, na propria consulta de claim, pelo
+	// mesmo motivo que a concorrencia global e imposta no pedido: nao existe
+	// caminho em que mais itens saiam da fila do que o permitido. Reivindicar e
+	// depois devolver seria uma janela em que dois dispatchers ja teriam pegado
+	// o mesmo workflow.
+	//
+	// `em_voo` conta itens RE IVINDICADOS, e nao runs em `running`: entre o
+	// claim e a transicao de estado ha um instante em que o run ainda esta
+	// `queued`, e contar por status abriria exatamente essa fresta.
+	//
+	// `posicao` e o que impede o segundo problema: sem ele, tres itens do mesmo
+	// workflow com limite 1 sairiam TODOS no mesmo lote, porque a contagem nao
+	// muda no meio da consulta. Com a numeracao por workflow, o item so passa se
+	// `em_voo + sua posicao` couber no limite.
 	linhas, err := q.pool.Query(ctx, `
+		WITH em_voo AS (
+			SELECT r.workflow_slug, count(*) AS n
+			FROM queue_items q
+			JOIN runs r ON r.id = q.run_id
+			WHERE q.reivindicado_em IS NOT NULL
+			GROUP BY r.workflow_slug
+		),
+		elegiveis AS (
+			SELECT q.id,
+			       r.max_ativos,
+			       COALESCE(v.n, 0) AS ja_em_voo,
+			       row_number() OVER (
+			           PARTITION BY r.workflow_slug
+			           ORDER BY q.prioridade DESC, q.disponivel_em, q.id
+			       ) AS posicao
+			FROM queue_items q
+			JOIN runs r ON r.id = q.run_id
+			LEFT JOIN em_voo v ON v.workflow_slug = r.workflow_slug
+			WHERE q.reivindicado_em IS NULL
+			  AND q.disponivel_em <= now()
+		)
 		UPDATE queue_items
 		SET reivindicado_em = now(), reivindicado_por = $1
 		WHERE id IN (
-			SELECT id FROM queue_items
-			WHERE reivindicado_em IS NULL
-			  AND disponivel_em <= now()
-			ORDER BY prioridade DESC, disponivel_em, id
+			SELECT q.id
+			FROM queue_items q
+			JOIN elegiveis e ON e.id = q.id
+			WHERE q.reivindicado_em IS NULL
+			  AND q.disponivel_em <= now()
+			  AND (e.max_ativos = 0 OR e.ja_em_voo + e.posicao <= e.max_ativos)
+			ORDER BY q.prioridade DESC, q.disponivel_em, q.id
 			LIMIT $2
-			FOR UPDATE SKIP LOCKED
+			FOR UPDATE OF q SKIP LOCKED
 		)
 		RETURNING id, run_id, prioridade, disponivel_em`,
 		worker, limite)
@@ -114,17 +164,32 @@ func (q *Queue) Release(ctx context.Context, id int64, atraso time.Duration) err
 // E a rede de seguranca contra worker morto: sem isso, um item reivindicado por
 // um processo que caiu ficaria preso para sempre. Era exatamente o modo de falha
 // das execucoes zumbis que travaram pipelines por 33 dias no sistema anterior.
-func (q *Queue) Recuperar(ctx context.Context, limite time.Duration) (int64, error) {
-	tag, err := q.pool.Exec(ctx, `
+func (q *Queue) Recuperar(ctx context.Context, limite time.Duration) ([]Item, error) {
+	// Devolve os itens, e nao apenas a contagem: quem recupera precisa saber
+	// QUAIS runs ficaram penduradas para corrigir tambem o estado delas. Com a
+	// contagem sozinha, o item voltava para a fila mas o Run seguia "running"
+	// para sempre — a metade do bug que isto conserta.
+	linhas, err := q.pool.Query(ctx, `
 		UPDATE queue_items
 		SET reivindicado_em = NULL, reivindicado_por = NULL
 		WHERE reivindicado_em IS NOT NULL
-		  AND reivindicado_em < now() - $1::interval`,
+		  AND reivindicado_em < now() - $1::interval
+		RETURNING id, run_id, prioridade`,
 		fmt.Sprintf("%d milliseconds", limite.Milliseconds()))
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	return tag.RowsAffected(), nil
+	defer linhas.Close()
+
+	var out []Item
+	for linhas.Next() {
+		var it Item
+		if err := linhas.Scan(&it.ID, &it.RunID, &it.Prioridade); err != nil {
+			return nil, err
+		}
+		out = append(out, it)
+	}
+	return out, linhas.Err()
 }
 
 // Tamanho conta os itens pendentes e os reivindicados, para observabilidade.

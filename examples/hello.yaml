@@ -1,0 +1,30 @@
+# O exemplo que RODA em qualquer lugar.
+#
+# Os outros dois arquivos desta pasta vieram do plano e servem para mostrar o
+# formato — eles chamam `python`, `docker.run` e `./notify.sh`, que nao existem
+# na imagem do worker. Este aqui usa so shell, entao serve para provar a stack
+# ponta a ponta:
+#
+#   bravis publish examples/hello.yaml
+#   e clicar em ▶ na tela de workflows
+name: hello
+type: dag
+tags: [exemplo]
+
+steps:
+  - id: preparar
+    run: sh -c 'echo preparando; sleep 1'
+
+  # Os dois seguintes dependem do mesmo passo, entao rodam EM PARALELO — da para
+  # ver os dois em azul ao mesmo tempo no grafo.
+  - id: extrair
+    run: sh -c 'sleep 2; echo 42 extraidos'
+    depends_on: [preparar]
+
+  - id: validar
+    run: sh -c 'sleep 1; echo validado'
+    depends_on: [preparar]
+
+  - id: publicar
+    run: echo publicado
+    depends_on: [extrair, validar]

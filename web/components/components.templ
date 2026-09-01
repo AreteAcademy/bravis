@@ -1,52 +1,612 @@
 package components
 
-import "fmt"
+import (
+	"fmt"
+	"net/url"
+	"strings"
+	"time"
 
-// StatusBadge pinta o estado de um Run.
+	"github.com/zarvhq/bravis/internal/infrastructure/postgres"
+)
+
+// Estado desenha o estado de um Run.
 //
-// As cores seguem a maquina de estados da secao 7, e nao o gosto: terminal de
-// sucesso em verde, falha em vermelho, e os intermediarios em tons neutros que
-// nao competem por atencao num painel cheio.
-templ StatusBadge(status string) {
-	<span class={ "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium", corDoStatus(status) }>
-		{ status }
+// Cores dessaturadas de proposito: verde e vermelho de painel puro brigam com o
+// pergaminho e gritam mais alto que a informacao. A forma tambem carrega
+// significado — o ponto e cheio no que ja terminou e anelado no que segue vivo —
+// para nao depender so de cor.
+templ Estado(status string) {
+	<span class={ "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium", classeEstado(status) }>
+		<span class={ "h-1.5 w-1.5 rounded-full", pontoEstado(status) }></span>
+		{ rotuloEstado(status) }
 	</span>
 }
 
-func corDoStatus(s string) string {
-	switch s {
-	case "success":
-		return "bg-emerald-500/10 text-emerald-400 ring-1 ring-inset ring-emerald-500/20"
-	case "failed":
-		return "bg-red-500/10 text-red-400 ring-1 ring-inset ring-red-500/20"
-	case "running":
-		return "bg-sky-500/10 text-sky-400 ring-1 ring-inset ring-sky-500/20"
-	case "queued":
-		return "bg-amber-500/10 text-amber-400 ring-1 ring-inset ring-amber-500/20"
-	case "retrying":
-		return "bg-orange-500/10 text-orange-400 ring-1 ring-inset ring-orange-500/20"
-	case "canceled":
-		return "bg-slate-500/10 text-slate-400 ring-1 ring-inset ring-slate-500/20"
-	default:
-		return "bg-slate-500/10 text-slate-400 ring-1 ring-inset ring-slate-500/20"
-	}
+// Ponto e a versao minima, para tabelas densas onde o rotulo ja aparece na coluna.
+templ Ponto(status string) {
+	<span
+		class={ "inline-block h-2.5 w-2.5 rounded-full", pontoEstado(status) }
+		title={ rotuloEstado(status) }
+	></span>
 }
 
-// Metrica e um numero em destaque no dashboard.
-templ Metrica(rotulo string, valor int, matiz string) {
-	<div class="rounded-lg border border-slate-800 bg-slate-900/40 px-5 py-4">
-		<p class="text-xs uppercase tracking-wide text-slate-500">{ rotulo }</p>
-		<p class={ "mt-1 text-2xl font-semibold tabular-nums", matiz }>{ fmt.Sprint(valor) }</p>
+func rotuloEstado(s string) string {
+	switch s {
+	case "success":
+		return "sucesso"
+	case "failed":
+		return "falha"
+	case "running":
+		return "executando"
+	case "queued":
+		return "na fila"
+	case "retrying":
+		return "repetindo"
+	case "canceled":
+		return "cancelado"
+	case "pending":
+		return "aguardando"
+	case "":
+		return "nunca rodou"
+	}
+	return s
+}
+
+func classeEstado(s string) string {
+	switch s {
+	case "success":
+		return "border-state-success/25 bg-state-success/10 text-state-success"
+	case "failed":
+		return "border-state-failed/25 bg-state-failed/10 text-state-failed"
+	case "running":
+		return "border-state-running/25 bg-state-running/10 text-state-running"
+	case "queued":
+		return "border-state-queued/25 bg-state-queued/10 text-state-queued"
+	case "retrying":
+		return "border-state-retrying/25 bg-state-retrying/10 text-state-retrying"
+	case "canceled":
+		return "border-state-canceled/25 bg-state-canceled/10 text-state-canceled"
+	}
+	return "border-line bg-parchment text-muted"
+}
+
+func pontoEstado(s string) string {
+	switch s {
+	case "success":
+		return "bg-state-success"
+	case "failed":
+		return "bg-state-failed"
+	case "running":
+		return "bg-state-running animate-pulse"
+	case "queued":
+		return "bg-state-queued"
+	case "retrying":
+		return "bg-state-retrying animate-pulse"
+	case "canceled":
+		return "bg-state-canceled"
+	}
+	return "bg-state-pending"
+}
+
+// Cartao e o painel base: superficie clara, borda fina, sombra quente e larga.
+templ Cartao(rotulo string) {
+	<section class="rounded-[20px] border border-line bg-surface p-6 shadow-warm-sm">
+		if rotulo != "" {
+			<p class="kicker mb-4">{ rotulo }</p>
+		}
+		{ children... }
+	</section>
+}
+
+// Indicador e um dos quatro numeros do topo do Overview. O numero em serifa
+// grande e o que da o tom editorial — em sans ele viraria mais um dashboard.
+templ Indicador(rotulo, valor, nota string, matiz string) {
+	<div class="rounded-[20px] border border-line bg-surface px-6 py-5 shadow-warm-sm">
+		<p class="kicker">{ rotulo }</p>
+		<p class={ "display mt-2 text-[2.6rem] leading-none", matiz }>{ valor }</p>
+		if nota != "" {
+			<p class="mt-2 text-xs text-muted">{ nota }</p>
+		}
 	</div>
 }
 
 // Vazio comunica ausencia de dado sem parecer erro. Uma tabela vazia sem
 // explicacao faz o operador procurar defeito onde nao ha.
 templ Vazio(msg, dica string) {
-	<div class="rounded-lg border border-dashed border-slate-800 px-6 py-10 text-center">
-		<p class="text-sm text-slate-400">{ msg }</p>
+	<div class="rounded-[20px] border border-dashed border-line px-6 py-12 text-center">
+		<p class="font-serif text-lg text-muted">{ msg }</p>
 		if dica != "" {
-			<p class="mt-1 font-mono text-xs text-slate-600">{ dica }</p>
+			<p class="mt-2 font-mono text-xs text-gold-strong">{ dica }</p>
 		}
 	</div>
+}
+
+// Etiqueta e um chip de tag. Vira link quando `rota` existe, para filtrar.
+templ Etiqueta(texto, rota string) {
+	if rota != "" {
+		<a
+			href={ templ.SafeURL(rota) }
+			class="inline-flex rounded-full border border-line bg-parchment px-2 py-0.5 text-[0.7rem] text-muted transition-colors hover:border-gold hover:text-gold-strong"
+		>{ texto }</a>
+	} else {
+		<span class="inline-flex rounded-full border border-line bg-parchment px-2 py-0.5 text-[0.7rem] text-muted">{ texto }</span>
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Graficos
+//
+// SVG gerado no servidor, sem biblioteca. Sao duas formas simples sobre dados
+// que ja estao na mao; puxar uma lib de grafico para isto traria um bundle e
+// uma dependencia de runtime que a §15 evita — e o SSR continua valendo para
+// quem desligou o JavaScript.
+// ---------------------------------------------------------------------------
+
+const (
+	larguraGrafico = 980
+	alturaGrafico  = 240
+	margemEsq      = 34
+	margemBaixo    = 26
+)
+
+// Execucoes desenha uma coluna empilhada por hora, com a linha de duracao media
+// por cima — as duas leituras que a tela de Overview precisa cruzar: "quantas" e
+// "quanto tempo".
+templ Execucoes(baldes []postgres.Balde) {
+	if len(baldes) == 0 {
+		@Vazio("Sem execuções na janela.", "bravis scheduler")
+	} else {
+		<div class="overflow-x-auto">
+			<svg
+				viewBox={ fmt.Sprintf("0 0 %d %d", larguraGrafico, alturaGrafico) }
+				class="h-[240px] w-full min-w-[560px]"
+				role="img"
+				aria-label="Execuções por hora"
+			>
+				// Grade horizontal: quatro linhas bastam para dar escala sem
+				// virar papel milimetrado.
+				for _, l := range linhasDeGrade(baldes) {
+					<line x1={ fmt.Sprint(margemEsq) } y1={ fmt.Sprint(l.Y) } x2={ fmt.Sprint(larguraGrafico) } y2={ fmt.Sprint(l.Y) } stroke="var(--color-ink)" stroke-opacity="0.08"></line>
+					<text x="0" y={ fmt.Sprint(l.Y + 4) } class="fill-muted text-[11px]">{ l.Rotulo }</text>
+				}
+				for _, b := range barras(baldes) {
+					// A coluna inteira e o alvo, nao so a barra: com uma unica
+					// execucao a barra tem 2px de altura, e exigir a mira exata
+					// tornaria o grafico decorativo.
+					<a href={ templ.SafeURL(b.Link) } class="grafico-alvo" data-dica={ b.Dica }>
+						<rect class="grafico-faixa" x={ fmt.Sprint(b.XFaixa) } y="0" width={ fmt.Sprint(b.LarguraFaixa) } height={ fmt.Sprint(alturaGrafico - margemBaixo) } rx="3"></rect>
+						<rect x={ fmt.Sprint(b.X) } y={ fmt.Sprint(b.YSucesso) } width={ fmt.Sprint(b.Largura) } height={ fmt.Sprint(b.HSucesso) } rx="2" fill="var(--color-state-success)"></rect>
+						<rect x={ fmt.Sprint(b.X) } y={ fmt.Sprint(b.YFalha) } width={ fmt.Sprint(b.Largura) } height={ fmt.Sprint(b.HFalha) } rx="2" fill="var(--color-state-failed)"></rect>
+						<rect x={ fmt.Sprint(b.X) } y={ fmt.Sprint(b.YOutros) } width={ fmt.Sprint(b.Largura) } height={ fmt.Sprint(b.HOutros) } rx="2" fill="var(--color-state-running)"></rect>
+						<title>{ b.Dica }</title>
+					</a>
+				}
+				if d := linhaDuracao(baldes); d != "" {
+					<path d={ d } fill="none" stroke="var(--color-gold)" stroke-width="1.5" stroke-linejoin="round" opacity="0.9"></path>
+					// A curva de duracao tem escala propria (ver linhaDuracao), entao
+					// sem esta ancora ela seria uma linha sem unidade: o pico diz a
+					// que corresponde o ponto mais alto.
+					<text x={ fmt.Sprint(larguraGrafico) } y="12" text-anchor="end" class="fill-gold-strong text-[11px]">
+						{ "pico de duração média: " + Duracao(picoDuracao(baldes)) }
+					</text>
+				}
+				for _, m := range marcasDeHora(baldes) {
+					<text x={ fmt.Sprint(m.X) } y={ fmt.Sprint(alturaGrafico - 6) } text-anchor="middle" class="fill-muted text-[11px]">{ m.Rotulo }</text>
+				}
+			</svg>
+		</div>
+		<div class="mt-3 flex flex-wrap gap-4 text-xs text-muted">
+			@legenda("var(--color-state-success)", "sucesso")
+			@legenda("var(--color-state-failed)", "falha")
+			@legenda("var(--color-state-running)", "em curso")
+			@legenda("var(--color-gold)", "duração média")
+		</div>
+	}
+}
+
+templ legenda(cor, texto string) {
+	<span class="inline-flex items-center gap-1.5">
+		<span class="h-2 w-2 rounded-full" style={ "background:" + cor }></span>
+		{ texto }
+	</span>
+}
+
+// Rosca resume a mesma janela em proporcao. O total no centro evita a leitura
+// so relativa: 95% de vinte execucoes nao e 95% de duas mil.
+templ Rosca(i postgres.Indicadores) {
+	<div class="flex flex-col items-center">
+		<svg viewBox="0 0 120 120" class="h-[190px] w-[190px]" role="img" aria-label="Distribuição das execuções">
+			<circle cx="60" cy="60" r="46" fill="none" stroke="var(--color-ink)" stroke-opacity="0.07" stroke-width="16"></circle>
+			for _, a := range arcos(i) {
+				<a href={ templ.SafeURL(a.Link) } class="grafico-alvo" data-dica={ a.Dica }>
+					<circle
+						cx="60"
+						cy="60"
+						r="46"
+						fill="none"
+						stroke={ a.Cor }
+						stroke-width="16"
+						stroke-dasharray={ a.Dash }
+						stroke-dashoffset={ fmt.Sprint(a.Offset) }
+						transform="rotate(-90 60 60)"
+					><title>{ a.Dica }</title></circle>
+				</a>
+			}
+			<text x="60" y="58" text-anchor="middle" class="fill-ink font-serif text-[26px] font-semibold">{ fmt.Sprint(i.Total) }</text>
+			<text x="60" y="74" text-anchor="middle" class="fill-muted text-[9px] tracking-[0.14em]">EXECUÇÕES</text>
+		</svg>
+	</div>
+}
+
+// ---------------------------------------------------------------------------
+// Calculo das formas. Fica em Go, e nao no template, porque template com
+// aritmetica no meio do markup e ilegivel e impossivel de testar.
+// ---------------------------------------------------------------------------
+
+type Barra struct {
+	X, Largura         int
+	XFaixa, LarguraFaixa int
+	YSucesso, HSucesso int
+	YFalha, HFalha     int
+	YOutros, HOutros   int
+	Dica               string
+	Link               string
+}
+
+type Grade struct {
+	Y      int
+	Rotulo string
+}
+
+type Marca struct {
+	X      int
+	Rotulo string
+}
+
+// teto arredonda o maximo para cima ate um valor divisivel por 4 em passos
+// "redondos", para a coluna mais alta nao encostar no topo E para os rotulos do
+// eixo cairem em numeros legiveis.
+//
+// A versao anterior dividia o maximo cru por quatro e produzia eixos como
+// 0/6/12/18/25 — cada rotulo com um intervalo diferente do anterior.
+func teto(baldes []postgres.Balde) int {
+	max := 0
+	for _, b := range baldes {
+		if t := b.Total(); t > max {
+			max = t
+		}
+	}
+	if max == 0 {
+		return 4
+	}
+	for _, passo := range []int{1, 2, 5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000} {
+		if passo*4 >= max {
+			return passo * 4
+		}
+	}
+	// Acima de 20 mil, arredonda para o milhar de cima divisivel por 4.
+	return ((max + 3999) / 4000) * 4000
+}
+
+func linhasDeGrade(baldes []postgres.Balde) []Grade {
+	max := teto(baldes)
+	util := alturaGrafico - margemBaixo
+	var out []Grade
+	for i := 0; i <= 4; i++ {
+		valor := max * i / 4
+		out = append(out, Grade{
+			Y:      util - util*i/4,
+			Rotulo: fmt.Sprint(valor),
+		})
+	}
+	return out
+}
+
+func barras(baldes []postgres.Balde) []Barra {
+	max := teto(baldes)
+	util := alturaGrafico - margemBaixo
+	area := larguraGrafico - margemEsq
+	passo := float64(area) / float64(len(baldes))
+	largura := int(passo * 0.62)
+	if largura < 2 {
+		largura = 2
+	}
+
+	alt := func(n int) int {
+		if n == 0 {
+			return 0
+		}
+		h := n * util / max
+		// Um pixel minimo: uma unica falha entre centenas de sucessos ainda
+		// precisa ser vista — e o caso em que o grafico mais importa.
+		if h < 2 {
+			h = 2
+		}
+		return h
+	}
+
+	var out []Barra
+	for i, b := range baldes {
+		inicioFaixa := margemEsq + int(float64(i)*passo)
+		x := inicioFaixa + (int(passo)-largura)/2
+		hs, hf := alt(b.Sucesso), alt(b.Falha)
+		ho := alt(b.Executando + b.Fila)
+
+		base := util
+		barra := Barra{
+			X: x, Largura: largura,
+			XFaixa: inicioFaixa, LarguraFaixa: int(passo),
+			Dica: dicaDoBalde(b), Link: linkDoBalde(b),
+		}
+		base -= hs
+		barra.YSucesso, barra.HSucesso = base, hs
+		base -= hf
+		barra.YFalha, barra.HFalha = base, hf
+		base -= ho
+		barra.YOutros, barra.HOutros = base, ho
+		out = append(out, barra)
+	}
+	return out
+}
+
+// linkDoBalde leva a hora exata na lista de execucoes. E o que transforma o
+// grafico em ponto de partida de investigacao: ver o pico de falhas e clicar
+// nele, em vez de reconstruir o filtro a mao.
+func linkDoBalde(b postgres.Balde) string {
+	de := b.Inicio.UTC().Format(time.RFC3339)
+	ate := b.Inicio.Add(time.Hour).UTC().Format(time.RFC3339)
+	return "/runs?de=" + url.QueryEscape(de) + "&ate=" + url.QueryEscape(ate)
+}
+
+func dicaDoBalde(b postgres.Balde) string {
+	partes := []string{b.Inicio.Local().Format("02/01 15h")}
+	if b.Sucesso > 0 {
+		partes = append(partes, fmt.Sprintf("%d sucesso", b.Sucesso))
+	}
+	if b.Falha > 0 {
+		partes = append(partes, fmt.Sprintf("%d falha", b.Falha))
+	}
+	if n := b.Executando + b.Fila; n > 0 {
+		partes = append(partes, fmt.Sprintf("%d em curso", n))
+	}
+	if b.DuracaoMedia > 0 {
+		partes = append(partes, "média "+Duracao(&b.DuracaoMedia))
+	}
+	if len(partes) == 1 {
+		return partes[0] + " · sem execuções"
+	}
+	return strings.Join(partes, " · ")
+}
+
+// picoDuracao e o maior valor da curva — a referencia da escala secundaria.
+func picoDuracao(baldes []postgres.Balde) *time.Duration {
+	var maior time.Duration
+	for _, b := range baldes {
+		if b.DuracaoMedia > maior {
+			maior = b.DuracaoMedia
+		}
+	}
+	if maior == 0 {
+		return nil
+	}
+	return &maior
+}
+
+// linhaDuracao normaliza a duracao media pela PROPRIA escala, nao pela de
+// contagem: sao grandezas diferentes, e o valor aqui e a forma da curva.
+func linhaDuracao(baldes []postgres.Balde) string {
+	var maior time.Duration
+	for _, b := range baldes {
+		if b.DuracaoMedia > maior {
+			maior = b.DuracaoMedia
+		}
+	}
+	if maior == 0 {
+		return ""
+	}
+
+	util := alturaGrafico - margemBaixo
+	area := larguraGrafico - margemEsq
+	passo := float64(area) / float64(len(baldes))
+
+	var b strings.Builder
+	comando := "M"
+	for i, bl := range baldes {
+		if bl.DuracaoMedia == 0 {
+			// Corta a linha em vez de ligar dois picos por cima de um vazio,
+			// que inventaria duracao numa hora sem execucao nenhuma.
+			comando = "M"
+			continue
+		}
+		x := margemEsq + int(float64(i)*passo+passo/2)
+		y := util - int(float64(util)*0.86*float64(bl.DuracaoMedia)/float64(maior))
+		fmt.Fprintf(&b, "%s%d %d ", comando, x, y)
+		comando = "L"
+	}
+	return strings.TrimSpace(b.String())
+}
+
+func marcasDeHora(baldes []postgres.Balde) []Marca {
+	area := larguraGrafico - margemEsq
+	passo := float64(area) / float64(len(baldes))
+
+	// Mostra no maximo 8 rotulos: mais que isso vira borrao ilegivel.
+	salto := len(baldes)/8 + 1
+	var out []Marca
+	for i, b := range baldes {
+		if i%salto != 0 {
+			continue
+		}
+		out = append(out, Marca{
+			X:      margemEsq + int(float64(i)*passo+passo/2),
+			Rotulo: b.Inicio.Local().Format("15h"),
+		})
+	}
+	return out
+}
+
+type Arco struct {
+	Cor    string
+	Dash   string
+	Offset int
+	Dica   string
+	Link   string
+}
+
+// arcos monta a rosca com dasharray sobre um circulo unico. O perimetro e
+// 2*pi*46 ≈ 289; cada fatia recebe seu pedaco e desloca a proxima.
+func arcos(i postgres.Indicadores) []Arco {
+	const perimetro = 289
+	if i.Total == 0 {
+		return nil
+	}
+	fatias := []struct {
+		n      int
+		cor    string
+		nome   string
+		estado string
+	}{
+		// Variavel CSS, e nao hexadecimal: o SVG e servido dentro da pagina,
+		// entao a rosca segue o tema do cliente como qualquer outro elemento.
+		{i.Sucesso, "var(--color-state-success)", "sucesso", "success"},
+		{i.Falha, "var(--color-state-failed)", "falha", "failed"},
+		{i.EmExecucao, "var(--color-state-running)", "executando", "running"},
+		{i.Pendentes, "var(--color-state-queued)", "na fila", "queued"},
+	}
+
+	var out []Arco
+	acumulado := 0
+	for _, f := range fatias {
+		if f.n == 0 {
+			continue
+		}
+		tamanho := f.n * perimetro / i.Total
+		out = append(out, Arco{
+			Cor:    f.cor,
+			Dash:   fmt.Sprintf("%d %d", tamanho, perimetro-tamanho),
+			Offset: -acumulado,
+			Dica: fmt.Sprintf("%d %s (%.0f%%) — clique para ver a lista",
+				f.n, f.nome, float64(f.n)*100/float64(i.Total)),
+			Link: "/runs?estado=" + f.estado,
+		})
+		acumulado += tamanho
+	}
+	return out
+}
+
+// ---------------------------------------------------------------------------
+// Formatadores compartilhados
+// ---------------------------------------------------------------------------
+
+// Duracao escolhe a unidade pela ordem de grandeza. "0.4s" diz mais que "400ms"
+// numa coluna onde o vizinho leva minutos.
+func Duracao(d *time.Duration) string {
+	if d == nil {
+		return "—"
+	}
+	switch {
+	case *d < time.Second:
+		return fmt.Sprintf("%dms", d.Milliseconds())
+	case *d < time.Minute:
+		return fmt.Sprintf("%.1fs", d.Seconds())
+	case *d < time.Hour:
+		return fmt.Sprintf("%dm %02ds", int(d.Minutes()), int(d.Seconds())%60)
+	}
+	return fmt.Sprintf("%dh %02dm", int(d.Hours()), int(d.Minutes())%60)
+}
+
+// Quando escreve o instante em relativo ate um dia, e em data absoluta depois.
+// "há 3 min" responde a pergunta de operacao; "12/03 04:00" responde a de
+// auditoria, e a fronteira entre as duas fica por volta de um dia.
+func Quando(t *time.Time) string {
+	if t == nil {
+		return "—"
+	}
+	d := time.Since(*t)
+	switch {
+	case d < 0:
+		return "em " + curto(-d)
+	case d < time.Minute:
+		return "agora"
+	case d < 24*time.Hour:
+		return "há " + curto(d)
+	}
+	return t.Local().Format("02/01 15:04")
+}
+
+func curto(d time.Duration) string {
+	switch {
+	case d < time.Hour:
+		return fmt.Sprintf("%d min", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%dh", int(d.Hours()))
+	}
+	return fmt.Sprintf("%dd", int(d.Hours()/24))
+}
+
+// Instante e a data completa, para colunas de auditoria.
+func Instante(t *time.Time) string {
+	if t == nil {
+		return "—"
+	}
+	return t.Local().Format("2006-01-02 15:04:05")
+}
+
+// ---------------------------------------------------------------------------
+// Erro em dialogo
+//
+// Antes o erro ocupava uma linha inteira abaixo da execucao, dentro da tabela.
+// Com stack trace de verdade isso empurrava o resto da lista para fora da tela e
+// misturava duas coisas — a lista e o detalhe. Agora a linha guarda um botao, e
+// o texto vive num <dialog> nativo: ESC fecha, o backdrop escurece e o foco fica
+// preso dentro dele sem uma linha de JavaScript nossa.
+// ---------------------------------------------------------------------------
+
+templ BotaoErro(runID string) {
+	// <a> e nao <button>: com o href, o erro tem endereco proprio — copiar o
+	// link leva outra pessoa direto para ele. O script intercepta o clique e
+	// abre o dialogo; sem JavaScript, o link ainda navega para a execucao.
+	<a
+		href={ templ.SafeURL("#erro-" + runID) }
+		data-dialogo={ "erro-" + runID }
+		title="Ver o erro"
+		class="inline-flex items-center gap-1 rounded-full border border-state-failed/30 bg-state-failed/5 px-2.5 py-1 text-[0.7rem] font-medium text-state-failed transition-colors hover:bg-state-failed/10"
+	>
+		<svg class="h-3 w-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6">
+			<circle cx="6" cy="6" r="4.6"></circle>
+			<path d="M6 3.4v3M6 8.4v.2" stroke-linecap="round"></path>
+		</svg>
+		erro
+	</a>
+}
+
+templ DialogoErro(runID, workflow, status, mensagem string) {
+	<dialog
+		id={ "erro-" + runID }
+		class="w-[min(680px,92vw)] rounded-[20px] border border-line bg-surface p-0 text-ink shadow-warm backdrop:bg-ink/40 backdrop:backdrop-blur-[2px]"
+	>
+		<div class="flex items-start justify-between gap-4 border-b border-line px-6 py-4">
+			<div>
+				<p class="kicker">Falha na execução</p>
+				<p class="display mt-1 text-2xl">{ workflow }</p>
+			</div>
+			// `method="dialog"` fecha sem JavaScript: e o proprio navegador que
+			// trata o submit deste form.
+			<form method="dialog">
+				<button
+					autofocus
+					class="rounded-full border border-line px-3 py-1 text-xs text-muted transition-colors hover:border-gold hover:text-ink focus-visible:border-gold focus-visible:text-ink"
+					aria-label="Fechar"
+				>fechar</button>
+			</form>
+		</div>
+		<div class="px-6 py-5">
+			<div class="mb-4 flex flex-wrap items-center gap-3 text-xs">
+				@Estado(status)
+				<a href={ templ.SafeURL("/runs/" + runID) } class="text-gold-strong hover:underline">abrir a execução</a>
+				<span class="font-mono text-[0.7rem] text-muted/70">{ runID }</span>
+			</div>
+			<pre class="max-h-[50vh] overflow-auto rounded-[14px] border border-state-failed/20 bg-state-failed/5 px-4 py-3 font-mono text-xs leading-relaxed whitespace-pre-wrap text-state-failed">{ mensagem }</pre>
+		</div>
+	</dialog>
 }

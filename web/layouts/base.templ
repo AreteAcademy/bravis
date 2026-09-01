@@ -1,30 +1,107 @@
 package layouts
 
+import "github.com/zarvhq/bravis/internal/branding"
+
 // Base e o esqueleto de toda pagina.
 //
 // A secao 17 do plano pede SSR primeiro, com ilhas interativas apenas onde a
 // interacao justifica (React Flow, na PHASE 6). Nada de SPA: o HTML chega pronto.
-templ Base(titulo string, ativo string) {
+//
+// A identidade visual segue a Arete Academy — pergaminho quente, ouro e serifa
+// nos titulos. Os tokens estao em `web/assets/app.src.css`; aqui so se compoe.
+
+// Pagina descreve o contexto de cada tela. Um struct em vez de cinco parametros
+// posicionais: quando o quinto entrou, a chamada ja tinha virado adivinhacao.
+type Pagina struct {
+	Titulo string
+
+	// Kicker e a migalha em versalete acima do titulo ("DASHBOARD", "WORKFLOWS").
+	Kicker string
+
+	// Ativo casa com a chave do item de menu.
+	Ativo string
+
+	// Acoes ocupa o canto direito do cabecalho. Nulo = sem botoes.
+	Acoes templ.Component
+
+	// Ilha traz os assets extras das telas interativas.
+	Ilha Ilha
+
+	// Largo tira o limite de largura. A DAG usa a tela inteira; texto, nao.
+	Largo bool
+}
+
+// Ilha lista os assets extras de uma pagina interativa. Existe porque so a tela
+// da DAG carrega React (~350 KB): embutir isso no Base faria toda pagina SSR
+// pagar por uma interatividade que nao usa.
+type Ilha struct {
+	CSS []string
+	JS  []string
+}
+
+templ Base(p Pagina) {
+	{{ marca := branding.De(ctx) }}
 	<!DOCTYPE html>
 	<html lang="pt-BR" class="h-full">
 		<head>
 			<meta charset="utf-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1"/>
-			<title>{ titulo } · Bravis</title>
+			<title>{ p.Titulo } · { marca.Titulo }</title>
+			// As duas fontes sao servidas do binario. O preload evita o pulo de
+			// layout no titulo em serifa, que e a primeira coisa que o olho vai.
+			<link rel="preload" href="/assets/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin/>
+			<link rel="preload" href="/assets/fonts/cormorant-latin.woff2" as="font" type="font/woff2" crossorigin/>
 			<link rel="stylesheet" href="/assets/app.css"/>
+			// Tema do cliente DEPOIS da folha compilada: sao as mesmas variaveis
+			// que o Tailwind emite, e todo utilitario resolve a cor por
+			// `var(--color-*)` — sobrescreve-las aqui repinta a interface inteira
+			// sem recompilar CSS. Sai vazio quando o tema e o padrao.
+			if css := marca.CSS(); css != "" {
+				@templ.Raw("<style>" + css + "</style>")
+			}
+			for _, href := range p.Ilha.CSS {
+				<link rel="stylesheet" href={ href }/>
+			}
 		</head>
-		<body class="h-full bg-slate-950 text-slate-200 antialiased">
+		<body class="h-full font-sans text-ink antialiased">
 			<div class="flex h-full">
-				@sidebar(ativo)
+				@sidebar(p.Ativo, marca)
 				<main class="flex-1 overflow-y-auto">
-					<header class="border-b border-slate-800 px-8 py-5">
-						<h1 class="text-xl font-semibold text-slate-100">{ titulo }</h1>
+					<header class="sticky top-0 z-10 border-b border-line bg-parchment-soft/85 px-10 py-6 backdrop-blur">
+						<div class="flex items-end justify-between gap-6">
+							<div>
+								if p.Kicker != "" {
+									<p class="kicker mb-1.5">{ p.Kicker }</p>
+								}
+								<h1 class="display text-3xl text-ink">{ p.Titulo }</h1>
+							</div>
+							if p.Acoes != nil {
+								<div class="flex shrink-0 items-center gap-3">
+									@p.Acoes
+								</div>
+							}
+						</div>
 					</header>
-					<div class="px-8 py-6">
-						{ children... }
-					</div>
+					if p.Largo {
+						<div class="px-10 py-8">
+							{ children... }
+						</div>
+					} else {
+						<div class="mx-auto max-w-[1400px] px-10 py-8">
+							{ children... }
+						</div>
+					}
 				</main>
 			</div>
+			// Interacoes basicas (dialogos, dicas dos graficos) em toda pagina.
+			// Fica no fim do body para nao bloquear a renderizacao — o HTML ja
+			// chega completo, o script so o enriquece.
+			<script src="/assets/ui.js" defer></script>
+			// Depois, em ordem: os UMD do React precisam existir antes do shim,
+			// e o shim antes do bundle do React Flow.
+			for _, src := range p.Ilha.JS {
+				<script src={ src }></script>
+			}
 		</body>
 	</html>
 }
@@ -35,29 +112,71 @@ type item struct {
 	Chave string
 }
 
-templ sidebar(ativo string) {
-	<aside class="w-56 shrink-0 border-r border-slate-800 bg-slate-900/50">
-		<div class="px-5 py-5">
-			<span class="text-lg font-semibold tracking-tight text-slate-100">Bravis</span>
-			<p class="mt-0.5 text-xs text-slate-500">workflow engine</p>
+templ sidebar(ativo string, marca branding.Marca) {
+	<aside class="flex w-60 shrink-0 flex-col border-r border-line bg-surface/60">
+		<div class="px-7 pt-7 pb-8">
+			<a href="/" class="display block text-[2rem] leading-none tracking-[0.02em] text-ink">{ marca.Titulo }</a>
+			if marca.Subtitulo != "" {
+				<p class="kicker mt-2">{ marca.Subtitulo }</p>
+			}
 		</div>
-		<nav class="px-3">
+		<nav class="flex-1 px-4">
 			for _, i := range []item{
-				{"/", "Dashboard", "dashboard"},
-				{"/projects", "Projetos", "projects"},
+				{"/", "Overview", "overview"},
 				{"/workflows", "Workflows", "workflows"},
-				{"/runs", "Execucoes", "runs"},
+				{"/runs", "Execuções", "runs"},
+				{"/projects", "Projetos", "projects"},
 			} {
 				if i.Chave == ativo {
-					<a href={ templ.SafeURL(i.Rota) } class="mb-0.5 block rounded-md bg-slate-800 px-3 py-2 text-sm font-medium text-slate-100">
+					<a
+						href={ templ.SafeURL(i.Rota) }
+						class="mb-1 flex items-center gap-3 rounded-xl border border-line-soft bg-gold-wash px-4 py-2.5 text-sm font-semibold text-ink"
+					>
+						<span class="h-4 w-[3px] rounded-full bg-gold"></span>
 						{ i.Nome }
 					</a>
 				} else {
-					<a href={ templ.SafeURL(i.Rota) } class="mb-0.5 block rounded-md px-3 py-2 text-sm text-slate-400 hover:bg-slate-800/50 hover:text-slate-200">
+					<a
+						href={ templ.SafeURL(i.Rota) }
+						class="mb-1 flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm text-muted transition-colors hover:bg-gold-wash hover:text-ink"
+					>
+						<span class="h-4 w-[3px] rounded-full bg-transparent"></span>
 						{ i.Nome }
 					</a>
 				}
 			}
 		</nav>
+		// Rodape: a frase do cliente e, abaixo dela, a atribuicao. A quebra de
+		// linha da frase e preservada — ela e do autor, e virar espaco mudaria o
+		// ritmo do texto.
+		<div class="border-t border-line-soft px-7 py-6">
+			if linhas := marca.Linhas(); len(linhas) > 0 {
+				<p class="font-serif text-[0.95rem] leading-snug text-muted italic">
+					for i, l := range linhas {
+						if i == 0 {
+							{ "“" + l }
+						} else {
+							<br/>
+							if i == len(linhas)-1 {
+								{ l + "”" }
+							} else {
+								{ l }
+							}
+						}
+					}
+					if len(linhas) == 1 {
+						{ "”" }
+					}
+				</p>
+			}
+			// Nao vem da configuracao — vem daqui. Nenhum valor de YAML remove
+			// esta linha, e e por isso que ela nao e um campo da Marca.
+			<a
+				href="https://github.com/zarvhq/bravis"
+				target="_blank"
+				rel="noreferrer"
+				class="mt-4 block text-[0.68rem] tracking-[0.1em] text-muted/60 uppercase transition-colors hover:text-gold-strong"
+			>{ branding.Atribuicao }</a>
+		</div>
 	</aside>
 }

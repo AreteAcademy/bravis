@@ -1,0 +1,90 @@
+# O scheduler: cria runs a partir das agendas e as executa criando um pod por
+# passo. Ele nao executa dbt nem Python — quem faz isso e o pod que ele cria.
+#
+# Por isso a imagem aqui e a `-worker` do Bravis (21 MB) e nao a do pipeline:
+# este processo so fala HTTP com o servidor de API.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bravis-scheduler
+  namespace: dados
+spec:
+  # UMA replica. O dispatcher usa `FOR UPDATE SKIP LOCKED`, entao duas nao
+  # entregariam o mesmo item — mas duas tambem MATERIALIZARIAM os mesmos slots,
+  # e a protecao contra isso e a chave de idempotencia, nao um lock. Uma replica
+  # mantem o comportamento obvio ate haver eleicao de lider.
+  replicas: 1
+  strategy:
+    # Recreate e nao RollingUpdate: com duas replicas no ar durante o rollout, a
+    # nova comecaria a materializar agendas antes de a antiga sair.
+    type: Recreate
+  selector:
+    matchLabels: {app.kubernetes.io/name: bravis, app.kubernetes.io/component: scheduler}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: bravis, app.kubernetes.io/component: scheduler}
+    spec:
+      serviceAccountName: bravis-scheduler
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: scheduler
+          image: daniel3843/bravis:0.2.1-worker
+          # DOIS tetos, e a diferenca importa:
+          #   --concurrency  quantos RUNS o dispatcher executa ao mesmo tempo
+          #   --max-pods     quantos PASSOS existem ao mesmo tempo = pods no cluster
+          #
+          # Com cinco pods de teto: dez passos prontos, cinco correm, e os
+          # demais entram conforme as vagas se abrem. Sem --max-pods, cinco runs
+          # com tres passos paralelos cada dariam quinze pods.
+          args: ["scheduler", "--interval", "10s", "--concurrency", "10", "--max-pods", "5"]
+          env:
+            - name: BRAVIS_ENV
+              value: prod
+            - name: BRAVIS_DATABASE_URL
+              valueFrom: {secretKeyRef: {name: bravis-db, key: url}}
+
+            # `on` e nao `auto`: neste deploy, ficar sem cluster tem de ser erro
+            # de boot. Com `auto`, uma falha de montagem da service account faria
+            # o scheduler rodar TUDO dentro deste pod de 128Mi, em silencio.
+            - name: BRAVIS_PODS
+              value: "on"
+            - name: BRAVIS_POD_SERVICE_ACCOUNT
+              value: bravis-task
+            # Credenciais dos pods de task. A lista vem daqui, da instalacao —
+            # nunca do YAML do workflow.
+            - name: BRAVIS_POD_ENV_FROM_SECRETS
+              value: bravis-task-env
+            # Pool de nos das tasks. No cluster de dev da Zarv e arm64 (t2a),
+            # e sem o selector as tasks caem em qualquer no.
+            - name: BRAVIS_POD_NODE_SELECTOR
+              value: "kubernetes.io/arch=arm64"
+            # O pool arm64 tem taint; sem a toleracao o pod da task fica Pending
+            # para sempre — sem erro, so parado.
+            - name: BRAVIS_POD_TOLERATIONS
+              value: "kubernetes.io/arch=arm64:NoSchedule"
+            # Em incidente, `true` deixa o pod que falhou de pe para inspecao.
+            - name: BRAVIS_POD_MANTER_EM_FALHA
+              value: "false"
+
+            # Alerta de falha. O webhook e credencial: quem tem a URL posta no
+            # canal como se fosse a plataforma, entao ele vive num Secret e
+            # nunca no YAML do workflow.
+            - name: BRAVIS_SLACK_WEBHOOK
+              valueFrom:
+                secretKeyRef: {name: bravis-slack, key: webhook, optional: true}
+            # Sem ela o alerta diz o que falhou mas obriga quem le a procurar a
+            # execucao na mao.
+            - name: BRAVIS_UI_URL
+              value: https://bravis.zarv.net
+          resources:
+            # O scheduler so orquestra: o trabalho pesado esta nos pods que ele
+            # cria. Estes numeros sao para um processo Go que fala HTTP e SQL.
+            requests: {cpu: 50m, memory: 128Mi}
+            limits: {memory: 256Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: ["ALL"]}

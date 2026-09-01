@@ -1,7 +1,12 @@
+# ILUSTRATIVO: `kubernetes.run` e `bravis run --select` ainda nao existem, entao
+# este arquivo mostra o FORMATO, nao um workflow executavel. O que roda de
+# verdade e `examples/hello.yaml`.
+#
 # A mesma engine com dependencias explicitas, para o caso em que a ordem nao e
 # linear. Aqui gold_metrics e gold_users rodam EM PARALELO depois do silver.
 name: daily_analytics
 type: dag
+tags: [analytics, dbt, diario]
 
 steps:
   - id: ingest_users

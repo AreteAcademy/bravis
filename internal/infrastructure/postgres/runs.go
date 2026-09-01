@@ -40,11 +40,11 @@ func (r *RunRepo) Criar(ctx context.Context, run dom.Run) (dom.Run, error) {
 
 	err := r.pool.QueryRow(ctx, `
 		INSERT INTO runs (id, workflow_slug, idempotency_key, status, attempt, definicao,
-		                  trigger_type, logical_date)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		                  trigger_type, logical_date, params, max_ativos)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		RETURNING criado_em`,
 		run.ID, run.WorkflowSlug, run.IdempotencyKey, run.Status, run.Attempt, run.Definicao,
-		run.TriggerType, run.LogicalDate,
+		run.TriggerType, run.LogicalDate, paramsOuVazio(run.Params), run.MaxAtivos,
 	).Scan(&run.CriadoEm)
 
 	if err != nil {
@@ -120,10 +120,10 @@ func (r *RunRepo) Buscar(ctx context.Context, id uuid.UUID) (dom.Run, error) {
 	var run dom.Run
 	err := r.pool.QueryRow(ctx, `
 		SELECT id, workflow_slug, idempotency_key, status, attempt, definicao,
-		       trigger_type, logical_date, erro, criado_em, iniciado_em, terminado_em
+		       trigger_type, logical_date, params, max_ativos, erro, criado_em, iniciado_em, terminado_em
 		FROM runs WHERE id = $1`, id).
 		Scan(&run.ID, &run.WorkflowSlug, &run.IdempotencyKey, &run.Status, &run.Attempt,
-			&run.Definicao, &run.TriggerType, &run.LogicalDate,
+			&run.Definicao, &run.TriggerType, &run.LogicalDate, &run.Params, &run.MaxAtivos,
 			&run.Erro, &run.CriadoEm, &run.IniciadoEm, &run.TerminadoEm)
 	return run, err
 }
@@ -173,4 +173,13 @@ func ehViolacaoUnica(err error) bool {
 	// 23505 = unique_violation
 	var pgErr interface{ SQLState() string }
 	return errors.As(err, &pgErr) && pgErr.SQLState() == "23505"
+}
+
+// paramsOuVazio evita gravar NULL numa coluna NOT NULL DEFAULT '{}': um Run sem
+// params tem params vazios, nao ausentes.
+func paramsOuVazio(p map[string]string) map[string]string {
+	if p == nil {
+		return map[string]string{}
+	}
+	return p
 }

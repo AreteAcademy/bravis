@@ -28,9 +28,36 @@ type TaskExec struct {
 	ExecutionID string
 	NodeID      string
 
+	// Workflow, RunID e Tentativa nao mudam a execucao — identificam-na. Em
+	// Kubernetes viram rotulos do pod, e sao eles que permitem achar "os pods
+	// daquela run" sem procurar por nome.
+	Workflow string
+	RunID    string
+
+	// Tentativa do PASSO, dentro de uma execucao do run.
+	Tentativa int
+
+	// TentativaDoRun e a do RUN, contada pelo dispatcher. As duas entram no
+	// nome do pod: sem a segunda, um retry do dispatcher recria o run do zero
+	// (passo na tentativa 0 de novo) e reencontra o pod anterior.
+	TentativaDoRun int
+
 	Command string // shell, para o ProcessExecutor
 	Action  string // nome no registry, para o GoExecutor
 	With    map[string]any
+
+	// Image e o runtime deste passo. Vazia no modo local (o comando roda na
+	// propria instancia); obrigatoria em Kubernetes, onde ela E o pod.
+	Image string
+
+	// Shell decide entre `sh -c "linha"` e argv direto. Importa para imagem
+	// distroless, que nao tem shell nenhum.
+	Shell bool
+
+	// Recursos do pod, no formato do Kubernetes. Ignorados no modo local, onde
+	// o limite de um processo e o da maquina.
+	CPU, Memoria       string
+	CPUMax, MemoriaMax string
 
 	WorkDir string
 	Env     map[string]string

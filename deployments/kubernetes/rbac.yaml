@@ -1,0 +1,57 @@
+# Identidade do scheduler e a permissao MINIMA para criar pods de task.
+#
+# Duas contas, nao uma:
+#
+#   bravis-scheduler  cria e apaga pods. E a unica que precisa dessa permissao.
+#   bravis-task       a identidade com que os pods de task rodam — SEM nenhuma
+#                     permissao no cluster.
+#
+# A separacao e o ponto: o pod de task executa comandos vindos de um YAML. Se ele
+# herdasse a conta do scheduler, qualquer workflow poderia criar pods, ler
+# secrets e escalar sozinho. Com uma conta sem role, o pior que um comando
+# arbitrario faz e usar as credenciais que a instalacao deu explicitamente a ele.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: bravis-scheduler
+  namespace: dados
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: bravis-task
+  namespace: dados
+  # Workload Identity: e por aqui que o pod de task fala com o BigQuery, sem
+  # nenhuma chave em arquivo.
+  # annotations:
+  #   iam.gke.io/gcp-service-account: bravis-task@PROJETO.iam.gserviceaccount.com
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: bravis-scheduler
+  namespace: dados
+rules:
+  # Sem `update` e sem `patch`: o scheduler cria, observa e apaga. Ele nunca
+  # edita um pod em voo, e uma permissao a mais aqui e uma a mais para quem
+  # comprometer o processo.
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["create", "get", "list", "watch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: bravis-scheduler
+  namespace: dados
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: bravis-scheduler
+subjects:
+  - kind: ServiceAccount
+    name: bravis-scheduler
+    namespace: dados

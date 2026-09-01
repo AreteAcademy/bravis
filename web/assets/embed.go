@@ -11,8 +11,17 @@ package assets
 
 import "embed"
 
-// FS contem o CSS compilado. O `app.src.css` fica de fora de proposito — e
-// entrada do Tailwind, nao artefato servido.
+// FS contem o CSS compilado e os scripts da ilha React. O `app.src.css` fica de
+// fora de proposito — e entrada do Tailwind, nao artefato servido.
 //
-//go:embed app.css
+// O `vendor/` guarda React, ReactDOM e React Flow em UMD (~350 KB). Vendorizar
+// em vez de apontar para um CDN e escolha da secao 15: sem npm no build, sem
+// dependencia de rede externa em runtime, e a UI continua funcionando num
+// cluster sem saida para a internet.
+//
+// As fontes (Inter e Cormorant Garamond, ~205 KB) entram pelo mesmo motivo dos
+// bundles: uma UI que depende do Google Fonts troca de tipografia no meio da
+// tela quando a rede nao responde.
+//
+//go:embed app.css ui.js dag.js jsx-shim.js vendor fonts
 var FS embed.FS

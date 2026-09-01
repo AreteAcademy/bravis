@@ -18,10 +18,70 @@ import (
 
 // Spec espelha o YAML, e so isso. Campos frouxos aqui, invariantes no dominio.
 type Spec struct {
-	Name     string     `yaml:"name"`
-	Schedule string     `yaml:"schedule"`
-	Type     string     `yaml:"type"`
-	Steps    []StepSpec `yaml:"steps"`
+	Name      string       `yaml:"name"`
+	Schedule  string       `yaml:"schedule"`
+	Type      string       `yaml:"type"`
+	Tags      []string     `yaml:"tags"`
+	Image     string       `yaml:"image"`
+	Resources ResourceSpec `yaml:"resources"`
+	Params    []ParamSpec  `yaml:"params"`
+	// Concurrency e o `concurrency.limit` do Kestra, com o mesmo nome que a
+	// maioria dos orquestradores usa.
+	Concurrency int        `yaml:"concurrency"`
+	Steps       []StepSpec `yaml:"steps"`
+}
+
+// ResourceSpec e o pedido de CPU e memoria no formato do Kubernetes.
+//
+// `limits` separado de `requests` porque a diferenca entre os dois e a diferenca
+// entre "quanto reservo" e "quando me matam": um dbt que estoura o limite morre
+// com OOMKilled, um que so passa do request continua rodando.
+type ResourceSpec struct {
+	CPU    string `yaml:"cpu"`
+	Memory string `yaml:"memory"`
+	Limits struct {
+		CPU    string `yaml:"cpu"`
+		Memory string `yaml:"memory"`
+	} `yaml:"limits"`
+}
+
+func (r ResourceSpec) dominio() dominio.Resources {
+	return dominio.Resources{
+		CPU: r.CPU, Memory: r.Memory,
+		CPULimit: r.Limits.CPU, MemoryLimit: r.Limits.Memory,
+	}
+}
+
+// ParamSpec e um parametro de execucao como escrito no arquivo.
+//
+//	params:
+//	  - name: load_full
+//	    type: boolean
+//	    default: "false"
+//	  - name: start_date
+//	    type: string
+//	    pattern: '^\d{4}-\d{2}-\d{2}$'
+type ParamSpec struct {
+	Name        string   `yaml:"name"`
+	Type        string   `yaml:"type"`
+	Default     string   `yaml:"default"`
+	Description string   `yaml:"description"`
+	Enum        []string `yaml:"enum"`
+	Pattern     string   `yaml:"pattern"`
+}
+
+func (p ParamSpec) dominio() dominio.Param {
+	tipo := dominio.TipoParam(strings.TrimSpace(p.Type))
+	if tipo == "" {
+		// `string` como padrao: e o tipo mais comum e o unico que nao muda o
+		// significado do valor. Exigir a chave em todo param seria ruido.
+		tipo = dominio.ParamTexto
+	}
+	return dominio.Param{
+		Nome: strings.TrimSpace(p.Name), Tipo: tipo,
+		Padrao: p.Default, Descricao: p.Description,
+		Enum: p.Enum, Pattern: p.Pattern,
+	}
 }
 
 // StepSpec e um passo como escrito no arquivo.
@@ -31,6 +91,16 @@ type StepSpec struct {
 	Action    string         `yaml:"action"`
 	With      map[string]any `yaml:"with"`
 	DependsOn []string       `yaml:"depends_on"`
+
+	// Image e Resources sobrescrevem os do workflow. Ausentes = herda.
+	Image     string       `yaml:"image"`
+	Resources ResourceSpec `yaml:"resources"`
+
+	// Shell: ponteiro para distinguir "nao declarou" de "declarou false". Sem o
+	// ponteiro, todo passo sem a chave viraria `shell: false` e as imagens com
+	// shell — a maioria — passariam a receber argv, quebrando qualquer comando
+	// com pipe ou variavel.
+	Shell *bool `yaml:"shell"`
 }
 
 // Parse le o YAML e devolve o workflow ja validado.
@@ -59,10 +129,22 @@ func Parse(caminho string, conteudo []byte) (dominio.Workflow, error) {
 		Name:     slug,
 		Kind:     kind,
 		Schedule: strings.TrimSpace(s.Schedule),
+		Tags:     normalizarTags(s.Tags),
+
+		// A imagem do workflow e o runtime padrao dos passos: em Kubernetes cada
+		// passo vira um pod, e e ela que decide o que aquele pod sabe fazer.
+		Image:     strings.TrimSpace(s.Image),
+		Resources: s.Resources.dominio(),
+		MaxAtivos: s.Concurrency,
+	}
+	for _, ps := range s.Params {
+		w.Params = append(w.Params, ps.dominio())
 	}
 	for _, st := range s.Steps {
 		w.Nodes = append(w.Nodes, dominio.Node{
 			ID: st.ID, Run: st.Run, Action: st.Action, With: st.With,
+			Image: strings.TrimSpace(st.Image), Resources: st.Resources.dominio(),
+			Shell: st.Shell,
 		})
 	}
 
@@ -75,6 +157,29 @@ func Parse(caminho string, conteudo []byte) (dominio.Workflow, error) {
 		return dominio.Workflow{}, fmt.Errorf("%s: %w", caminho, err)
 	}
 	return w, nil
+}
+
+// normalizarTags apara espacos, descarta vazias e deduplica preservando a ordem
+// do arquivo. Sem isso, `tags: [dbt, dbt , ""]` viraria tres chips na tela, dois
+// deles iguais e um em branco.
+func normalizarTags(brutas []string) []string {
+	if len(brutas) == 0 {
+		return nil
+	}
+	vistas := make(map[string]struct{}, len(brutas))
+	out := make([]string, 0, len(brutas))
+	for _, t := range brutas {
+		t = strings.TrimSpace(t)
+		if t == "" {
+			continue
+		}
+		if _, ja := vistas[t]; ja {
+			continue
+		}
+		vistas[t] = struct{}{}
+		out = append(out, t)
+	}
+	return out
 }
 
 // arestas transforma a declaracao em grafo.

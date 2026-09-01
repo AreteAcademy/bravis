@@ -1,0 +1,62 @@
+# A API e a UI. Nao executa nada — por isso a imagem distroless, sem shell, e um
+# ServiceAccount sem permissao nenhuma no cluster.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bravis-api
+  namespace: dados
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app.kubernetes.io/name: bravis, app.kubernetes.io/component: api}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: bravis, app.kubernetes.io/component: api}
+    spec:
+      # Explicito: sem isto o pod recebe a `default` do namespace, que costuma
+      # ter mais permissao do que se imagina.
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: api
+          image: daniel3843/bravis:0.2.1
+          args: ["serve"]
+          ports: [{containerPort: 8080, name: http}]
+          env:
+            - name: BRAVIS_ENV
+              value: prod
+            - name: BRAVIS_DATABASE_URL
+              valueFrom: {secretKeyRef: {name: bravis-db, key: url}}
+            - name: BRAVIS_BRAND_FILE
+              value: /etc/bravis/brand.yaml
+          volumeMounts:
+            - {name: brand, mountPath: /etc/bravis, readOnly: true}
+          # /health nao toca o banco e /ready toca: liveness que depende do banco
+          # reinicia a API por causa de um failover do Postgres, o que so piora.
+          livenessProbe:
+            httpGet: {path: /health, port: http}
+            periodSeconds: 10
+          readinessProbe:
+            httpGet: {path: /ready, port: http}
+            periodSeconds: 5
+          resources:
+            requests: {cpu: 50m, memory: 96Mi}
+            limits: {memory: 192Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: ["ALL"]}
+      volumes:
+        - name: brand
+          configMap: {name: bravis-brand, optional: true}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: bravis-api
+  namespace: dados
+spec:
+  selector: {app.kubernetes.io/name: bravis, app.kubernetes.io/component: api}
+  ports: [{port: 80, targetPort: http, name: http}]
