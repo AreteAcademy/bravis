@@ -1,0 +1,26 @@
+# A mesma engine com dependencias explicitas, para o caso em que a ordem nao e
+# linear. Aqui gold_metrics e gold_users rodam EM PARALELO depois do silver.
+name: daily_analytics
+type: dag
+
+steps:
+  - id: ingest_users
+    action: kubernetes.run
+    with:
+      image: company/ingestion:latest
+
+  - id: transform_silver
+    run: bravis run --select silver.*
+    depends_on: [ingest_users]
+
+  - id: gold_metrics
+    run: bravis run --select gold.metrics
+    depends_on: [transform_silver]
+
+  - id: gold_users
+    run: bravis run --select gold.users
+    depends_on: [transform_silver]
+
+  - id: publish
+    run: ./publish.sh
+    depends_on: [gold_metrics, gold_users]

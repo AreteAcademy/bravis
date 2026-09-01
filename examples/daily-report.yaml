@@ -1,0 +1,21 @@
+# Exemplo do plano, tal como pedido.
+#
+# `type: chain` significa que a ordem e a do arquivo: fetch_data -> build_report
+# -> notify. O parser converte isso em arestas, entao o motor so conhece DAG.
+schedule: "0 2 * * *"   # todo dia as 02:00
+type: chain
+
+steps:
+  - id: fetch_data
+    run: python fetch.py
+
+  - id: build_report
+    action: docker.run
+    with:
+      image: ghcr.io/acme/reporting:1.4.2
+      volumes:
+        - ~/data:/work/data
+      command: python report.py
+
+  - id: notify
+    run: ./notify.sh
