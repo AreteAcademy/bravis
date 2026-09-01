@@ -284,6 +284,48 @@ KUBERNETES OBRIGATÓRIO
 
 A decisão deve ser explícita.
 
+---
+
+## EMENDA — 2026-08-31: executor de processo no modo local
+
+A regra acima proíbe executar outras linguagens fora do Kubernetes. Isso torna
+inviável o caso de uso local: exigir cluster para um `python fetch.py` ou um
+`./notify.sh` mata o desenvolvimento na própria instância.
+
+A regra passa a ser:
+
+```text
+GO
+↓
+LOCAL (in-process) ou KUBERNETES
+
+OUTRAS LINGUAGENS
+↓
+KUBERNETES          quando BRAVIS_ENV != local
+PROCESSO DO HOST    quando BRAVIS_ENV == local
+```
+
+Existe portanto um TERCEIRO executor, além dos dois da §13:
+
+```text
+LocalGoExecutor     tasks Go compiladas e registradas (§14, inalterada)
+ProcessExecutor     comando arbitrário no host — SOMENTE local
+KubernetesExecutor  todo o resto
+```
+
+**A fronteira é código, não convenção.** O `ProcessExecutor` recusa-se a ser
+construído quando `BRAVIS_ENV != local`, e a recusa é testada. O risco de
+`run:` não é o comando em si — é ele existir sem limite declarado.
+
+O que a emenda NÃO afrouxa:
+
+- A §14 continua valendo para o executor Go: tasks in-process seguem compiladas
+  e registradas, nunca recebidas pela API.
+- Fora do modo local, `run:` continua exigindo pod. O mesmo arquivo muda de
+  executor conforme o ambiente, e isso é deliberado.
+- O `ProcessExecutor` não herda o ambiente do processo pai: variáveis são
+  passadas explicitamente, e o diretório de trabalho é o do projeto.
+
 Exemplo:
 
 ```yaml
@@ -942,6 +984,10 @@ Events
 Não executar código arbitrário recebido pela API.
 
 Tasks locais devem ser compiladas e registradas no runtime.
+
+> Esta seção continua valendo **para o executor Go**. Comandos declarados em
+> `run:` no YAML são atendidos pelo `ProcessExecutor`, restrito ao modo local —
+> ver a emenda no fim da §3.
 
 ---
 

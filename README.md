@@ -7,8 +7,16 @@ execução em pod no Kubernetes.
 Arquitetura e faseamento: [`docs/plan.md`](docs/plan.md).
 Relatórios por fase: [`docs/phases/`](docs/phases/).
 
-**Estado: PHASE 0 concluída.** Fundação — configuração, logging, Postgres,
-migrations, health checks e CLI. Sem scheduler, fila ou executor ainda.
+**Estado: PHASE 1 concluída.** Workflows em YAML, validação de grafo e execução
+local. Sem fila, persistência de run nem scheduler — ver `docs/phases/`.
+
+```bash
+bravis validate examples/          # valida sem banco, serve na CI
+bravis run examples/pipeline.yaml  # executa na propria instancia
+```
+
+O YAML aceita `type: chain` (ordem do arquivo) ou `type: dag` com `depends_on`.
+`chain` é açúcar: vira arestas no parser, e o motor conhece apenas DAG.
 
 ## Local
 

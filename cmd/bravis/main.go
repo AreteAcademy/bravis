@@ -18,8 +18,11 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/zarvhq/bravis/internal/api"
+	app "github.com/zarvhq/bravis/internal/application/execution"
 	spec "github.com/zarvhq/bravis/internal/application/workflow"
 	"github.com/zarvhq/bravis/internal/config"
+	"github.com/zarvhq/bravis/internal/execution"
+	"github.com/zarvhq/bravis/internal/execution/local"
 	"github.com/zarvhq/bravis/internal/infrastructure/postgres"
 	"github.com/zarvhq/bravis/internal/observability"
 )
@@ -38,7 +41,7 @@ func raiz() *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
-	c.AddCommand(cmdServe(), cmdMigrate(), cmdValidate())
+	c.AddCommand(cmdServe(), cmdMigrate(), cmdValidate(), cmdRun())
 	return c
 }
 
@@ -119,6 +122,78 @@ func cmdValidate() *cobra.Command {
 			}
 			return nil
 		},
+	}
+}
+
+// cmdRun executa um workflow na propria instancia. Sem fila, sem banco, sem
+// scheduler — e o caminho curto que a emenda a secao 3 habilitou.
+func cmdRun() *cobra.Command {
+	var workDir string
+	c := &cobra.Command{
+		Use:   "run <arquivo.yaml>",
+		Short: "Executa um workflow localmente",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			conteudo, err := os.ReadFile(args[0])
+			if err != nil {
+				return err
+			}
+			w, err := spec.Parse(args[0], conteudo)
+			if err != nil {
+				return err
+			}
+
+			env := os.Getenv("BRAVIS_ENV")
+			if env == "" {
+				env = "local"
+			}
+			exec, err := local.New(env)
+			if err != nil {
+				return err
+			}
+
+			if workDir == "" {
+				workDir = filepath.Dir(args[0])
+			}
+			fmt.Printf("workflow %s (%s, %d steps) em %s\n\n", w.Slug, w.Kind, len(w.Nodes), workDir)
+
+			runner := app.Runner{
+				Exec:    exec,
+				WorkDir: workDir,
+				// PATH e HOME explicitos: sem eles um `python` ou `./script.sh`
+				// nao resolve. O resto do ambiente NAO e herdado, de proposito.
+				Env:    map[string]string{"PATH": os.Getenv("PATH"), "HOME": os.Getenv("HOME")},
+				Report: consoleReporter{},
+			}
+			if err := runner.Run(cmd.Context(), w); err != nil {
+				return err
+			}
+			fmt.Printf("\nworkflow %s concluido\n", w.Slug)
+			return nil
+		},
+	}
+	c.Flags().StringVar(&workDir, "workdir", "", "diretorio de trabalho (padrao: o do arquivo)")
+	return c
+}
+
+// consoleReporter imprime os eventos prefixados pelo step, que e o que torna a
+// saida legivel quando varios rodam em paralelo no mesmo nivel.
+type consoleReporter struct{}
+
+func (consoleReporter) Evento(e execution.Event) {
+	switch e.Kind {
+	case execution.EventStarted:
+		fmt.Printf("  ▶ %s\n", e.NodeID)
+	case execution.EventLog:
+		destino := os.Stdout
+		if e.Stream == "stderr" {
+			destino = os.Stderr
+		}
+		fmt.Fprintf(destino, "    %s | %s\n", e.NodeID, e.Message)
+	case execution.EventSucceeded:
+		fmt.Printf("  ✓ %s\n", e.NodeID)
+	case execution.EventFailed:
+		fmt.Printf("  ✗ %s (%s)\n", e.NodeID, e.Message)
 	}
 }
 
