@@ -7,8 +7,11 @@ help: ## Lista os alvos
 build: ## Compila o binario em bin/
 	@go build -trimpath -o $(BIN) ./cmd/bravis
 
-test: ## Roda os testes
+test: ## Roda os testes (os de integracao pulam sem Postgres)
 	@go test ./...
+
+test-int: ## Roda tudo, inclusive integracao (exige `make up`)
+	@BRAVIS_TEST_DATABASE_URL='postgres://bravis:bravis@localhost:5432/bravis?sslmode=disable' go test ./... -count=1
 
 check: ## gofmt + vet + testes (portao antes de commitar)
 	@test -z "$$(gofmt -l cmd internal migrations)" || { echo "gofmt pendente:"; gofmt -l cmd internal migrations; exit 1; }
@@ -29,4 +32,4 @@ smoke: ## Verifica /health e /ready contra o ambiente local
 	@printf 'health: '; curl -fsS localhost:8080/health && echo
 	@printf 'ready:  '; curl -fsS localhost:8080/ready  && echo
 
-.PHONY: help build test check up down logs smoke
+.PHONY: help build test test-int check up down logs smoke
