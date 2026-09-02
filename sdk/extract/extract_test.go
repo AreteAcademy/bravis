@@ -117,7 +117,7 @@ func TestTimeoutPerAttempt(t *testing.T) {
 	fonte := sdk.Fonte{
 		URL:          server.URL,
 		Timeout:      100 * time.Millisecond, // per-attempt
-		TotalTimeout: 5 * time.Second,       // total
+		TotalTimeout: 5 * time.Second,        // total
 	}
 
 	_, err := NDJSON(ctx, fonte)

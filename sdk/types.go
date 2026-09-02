@@ -11,11 +11,11 @@ import (
 // Envelope is the contract between extract and load.
 // It represents a single record extracted from a source.
 type Envelope struct {
-	Provider  string    // identifies the data provider (e.g., "example_gov", "api_platform")
-	Entity    string    // identifies the entity type (e.g., "transactions", "users")
-	SourceKey string    // unique key from the source; empty is an error
-	RecordTS  string    // timestamp when the record was created at source; must be set before Load
-	Payload   any       // the actual data; will become the JSON column
+	Provider  string // identifies the data provider (e.g., "example_gov", "api_platform")
+	Entity    string // identifies the entity type (e.g., "transactions", "users")
+	SourceKey string // unique key from the source; empty is an error
+	RecordTS  string // timestamp when the record was created at source; must be set before Load
+	Payload   any    // the actual data; will become the JSON column
 }
 
 // IngestionID returns the deterministic UUID v5 for this envelope.
@@ -44,35 +44,35 @@ func (e *Envelope) IngestionID() (string, error) {
 
 // LoadResult reports the outcome of a load operation.
 type LoadResult struct {
-	RowsLoaded    int64         // number of rows written to BigQuery
-	BytesStaged   int64         // number of bytes in the staging format
-	Duration      time.Duration // total time from start to finish
-	Strategy      string        // "inline" or "gcs"
-	Format        string        // "ndjson", "csv", or "parquet"
-	ErrorRows     []string      // error descriptions from BigQuery per row (truncated)
+	RowsLoaded  int64         // number of rows written to BigQuery
+	BytesStaged int64         // number of bytes in the staging format
+	Duration    time.Duration // total time from start to finish
+	Strategy    string        // "inline" or "gcs"
+	Format      string        // "ndjson", "csv", or "parquet"
+	ErrorRows   []string      // error descriptions from BigQuery per row (truncated)
 }
 
 // RetryConfig controls retry behavior for extract.
 type RetryConfig struct {
-	MaxAttempts   int           // default: 3
+	MaxAttempts    int           // default: 3
 	InitialBackoff time.Duration // default: 1s
-	MaxBackoff    time.Duration // default: 60s
-	JitterFraction float64        // [0, 1]; default: 0.1
+	MaxBackoff     time.Duration // default: 60s
+	JitterFraction float64       // [0, 1]; default: 0.1
 }
 
 // LoadConfig controls load behavior.
 type LoadConfig struct {
-	ProjectID           string // GCP project ID; required
-	Dataset             string // BigQuery dataset; required
-	Table               string // BigQuery table; required
-	StagingBucket       string // GCS bucket for staging; default: "{projectID}-bravis-staging"
-	StagingPrefix       string // prefix for staged files; default: "extracts/"
-	ThresholdForGCS     int    // row count above which to use GCS; default: 5000
-	Format              string // "ndjson", "csv", or "parquet"; default: "ndjson"
-	DeleteAfterLoad     bool   // delete staged file after successful load; default: true
-	AddMetadata         bool   // add metadata fields to payload; default: false
-	MetadataNamespace   string // namespace UUID for ingestion_id; default: "e3a4f8c0-1b9d-4ea0-9c2e-77f6a6c4a4d7"
-	SourceKeyField      string // which field in payload contains the source key; if empty, uses Envelope.SourceKey
+	ProjectID         string // GCP project ID; required
+	Dataset           string // BigQuery dataset; required
+	Table             string // BigQuery table; required
+	StagingBucket     string // GCS bucket for staging; default: "{projectID}-bravis-staging"
+	StagingPrefix     string // prefix for staged files; default: "extracts/"
+	ThresholdForGCS   int    // row count above which to use GCS; default: 5000
+	Format            string // "ndjson", "csv", or "parquet"; default: "ndjson"
+	DeleteAfterLoad   bool   // delete staged file after successful load; default: true
+	AddMetadata       bool   // add metadata fields to payload; default: false
+	MetadataNamespace string // namespace UUID for ingestion_id; default: "e3a4f8c0-1b9d-4ea0-9c2e-77f6a6c4a4d7"
+	SourceKeyField    string // which field in payload contains the source key; if empty, uses Envelope.SourceKey
 }
 
 // ExtractOption is a functional option for extract.Fonte.
@@ -80,20 +80,20 @@ type ExtractOption func(*Fonte)
 
 // Fonte describes the source for extraction.
 type Fonte struct {
-	URL           string        // required
-	Method        string        // default: GET
-	Body          io.Reader     // for POST/PUT
-	Header        map[string][]string
-	Timeout       time.Duration // per attempt; default: 30s
-	TotalTimeout  time.Duration // total; default: 5 minutes
-	RetryConfig   *RetryConfig  // nil uses defaults
-	RateLimiter   any           // *rate.Limiter or nil
-	Guard         func(status int, body []byte) error
-	Format        string        // "json", "ndjson", "csv", "xml"; auto-detected if omitted
-	HasHeader     bool          // for CSV; ignored for others
-	CursorKey     string        // for pagination; e.g., "next_page"
-	OffsetKey     string        // alternative to cursor
-	PageSize      int           // page size if using offset
+	URL          string    // required
+	Method       string    // default: GET
+	Body         io.Reader // for POST/PUT
+	Header       map[string][]string
+	Timeout      time.Duration // per attempt; default: 30s
+	TotalTimeout time.Duration // total; default: 5 minutes
+	RetryConfig  *RetryConfig  // nil uses defaults
+	RateLimiter  any           // *rate.Limiter or nil
+	Guard        func(status int, body []byte) error
+	Format       string // "json", "ndjson", "csv", "xml"; auto-detected if omitted
+	HasHeader    bool   // for CSV; ignored for others
+	CursorKey    string // for pagination; e.g., "next_page"
+	OffsetKey    string // alternative to cursor
+	PageSize     int    // page size if using offset
 }
 
 // LoadOption is a functional option for load.
