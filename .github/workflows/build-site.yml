@@ -22,16 +22,13 @@ jobs:
       - name: Validate HTML
         run: |
           cd site
-          if ! command -v tidy &> /dev/null; then
-            sudo apt-get update && sudo apt-get install -y html-tidy
-          fi
+          sudo apt-get update -qq && sudo apt-get install -y -qq html-tidy
           tidy -q -e index.html || true
           echo "✅ HTML validation passed"
 
       - name: Check CSS
         run: |
           cd site/css
-          # Basic CSS lint (check for common issues)
           echo "Checking CSS syntax..."
           if grep -n "{{" *.css; then
             echo "⚠️  Found template syntax in CSS"
@@ -43,16 +40,15 @@ jobs:
         run: |
           cd site
           echo "Checking for broken links..."
-          # Check for common issues
           if grep -o 'href="[^"]*"' index.html | grep -E 'href="[0-9]' | head -5; then
             echo "⚠️  Found potentially broken links"
           fi
           echo "✅ Link check passed"
 
-      - name: Build Docker image (dry-run)
+      - name: Validate Docker build
         run: |
           cd site
-          docker build --dry-run -t bravis-site:latest .
+          docker build -t bravis-site:ci .
           echo "✅ Docker build validation passed"
 
   lighthouse:
@@ -69,7 +65,7 @@ jobs:
           node-version: '20'
 
       - name: Install Lighthouse CI
-        run: npm install -g @lhci/cli@*
+        run: npm install -g @lhci/cli@latest
 
       - name: Start local server
         run: |
@@ -79,32 +75,21 @@ jobs:
           curl -s http://localhost:8000 > /dev/null || (echo "Server failed"; exit 1)
 
       - name: Run Lighthouse
-        run: |
-          lhci autorun --config=.lighthouserc.json || true
-        continue-on-error: true
-
-      - name: Comment PR with results
-        if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: '✅ Site validation passed\n\n- HTML validated\n- CSS checked\n- Links validated\n- Docker buildable'
-            })
+        run: lhci autorun --config=site/.lighthouserc.json || true
         continue-on-error: true
 
   publish:
-    name: Publish to Docker Hub (on main)
+    name: Publish site image
     runs-on: ubuntu-latest
     needs: build
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push'
 
     permissions:
       contents: read
       packages: write
+
+    env:
+      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
 
     steps:
       - uses: actions/checkout@v4
@@ -113,27 +98,25 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Login to Docker Hub
+        if: env.DOCKER_USERNAME != ''
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
-        if: secrets.DOCKER_USERNAME != ''
 
-      - name: Build and push (if credentials available)
-        uses: docker/build-push-action@v5
+      - name: Build and push
+        if: env.DOCKER_USERNAME != ''
+        uses: docker/build-push-action@v6
         with:
           context: ./site
-          push: ${{ secrets.DOCKER_USERNAME != '' }}
+          push: true
           tags: |
             ${{ secrets.DOCKER_USERNAME }}/bravis-site:latest
             ${{ secrets.DOCKER_USERNAME }}/bravis-site:${{ github.sha }}
-          cache-from: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/bravis-site:buildcache
-          cache-to: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/bravis-site:buildcache,mode=max
-        if: secrets.DOCKER_USERNAME != ''
 
-      - name: Build (dry-run if no credentials)
-        if: secrets.DOCKER_USERNAME == ''
+      - name: Build only (no credentials configured)
+        if: env.DOCKER_USERNAME == ''
         run: |
           cd site
           docker build -t bravis-site:test .
-          echo "✅ Docker build successful (credentials not configured for push)"
+          echo "✅ Docker build successful (DOCKER_USERNAME secret not set; skipping push)"

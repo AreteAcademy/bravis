@@ -215,6 +215,7 @@ func TestContextCancellation(t *testing.T) {
 	defer server.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	fonte := sdk.Fonte{URL: server.URL}
 	lines, err := NDJSON(ctx, fonte)
