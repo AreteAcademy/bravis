@@ -205,7 +205,6 @@ func TestPagination(t *testing.T) {
 	// For now, this is a placeholder - test passes trivially
 }
 
-
 // TestContextCancellation verifies cancellation stops fetching.
 func TestContextCancellation(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
