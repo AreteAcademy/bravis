@@ -77,69 +77,99 @@ func fetch(ctx context.Context, fonte sdk.Fonte) (iter.Seq2[sdk.Envelope, error]
 		}
 	}
 
-	return func(yield func(sdk.Envelope, error) bool) {
-		startTime := time.Now()
-		ctx, cancel := context.WithTimeout(ctx, fonte.TotalTimeout)
-		defer cancel()
+	// Make initial request to check for errors before returning sequence
+	ctxTotal, cancelTotal := context.WithTimeout(ctx, fonte.TotalTimeout)
+
+	var resp *http.Response
+
+	for attempt := 0; attempt < fonte.RetryConfig.MaxAttempts; attempt++ {
+		// Create context with per-attempt timeout
+		ctxAttempt, cancelAttempt := context.WithTimeout(ctxTotal, fonte.Timeout)
 
 		client := &http.Client{Timeout: fonte.Timeout}
 
-		req, err := http.NewRequestWithContext(ctx, fonte.Method, fonte.URL, fonte.Body)
+		req, err := http.NewRequestWithContext(ctxAttempt, fonte.Method, fonte.URL, fonte.Body)
 		if err != nil {
-			yield(sdk.Envelope{}, fmt.Errorf("create request: %w", err))
-			return
+			cancelAttempt()
+			cancelTotal()
+			return nil, fmt.Errorf("create request: %w", err)
 		}
 
 		if fonte.Header != nil {
 			req.Header = fonte.Header
 		}
 
-		var resp *http.Response
-		for attempt := 0; attempt < fonte.RetryConfig.MaxAttempts; attempt++ {
-			resp, err = client.Do(req)
-			if err == nil {
-				break
-			}
+		resp, err = client.Do(req)
+		cancelAttempt()
 
+		if err != nil {
 			if shouldRetry(err) && attempt < fonte.RetryConfig.MaxAttempts-1 {
 				backoff := calculateBackoff(attempt, fonte.RetryConfig)
-				slog.DebugContext(ctx, "retry",
+				slog.DebugContext(ctxTotal, "retry",
 					"attempt", attempt+1,
 					"backoff", backoff,
 					"error", err)
 				time.Sleep(backoff)
 				continue
 			}
-
-			yield(sdk.Envelope{}, fmt.Errorf("fetch failed after %d attempts: %w", attempt+1, err))
-			return
+			cancelTotal()
+			return nil, fmt.Errorf("fetch failed after %d attempts: %w", attempt+1, err)
 		}
 
+		if resp.StatusCode == http.StatusOK {
+			break
+		}
+
+		// Retry on 429 or 5xx
+		if shouldRetryStatus(resp.StatusCode) && attempt < fonte.RetryConfig.MaxAttempts-1 {
+			var backoff time.Duration
+			if retryAfter := resp.Header.Get("Retry-After"); retryAfter != "" {
+				if seconds, err := time.ParseDuration(retryAfter + "s"); err == nil {
+					backoff = seconds
+				} else {
+					backoff = calculateBackoff(attempt, fonte.RetryConfig)
+				}
+			} else {
+				backoff = calculateBackoff(attempt, fonte.RetryConfig)
+			}
+
+			slog.DebugContext(ctxTotal, "retry",
+				"attempt", attempt+1,
+				"status", resp.StatusCode,
+				"backoff", backoff)
+			resp.Body.Close()
+			time.Sleep(backoff)
+			continue
+		}
+
+		// Non-retryable status code (400, 404, etc.)
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		cancelTotal()
+		return nil, fmt.Errorf("http %d: %s", resp.StatusCode, string(body))
+	}
+
+	// Guard function (before decoding)
+	if fonte.Guard != nil {
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			resp.Body.Close()
+			cancelTotal()
+			return nil, fmt.Errorf("read body for guard: %w", err)
+		}
+		if err := fonte.Guard(resp.StatusCode, body); err != nil {
+			resp.Body.Close()
+			cancelTotal()
+			return nil, fmt.Errorf("guard rejected response: %w", err)
+		}
+		// Create new reader from read body
+		resp.Body = io.NopCloser(strings.NewReader(string(body)))
+	}
+
+	return func(yield func(sdk.Envelope, error) bool) {
+		startTime := time.Now()
 		defer resp.Body.Close()
-
-		if resp.StatusCode != http.StatusOK {
-			if shouldRetryStatus(resp.StatusCode) && resp.StatusCode != http.StatusTooManyRequests {
-				// Implementar retry com Retry-After
-			}
-			body, _ := io.ReadAll(resp.Body)
-			yield(sdk.Envelope{}, fmt.Errorf("http %d: %s", resp.StatusCode, string(body)))
-			return
-		}
-
-		// Guard function
-		if fonte.Guard != nil {
-			body, err := io.ReadAll(resp.Body)
-			if err != nil {
-				yield(sdk.Envelope{}, fmt.Errorf("read body for guard: %w", err))
-				return
-			}
-			if err := fonte.Guard(resp.StatusCode, body); err != nil {
-				yield(sdk.Envelope{}, fmt.Errorf("guard rejected response: %w", err))
-				return
-			}
-			// Create new reader from read body
-			resp.Body = io.NopCloser(strings.NewReader(string(body)))
-		}
+		defer cancelTotal()
 
 		// Decode based on format
 		decoder := NewDecoder(resp.Body, fonte.Format)
@@ -149,7 +179,14 @@ func fetch(ctx context.Context, fonte sdk.Fonte) (iter.Seq2[sdk.Envelope, error]
 		}
 
 		for {
-			env, err := decoder.Next(ctx)
+			select {
+			case <-ctxTotal.Done():
+				yield(sdk.Envelope{}, fmt.Errorf("context cancelled"))
+				return
+			default:
+			}
+
+			env, err := decoder.Next(ctxTotal)
 			if err == io.EOF {
 				break
 			}
@@ -166,7 +203,7 @@ func fetch(ctx context.Context, fonte sdk.Fonte) (iter.Seq2[sdk.Envelope, error]
 		}
 
 		duration := time.Since(startTime)
-		slog.InfoContext(ctx, "extract complete",
+		slog.InfoContext(ctxTotal, "extract complete",
 			"format", fonte.Format,
 			"url", redactURL(fonte.URL),
 			"duration", duration)
@@ -236,27 +273,32 @@ func NewDecoder(r io.Reader, format string) Decoder {
 }
 
 type csvDecoder struct {
-	r       *csv.Reader
-	headers []string
-	first   bool
+	r        *csv.Reader
+	headers  []string
+	first    bool
+	returned bool
 }
 
 func (d *csvDecoder) Next(ctx context.Context) (sdk.Envelope, error) {
-	if !d.first {
-		record, err := d.r.Read()
-		if err != nil {
-			return sdk.Envelope{}, err
-		}
-		d.headers = record
-		d.first = true
-	}
-
 	record, err := d.r.Read()
 	if err != nil {
 		return sdk.Envelope{}, err
 	}
 
-	// Convert CSV record to JSON object
+	if !d.first {
+		d.headers = record
+		d.first = true
+		// Return header as first line
+		obj := make(map[string]string)
+		for i, header := range d.headers {
+			obj[fmt.Sprintf("field_%d", i)] = header
+		}
+		return sdk.Envelope{
+			Payload: obj,
+		}, nil
+	}
+
+	// Convert CSV record to JSON object using headers as keys
 	obj := make(map[string]string)
 	for i, header := range d.headers {
 		if i < len(record) {
