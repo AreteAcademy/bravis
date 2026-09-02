@@ -226,26 +226,6 @@ func TestCSVWithoutHeader(t *testing.T) {
 	}
 }
 
-// TestPagination verifies multiple pages are fetched.
-func TestPagination(t *testing.T) {
-	pages := 0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		pages++
-		w.WriteHeader(http.StatusOK)
-		switch pages {
-		case 1:
-			w.Header().Set("Link", `<http://example.com?page=2>; rel="next"`)
-			_, _ = fmt.Fprintf(w, `{"id": 1}`)
-		case 2:
-			_, _ = fmt.Fprintf(w, `{"id": 2}`)
-		}
-	}))
-	defer server.Close()
-
-	// TODO: implement pagination in extract
-	// For now, this is a placeholder - test passes trivially
-}
-
 // TestContextCancellation verifies cancellation stops fetching.
 func TestContextCancellation(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -1,9 +1,11 @@
 package extract
 
 import (
+	"bytes"
 	"context"
 	"encoding/csv"
 	"encoding/json"
+	"encoding/xml"
 	"errors"
 	"fmt"
 	"io"
@@ -13,6 +15,7 @@ import (
 	"math/rand"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -82,25 +85,187 @@ func fetch(ctx context.Context, fonte sdk.Fonte) (iter.Seq2[sdk.Envelope, error]
 		fonte.RetryConfig.MaxAttempts = 1
 	}
 
-	// Make initial request to check for errors before returning sequence
+	if fonte.MaxPages <= 0 {
+		fonte.MaxPages = defaultMaxPages
+	}
+
 	ctxTotal, cancelTotal := context.WithTimeout(ctx, fonte.TotalTimeout)
 
+	// The first page is fetched eagerly so that an unreachable host, a 404 or
+	// a guard rejection surfaces as an error from CSV/JSON/NDJSON/XML rather
+	// than as the first item of a sequence the caller has to drain to notice.
+	first, err := fetchPage(ctxTotal, fonte, fonte.URL)
+	if err != nil {
+		cancelTotal()
+		return nil, err
+	}
+
+	return func(yield func(sdk.Envelope, error) bool) {
+		startTime := time.Now()
+		defer cancelTotal()
+
+		page := first
+		rows := 0
+		pages := 0
+
+		for {
+			pages++
+			emitted, next, err := drainPage(ctxTotal, fonte, page, yield)
+			rows += emitted
+			page.close()
+
+			if err != nil {
+				if !errors.Is(err, errStopped) {
+					yield(sdk.Envelope{}, err)
+				}
+				return
+			}
+
+			if next == "" || pages >= fonte.MaxPages {
+				break
+			}
+
+			page, err = fetchPage(ctxTotal, fonte, next)
+			if err != nil {
+				yield(sdk.Envelope{}, fmt.Errorf("page %d: %w", pages+1, err))
+				return
+			}
+		}
+
+		slog.InfoContext(ctxTotal, "extract complete",
+			"format", fonte.Format,
+			"url", redactURL(fonte.URL),
+			"pages", pages,
+			"rows", rows,
+			"duration", time.Since(startTime))
+	}, nil
+}
+
+const defaultMaxPages = 1000
+
+// errStopped signals that the consumer broke out of the range loop. It is
+// never handed to the caller -- there is nobody left to hand it to.
+var errStopped = errors.New("consumer stopped iterating")
+
+// page is one fetched HTTP response, plus whatever had to be buffered to
+// work out where the next page lives.
+type page struct {
+	body     io.ReadCloser
+	linkNext string // rel="next" from the Link header
+	cursor   string // value at fonte.CursorKey, when cursor paging
+	offset   int    // offset this page was fetched at, for offset paging
+	release  func()
+}
+
+func (p *page) close() {
+	if p.body != nil {
+		_ = p.body.Close()
+	}
+	if p.release != nil {
+		p.release()
+	}
+}
+
+// drainPage decodes one page, yielding every row. It reports how many rows it
+// emitted and the URL of the next page, if any.
+func drainPage(ctx context.Context, fonte sdk.Fonte, p *page, yield func(sdk.Envelope, error) bool) (int, string, error) {
+	decoder := NewDecoder(p.body, fonte)
+	if decoder == nil {
+		return 0, "", fmt.Errorf("unsupported format: %s", fonte.Format)
+	}
+
+	emitted := 0
+	for {
+		select {
+		case <-ctx.Done():
+			return emitted, "", fmt.Errorf("context cancelled")
+		default:
+		}
+
+		env, err := decoder.Next(ctx)
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			// The underlying stream cannot recover: a syntax error or a read
+			// failure repeats forever. Report it once and stop.
+			return emitted, "", err
+		}
+
+		emitted++
+		if !yield(env, nil) {
+			return emitted, "", errStopped
+		}
+	}
+
+	next, err := nextPageURL(fonte, p, emitted)
+	return emitted, next, err
+}
+
+// nextPageURL resolves where the following page lives, or "" when the current
+// page was the last one.
+func nextPageURL(fonte sdk.Fonte, p *page, emitted int) (string, error) {
+	switch {
+	case fonte.FollowLinks:
+		return p.linkNext, nil
+
+	case fonte.CursorKey != "":
+		if p.cursor == "" {
+			return "", nil
+		}
+		return withQuery(fonte.URL, fonte.CursorKey, p.cursor)
+
+	case fonte.OffsetKey != "":
+		// An empty page is the only reliable end-of-data signal for offset
+		// paging; a short page can just be a partially filled one.
+		if emitted == 0 {
+			return "", nil
+		}
+		size := fonte.PageSize
+		if size <= 0 {
+			size = emitted
+		}
+		return withQuery(fonte.URL, fonte.OffsetKey, strconv.Itoa(p.offset+size))
+	}
+
+	return "", nil
+}
+
+func withQuery(rawURL, key, value string) (string, error) {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return "", fmt.Errorf("build next page url: %w", err)
+	}
+	q := u.Query()
+	q.Set(key, value)
+	u.RawQuery = q.Encode()
+	return u.String(), nil
+}
+
+// fetchPage performs one request, with retry, and prepares the response for
+// decoding. Everything that needs the whole body -- the guard, cursor paging
+// -- buffers it here so the streaming path below stays streaming.
+func fetchPage(ctxTotal context.Context, fonte sdk.Fonte, pageURL string) (*page, error) {
 	var resp *http.Response
 	// release cancels the context of the attempt that produced resp. The body
 	// is still streaming under that context, so it must stay alive until the
-	// caller is done iterating -- cancelling it here truncates the response.
+	// page is drained -- cancelling it early truncates the response.
 	release := func() {}
 
 	for attempt := 0; attempt < fonte.RetryConfig.MaxAttempts; attempt++ {
-		// Create context with per-attempt timeout
+		if fonte.RateLimiter != nil {
+			if err := fonte.RateLimiter.Wait(ctxTotal); err != nil {
+				return nil, fmt.Errorf("rate limiter: %w", err)
+			}
+		}
+
 		ctxAttempt, cancelAttempt := context.WithTimeout(ctxTotal, fonte.Timeout)
 
 		client := &http.Client{Timeout: fonte.Timeout}
 
-		req, err := http.NewRequestWithContext(ctxAttempt, fonte.Method, fonte.URL, fonte.Body)
+		req, err := http.NewRequestWithContext(ctxAttempt, fonte.Method, pageURL, fonte.Body)
 		if err != nil {
 			cancelAttempt()
-			cancelTotal()
 			return nil, fmt.Errorf("create request: %w", err)
 		}
 
@@ -121,7 +286,6 @@ func fetch(ctx context.Context, fonte sdk.Fonte) (iter.Seq2[sdk.Envelope, error]
 				time.Sleep(backoff)
 				continue
 			}
-			cancelTotal()
 			return nil, fmt.Errorf("fetch failed after %d attempts: %w", attempt+1, err)
 		}
 
@@ -130,19 +294,8 @@ func fetch(ctx context.Context, fonte sdk.Fonte) (iter.Seq2[sdk.Envelope, error]
 			break
 		}
 
-		// Retry on 429 or 5xx
 		if shouldRetryStatus(resp.StatusCode) && attempt < fonte.RetryConfig.MaxAttempts-1 {
-			var backoff time.Duration
-			if retryAfter := resp.Header.Get("Retry-After"); retryAfter != "" {
-				if seconds, err := time.ParseDuration(retryAfter + "s"); err == nil {
-					backoff = seconds
-				} else {
-					backoff = calculateBackoff(attempt, fonte.RetryConfig)
-				}
-			} else {
-				backoff = calculateBackoff(attempt, fonte.RetryConfig)
-			}
-
+			backoff := retryAfter(resp, attempt, fonte.RetryConfig)
 			slog.DebugContext(ctxTotal, "retry",
 				"attempt", attempt+1,
 				"status", resp.StatusCode,
@@ -153,76 +306,134 @@ func fetch(ctx context.Context, fonte sdk.Fonte) (iter.Seq2[sdk.Envelope, error]
 			continue
 		}
 
-		// Non-retryable status code (400, 404, etc.)
 		body, _ := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
 		cancelAttempt()
-		cancelTotal()
 		return nil, fmt.Errorf("http %d: %s", resp.StatusCode, string(body))
 	}
 
-	// Guard function (before decoding)
-	if fonte.Guard != nil {
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			_ = resp.Body.Close()
-			release()
-			cancelTotal()
-			return nil, fmt.Errorf("read body for guard: %w", err)
-		}
-		if err := fonte.Guard(resp.StatusCode, body); err != nil {
-			_ = resp.Body.Close()
-			release()
-			cancelTotal()
-			return nil, fmt.Errorf("guard rejected response: %w", err)
-		}
-		// Create new reader from read body
-		resp.Body = io.NopCloser(strings.NewReader(string(body)))
+	p := &page{body: resp.Body, release: release}
+
+	if fonte.FollowLinks {
+		p.linkNext = parseLinkNext(resp.Header.Get("Link"))
+	}
+	if fonte.OffsetKey != "" {
+		p.offset = currentOffset(resp.Request, fonte.OffsetKey)
 	}
 
-	return func(yield func(sdk.Envelope, error) bool) {
-		startTime := time.Now()
-		defer func() { _ = resp.Body.Close() }()
-		defer release()
-		defer cancelTotal()
+	// Anything that must see the whole body reads it here and hands the
+	// decoder an equivalent reader.
+	if fonte.Guard != nil || fonte.CursorKey != "" || fonte.DataKey != "" {
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			p.close()
+			return nil, fmt.Errorf("read body: %w", err)
+		}
+		_ = resp.Body.Close()
 
-		// Decode based on format
-		decoder := NewDecoder(resp.Body, fonte)
-		if decoder == nil {
-			yield(sdk.Envelope{}, fmt.Errorf("unsupported format: %s", fonte.Format))
-			return
+		if fonte.Guard != nil {
+			if err := fonte.Guard(resp.StatusCode, body); err != nil {
+				p.body = nil
+				p.close()
+				return nil, fmt.Errorf("guard rejected response: %w", err)
+			}
 		}
 
-		for {
-			select {
-			case <-ctxTotal.Done():
-				yield(sdk.Envelope{}, fmt.Errorf("context cancelled"))
-				return
-			default:
-			}
-
-			env, err := decoder.Next(ctxTotal)
-			if errors.Is(err, io.EOF) {
-				break
-			}
+		if fonte.CursorKey != "" || fonte.DataKey != "" {
+			cursor, rows, err := unwrapPage(body, fonte.CursorKey, fonte.DataKey)
 			if err != nil {
-				// The underlying stream cannot recover: a syntax error or a
-				// read failure repeats forever. Report it once and stop.
-				yield(sdk.Envelope{}, err)
-				return
+				p.body = nil
+				p.close()
+				return nil, err
 			}
-
-			if !yield(env, nil) {
-				return
-			}
+			p.cursor = cursor
+			body = rows
 		}
 
-		duration := time.Since(startTime)
-		slog.InfoContext(ctxTotal, "extract complete",
-			"format", fonte.Format,
-			"url", redactURL(fonte.URL),
-			"duration", duration)
-	}, nil
+		p.body = io.NopCloser(bytes.NewReader(body))
+	}
+
+	return p, nil
+}
+
+// unwrapPage pulls the next cursor and, when DataKey is set, the row payload
+// out of a wrapper object such as {"results": [...], "next": "abc"}.
+func unwrapPage(body []byte, cursorKey, dataKey string) (cursor string, rows []byte, err error) {
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(body, &obj); err != nil {
+		return "", nil, fmt.Errorf("cursor and data keys need a JSON object page: %w", err)
+	}
+
+	if cursorKey != "" {
+		if raw, ok := obj[cursorKey]; ok {
+			// A cursor is usually a string but numeric page ids are common.
+			if err := json.Unmarshal(raw, &cursor); err != nil {
+				cursor = strings.Trim(string(raw), `"`)
+				if cursor == "null" {
+					cursor = ""
+				}
+			}
+		}
+	}
+
+	rows = body
+	if dataKey != "" {
+		raw, ok := obj[dataKey]
+		if !ok {
+			return "", nil, fmt.Errorf("DataKey %q not found in page", dataKey)
+		}
+		rows = raw
+	}
+
+	return cursor, rows, nil
+}
+
+// parseLinkNext returns the URL of the rel="next" link in an RFC 8288 header.
+func parseLinkNext(header string) string {
+	for _, link := range strings.Split(header, ",") {
+		parts := strings.Split(link, ";")
+		if len(parts) < 2 {
+			continue
+		}
+		target := strings.TrimSpace(parts[0])
+		if !strings.HasPrefix(target, "<") || !strings.HasSuffix(target, ">") {
+			continue
+		}
+		for _, param := range parts[1:] {
+			p := strings.TrimSpace(param)
+			if p == `rel="next"` || p == "rel=next" || p == `rel='next'` {
+				return target[1 : len(target)-1]
+			}
+		}
+	}
+	return ""
+}
+
+// currentOffset reads the offset the request that produced this page used, so
+// the next one can advance from it rather than from zero.
+func currentOffset(req *http.Request, key string) int {
+	if req == nil || req.URL == nil {
+		return 0
+	}
+	n, err := strconv.Atoi(req.URL.Query().Get(key))
+	if err != nil {
+		return 0
+	}
+	return n
+}
+
+func retryAfter(resp *http.Response, attempt int, cfg *sdk.RetryConfig) time.Duration {
+	if v := resp.Header.Get("Retry-After"); v != "" {
+		if secs, err := strconv.Atoi(strings.TrimSpace(v)); err == nil && secs >= 0 {
+			return time.Duration(secs) * time.Second
+		}
+		if t, err := http.ParseTime(v); err == nil {
+			if d := time.Until(t); d > 0 {
+				return d
+			}
+		}
+	}
+	return calculateBackoff(attempt, cfg)
 }
 
 func shouldRetry(err error) bool {
@@ -284,6 +495,8 @@ func NewDecoder(r io.Reader, fonte sdk.Fonte) Decoder {
 		return &ndjsonDecoder{dec: json.NewDecoder(r)}
 	case "json":
 		return &jsonDecoder{dec: json.NewDecoder(r)}
+	case "xml":
+		return &xmlDecoder{dec: xml.NewDecoder(r)}
 	default:
 		return nil
 	}
@@ -377,4 +590,94 @@ func (d *jsonDecoder) Next(ctx context.Context) (sdk.Envelope, error) {
 	}
 	d.index++
 	return env, nil
+}
+
+// xmlDecoder streams the direct children of the root element, one Envelope
+// each. For
+//
+//	<items><item><id>1</id></item><item><id>2</id></item></items>
+//
+// that is two Envelopes, {id: 1} and {id: 2}.
+//
+// XML has no notion of a list, so there is nothing to infer beyond "the
+// repeated thing under the root is the record". Attributes are folded in with
+// an "@" prefix, and an element holding only text becomes that text.
+type xmlDecoder struct {
+	dec     *xml.Decoder
+	entered bool
+}
+
+func (d *xmlDecoder) Next(ctx context.Context) (sdk.Envelope, error) {
+	for {
+		tok, err := d.dec.Token()
+		if err != nil {
+			return sdk.Envelope{}, err
+		}
+
+		start, ok := tok.(xml.StartElement)
+		if !ok {
+			continue
+		}
+
+		// Skip past the root element; its children are the records.
+		if !d.entered {
+			d.entered = true
+			continue
+		}
+
+		var node xmlNode
+		if err := d.dec.DecodeElement(&node, &start); err != nil {
+			return sdk.Envelope{}, err
+		}
+
+		return sdk.Envelope{Payload: node.value()}, nil
+	}
+}
+
+// xmlNode is the generic shape encoding/xml can unmarshal any element into.
+type xmlNode struct {
+	Attrs   []xml.Attr `xml:",any,attr"`
+	Content string     `xml:",chardata"`
+	Nodes   []xmlNode  `xml:",any"`
+	XMLName xml.Name
+}
+
+// value renders a node as a plain Go value: a string for a leaf, a map
+// otherwise. Repeated sibling names collapse into a slice.
+func (n xmlNode) value() any {
+	if len(n.Nodes) == 0 && len(n.Attrs) == 0 {
+		return strings.TrimSpace(n.Content)
+	}
+
+	out := make(map[string]any, len(n.Nodes)+len(n.Attrs))
+
+	for _, attr := range n.Attrs {
+		out["@"+attr.Name.Local] = attr.Value
+	}
+
+	for _, child := range n.Nodes {
+		name := child.Name()
+		v := child.value()
+
+		existing, seen := out[name]
+		if !seen {
+			out[name] = v
+			continue
+		}
+		if list, ok := existing.([]any); ok {
+			out[name] = append(list, v)
+			continue
+		}
+		out[name] = []any{existing, v}
+	}
+
+	if text := strings.TrimSpace(n.Content); text != "" && len(n.Nodes) == 0 {
+		out["#text"] = text
+	}
+
+	return out
+}
+
+func (n xmlNode) Name() string {
+	return n.XMLName.Local
 }

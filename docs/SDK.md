@@ -42,9 +42,13 @@ Não é preferência de organização. O módulo raiz depende de `pgx`, `goose`,
 fetcher de 200 linhas baixa o orquestrador inteiro. **Um SDK que arrasta um
 driver de Postgres não é adotado.**
 
-### 2.2 pkg.go.dev exige repositório público — e hoje não existe
+### 2.2 Publicado — o bloqueio foi resolvido em 2026-09-02
 
-> **Bloqueio real. Resolver antes de prometer a URL.**
+> **RESOLVIDO.** O módulo está em `github.com/AreteAcademy/bravis/sdk`, com
+> `v0.1.0` e `v0.1.1` no proxy. O histórico abaixo fica porque a armadilha da tag
+> com prefixo de diretório continua valendo para as próximas versões.
+>
+> _Registro do que era o bloqueio:_
 >
 > Este repositório não tem remote configurado: o código existe em uma máquina. O
 > pkg.go.dev indexa a partir do proxy de módulos, que busca do VCS público — sem
@@ -99,7 +103,19 @@ Go é menos.
 
 ---
 
-## 3. O contrato de saída — não se negocia
+## 3. O contrato de saída
+
+> **DESATUALIZADA a partir da v0.1.1.** O `load` passou a ser agnóstico de schema
+> por decisão de desenho — a documentação do pacote diz "The SDK does NOT impose a
+> schema — you define it", e `Load` recusa criar a tabela. Logo o que está escrito
+> abaixo deixou de ser o que o SDK faz.
+>
+> A pergunta de quem produz as 6 colunas está aberta e é decisão de produto; ver
+> [`SDK_LOAD.md`](SDK_LOAD.md) §5, que recomenda um modo envelope opt-in para o
+> `ingestion_id` continuar tendo um dono único.
+>
+> O que segue valendo integralmente é o cálculo do `ingestion_id` — conferido
+> contra o Python em 2026-09-02, os UUIDs batem.
 
 O SDK escreve numa tabela de landing com esta forma exata:
 

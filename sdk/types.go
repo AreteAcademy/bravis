@@ -1,6 +1,7 @@
 package sdk
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"time"
@@ -78,6 +79,17 @@ type LoadConfig struct {
 // ExtractOption is a functional option for extract.Fonte.
 type ExtractOption func(*Fonte)
 
+// Limiter throttles outbound requests. It is satisfied by
+// *golang.org/x/time/rate.Limiter, so callers can pass one directly without
+// the SDK taking on the dependency:
+//
+//	fonte.RateLimiter = rate.NewLimiter(rate.Every(time.Second), 1)
+//
+// Any type with a matching Wait works too.
+type Limiter interface {
+	Wait(ctx context.Context) error
+}
+
 // Fonte describes the source for extraction.
 type Fonte struct {
 	URL          string    // required
@@ -87,14 +99,29 @@ type Fonte struct {
 	Timeout      time.Duration // per attempt; default: 30s
 	TotalTimeout time.Duration // total; default: 5 minutes
 	RetryConfig  *RetryConfig  // nil uses defaults
-	RateLimiter  any           // *rate.Limiter or nil
+	RateLimiter  Limiter       // throttles each attempt; nil disables
 	Guard        func(status int, body []byte) error
 	Format       string // "json", "ndjson", "csv", "xml"; auto-detected if omitted
 	NoHeader     bool   // for CSV: treat every row as data with field_N keys.
 	// Default (false) uses the first row as column names. Ignored for other formats.
-	CursorKey string // for pagination; e.g., "next_page"
-	OffsetKey string // alternative to cursor
-	PageSize  int    // page size if using offset
+	// Pagination. At most one strategy applies, checked in this order:
+	//
+	//   FollowLinks  follow RFC 8288 Link headers with rel="next"
+	//   CursorKey    name of the field in each JSON page holding the next
+	//                cursor; it is sent back as a query parameter of the
+	//                same name. Requires the page to be a JSON object.
+	//   OffsetKey    query parameter advanced by PageSize each page,
+	//                stopping at the first page that yields no rows
+	//
+	// DataKey names the field holding the rows when a paginated response
+	// wraps them: {"results": [...], "next": "..."} needs DataKey
+	// "results". Without it the whole page object becomes one Envelope.
+	FollowLinks bool
+	CursorKey   string
+	OffsetKey   string
+	DataKey     string
+	PageSize    int
+	MaxPages    int // safety stop on runaway pagination; 0 means 1000
 }
 
 // LoadOption is a functional option for load.

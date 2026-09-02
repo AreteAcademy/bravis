@@ -22,7 +22,28 @@ type Loader struct {
 }
 
 // New creates a new Loader.
-func New(ctx context.Context, cfg *sdk.LoadConfig) (*Loader, error) {
+//
+// cfg may be nil, in which case the configuration is built entirely from
+// opts. cfg is never mutated: defaults and options are applied to a copy, so
+// the caller can reuse the same LoadConfig for several Loaders.
+//
+//	l, err := load.New(ctx, nil,
+//		sdk.WithProjectID("my-project"),
+//		sdk.WithDataset("landing"),
+//		sdk.WithTable("raw_data"),
+//	)
+func New(ctx context.Context, cfg *sdk.LoadConfig, opts ...sdk.LoadOption) (*Loader, error) {
+	var c sdk.LoadConfig
+	if cfg != nil {
+		c = *cfg
+	}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(&c)
+		}
+	}
+	cfg = &c
+
 	if cfg.ProjectID == "" {
 		return nil, fmt.Errorf("projectID is required")
 	}
@@ -185,23 +206,60 @@ func (l *Loader) addMetadataToEnvelope(env *sdk.Envelope) error {
 	return nil
 }
 
+// jsonSaver adapts an arbitrary decoded payload to BigQuery's ValueSaver.
+//
+// StructSaver cannot be used here: it reflects over the fields of a struct,
+// and the SDK deliberately has no struct for the payload -- the whole point
+// is that the caller owns the schema.
+//
+// insertID is left empty on purpose. Populating it would enable BigQuery's
+// best-effort streaming dedup, which contradicts the documented contract
+// that deduplication happens downstream, keyed on _bravis_ingestion_id.
+type jsonSaver struct {
+	row map[string]bigquery.Value
+}
+
+func (s jsonSaver) Save() (map[string]bigquery.Value, string, error) {
+	return s.row, "", nil
+}
+
+// toRow converts a payload into the column/value map BigQuery expects.
+func toRow(payload any) (map[string]bigquery.Value, int, error) {
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	var obj map[string]any
+	if err := json.Unmarshal(data, &obj); err != nil {
+		return nil, 0, fmt.Errorf("payload must encode to a JSON object, got %s: %w", truncate(data, 80), err)
+	}
+
+	row := make(map[string]bigquery.Value, len(obj))
+	for k, v := range obj {
+		row[k] = v
+	}
+	return row, len(data), nil
+}
+
+func truncate(b []byte, n int) string {
+	if len(b) <= n {
+		return string(b)
+	}
+	return string(b[:n]) + "..."
+}
+
 func (l *Loader) loadInline(ctx context.Context, table *bigquery.Table, envelopes []sdk.Envelope) (int64, error) {
-	// Convert envelopes to JSON rows
-	rows := make([]*bigquery.StructSaver, len(envelopes))
+	rows := make([]*jsonSaver, len(envelopes))
 
 	var totalBytes int64
 	for i, env := range envelopes {
-		// Marshal payload to JSON
-		data, err := json.Marshal(env.Payload)
+		row, n, err := toRow(env.Payload)
 		if err != nil {
 			return 0, fmt.Errorf("marshal row %d: %w", i, err)
 		}
-
-		totalBytes += int64(len(data))
-
-		rows[i] = &bigquery.StructSaver{
-			Struct: json.RawMessage(data),
-		}
+		totalBytes += int64(n)
+		rows[i] = &jsonSaver{row: row}
 	}
 
 	inserter := table.Inserter()
@@ -250,6 +308,9 @@ func (l *Loader) loadViaGCS(ctx context.Context, table *bigquery.Table, envelope
 
 	// Load from GCS
 	gcsRef := bigquery.NewGCSReference(fmt.Sprintf("gs://%s/%s", l.cfg.StagingBucket, objName))
+	// We stage NDJSON. Without this BigQuery assumes CSV and every row of
+	// every GCS-strategy load is parsed wrong.
+	gcsRef.SourceFormat = bigquery.JSON
 
 	loader := table.LoaderFrom(gcsRef)
 	loader.WriteDisposition = bigquery.WriteAppend
