@@ -95,9 +95,33 @@ func main() {
 }
 ```
 
+## CSV headers
+
+By default the first CSV row is consumed as the column names, so a file with a
+header and N data rows yields N Envelopes keyed by those names:
+
+```go
+// name,age
+// Alice,30
+// Bob,25
+lines, _ := extract.CSV(ctx, sdk.Fonte{URL: url})
+// -> {name: Alice, age: 30}
+// -> {name: Bob,   age: 25}
+```
+
+Set `NoHeader: true` when the file has no header row. No row is then treated as
+special and every line is keyed positionally:
+
+```go
+lines, _ := extract.CSV(ctx, sdk.Fonte{URL: url, NoHeader: true})
+// -> {field_0: name,  field_1: age}
+// -> {field_0: Alice, field_1: 30}
+// -> {field_0: Bob,   field_1: 25}
+```
+
 ## Extract Formats
 
-- **CSV** — tabular data; auto-detects headers
+- **CSV** — tabular data; the first row names the columns (set `NoHeader: true` to key rows positionally instead)
 - **NDJSON** — newline-delimited JSON; streaming friendly
 - **JSON** — array or single object
 - **XML** — structured data (partial support)
@@ -194,6 +218,7 @@ fonte := sdk.Fonte{
 	Method:       "GET",           // default
 	Timeout:      30 * time.Second, // per attempt
 	TotalTimeout: 5 * time.Minute,  // total
+	NoHeader:     false,            // CSV only; false = first row is the header
 	RetryConfig: &sdk.RetryConfig{
 		MaxAttempts:    3,
 		InitialBackoff: 1 * time.Second,

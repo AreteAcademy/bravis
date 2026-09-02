@@ -90,10 +90,11 @@ type Fonte struct {
 	RateLimiter  any           // *rate.Limiter or nil
 	Guard        func(status int, body []byte) error
 	Format       string // "json", "ndjson", "csv", "xml"; auto-detected if omitted
-	HasHeader    bool   // for CSV; ignored for others
-	CursorKey    string // for pagination; e.g., "next_page"
-	OffsetKey    string // alternative to cursor
-	PageSize     int    // page size if using offset
+	NoHeader     bool   // for CSV: treat every row as data with field_N keys.
+	// Default (false) uses the first row as column names. Ignored for other formats.
+	CursorKey string // for pagination; e.g., "next_page"
+	OffsetKey string // alternative to cursor
+	PageSize  int    // page size if using offset
 }
 
 // LoadOption is a functional option for load.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/csv"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"iter"
@@ -77,10 +78,18 @@ func fetch(ctx context.Context, fonte sdk.Fonte) (iter.Seq2[sdk.Envelope, error]
 		}
 	}
 
+	if fonte.RetryConfig.MaxAttempts < 1 {
+		fonte.RetryConfig.MaxAttempts = 1
+	}
+
 	// Make initial request to check for errors before returning sequence
 	ctxTotal, cancelTotal := context.WithTimeout(ctx, fonte.TotalTimeout)
 
 	var resp *http.Response
+	// release cancels the context of the attempt that produced resp. The body
+	// is still streaming under that context, so it must stay alive until the
+	// caller is done iterating -- cancelling it here truncates the response.
+	release := func() {}
 
 	for attempt := 0; attempt < fonte.RetryConfig.MaxAttempts; attempt++ {
 		// Create context with per-attempt timeout
@@ -100,9 +109,9 @@ func fetch(ctx context.Context, fonte sdk.Fonte) (iter.Seq2[sdk.Envelope, error]
 		}
 
 		resp, err = client.Do(req)
-		cancelAttempt()
 
 		if err != nil {
+			cancelAttempt()
 			if shouldRetry(err) && attempt < fonte.RetryConfig.MaxAttempts-1 {
 				backoff := calculateBackoff(attempt, fonte.RetryConfig)
 				slog.DebugContext(ctxTotal, "retry",
@@ -117,6 +126,7 @@ func fetch(ctx context.Context, fonte sdk.Fonte) (iter.Seq2[sdk.Envelope, error]
 		}
 
 		if resp.StatusCode == http.StatusOK {
+			release = cancelAttempt
 			break
 		}
 
@@ -138,6 +148,7 @@ func fetch(ctx context.Context, fonte sdk.Fonte) (iter.Seq2[sdk.Envelope, error]
 				"status", resp.StatusCode,
 				"backoff", backoff)
 			_ = resp.Body.Close()
+			cancelAttempt()
 			time.Sleep(backoff)
 			continue
 		}
@@ -145,6 +156,7 @@ func fetch(ctx context.Context, fonte sdk.Fonte) (iter.Seq2[sdk.Envelope, error]
 		// Non-retryable status code (400, 404, etc.)
 		body, _ := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
+		cancelAttempt()
 		cancelTotal()
 		return nil, fmt.Errorf("http %d: %s", resp.StatusCode, string(body))
 	}
@@ -154,11 +166,13 @@ func fetch(ctx context.Context, fonte sdk.Fonte) (iter.Seq2[sdk.Envelope, error]
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
 			_ = resp.Body.Close()
+			release()
 			cancelTotal()
 			return nil, fmt.Errorf("read body for guard: %w", err)
 		}
 		if err := fonte.Guard(resp.StatusCode, body); err != nil {
 			_ = resp.Body.Close()
+			release()
 			cancelTotal()
 			return nil, fmt.Errorf("guard rejected response: %w", err)
 		}
@@ -169,10 +183,11 @@ func fetch(ctx context.Context, fonte sdk.Fonte) (iter.Seq2[sdk.Envelope, error]
 	return func(yield func(sdk.Envelope, error) bool) {
 		startTime := time.Now()
 		defer func() { _ = resp.Body.Close() }()
+		defer release()
 		defer cancelTotal()
 
 		// Decode based on format
-		decoder := NewDecoder(resp.Body, fonte.Format)
+		decoder := NewDecoder(resp.Body, fonte)
 		if decoder == nil {
 			yield(sdk.Envelope{}, fmt.Errorf("unsupported format: %s", fonte.Format))
 			return
@@ -187,14 +202,14 @@ func fetch(ctx context.Context, fonte sdk.Fonte) (iter.Seq2[sdk.Envelope, error]
 			}
 
 			env, err := decoder.Next(ctxTotal)
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				break
 			}
 			if err != nil {
-				if !yield(sdk.Envelope{}, err) {
-					return
-				}
-				continue
+				// The underlying stream cannot recover: a syntax error or a
+				// read failure repeats forever. Report it once and stop.
+				yield(sdk.Envelope{}, err)
+				return
 			}
 
 			if !yield(env, nil) {
@@ -259,10 +274,12 @@ type Decoder interface {
 	Next(ctx context.Context) (sdk.Envelope, error)
 }
 
-func NewDecoder(r io.Reader, format string) Decoder {
-	switch format {
+// NewDecoder builds a Decoder for fonte.Format reading from r.
+// It returns nil if the format is not supported.
+func NewDecoder(r io.Reader, fonte sdk.Fonte) Decoder {
+	switch fonte.Format {
 	case "csv":
-		return &csvDecoder{r: csv.NewReader(r)}
+		return &csvDecoder{r: csv.NewReader(r), noHeader: fonte.NoHeader}
 	case "ndjson":
 		return &ndjsonDecoder{dec: json.NewDecoder(r)}
 	case "json":
@@ -272,36 +289,41 @@ func NewDecoder(r io.Reader, format string) Decoder {
 	}
 }
 
+// csvDecoder turns CSV rows into Envelopes.
+//
+// By default the first row is consumed as the column names and every
+// following row is keyed by them, so a file with a header and N data rows
+// yields N Envelopes. With noHeader set, no row is treated as special and
+// every row is keyed positionally as field_0, field_1, ... yielding one
+// Envelope per line.
 type csvDecoder struct {
-	r       *csv.Reader
-	headers []string
-	first   bool
+	r        *csv.Reader
+	headers  []string
+	noHeader bool
 }
 
 func (d *csvDecoder) Next(ctx context.Context) (sdk.Envelope, error) {
+	if !d.noHeader && d.headers == nil {
+		header, err := d.r.Read()
+		if err != nil {
+			return sdk.Envelope{}, err
+		}
+		d.headers = header
+	}
+
 	record, err := d.r.Read()
 	if err != nil {
 		return sdk.Envelope{}, err
 	}
 
-	if !d.first {
-		d.headers = record
-		d.first = true
-		// Return header as first line
-		obj := make(map[string]string)
-		for i, header := range d.headers {
-			obj[fmt.Sprintf("field_%d", i)] = header
+	obj := make(map[string]string, len(record))
+	for i, value := range record {
+		if d.noHeader {
+			obj[fmt.Sprintf("field_%d", i)] = value
+			continue
 		}
-		return sdk.Envelope{
-			Payload: obj,
-		}, nil
-	}
-
-	// Convert CSV record to JSON object using headers as keys
-	obj := make(map[string]string)
-	for i, header := range d.headers {
-		if i < len(record) {
-			obj[header] = record[i]
+		if i < len(d.headers) {
+			obj[d.headers[i]] = value
 		}
 	}
 
