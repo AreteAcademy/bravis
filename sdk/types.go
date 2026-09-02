@@ -1,0 +1,133 @@
+package sdk
+
+import (
+	"crypto/sha1"
+	"fmt"
+	"io"
+	"time"
+
+	"github.com/google/uuid"
+)
+
+// Envelope is the contract between extract and load.
+// It represents a single record extracted from a source.
+type Envelope struct {
+	Provider  string    // identifies the data provider (e.g., "example_gov", "api_platform")
+	Entity    string    // identifies the entity type (e.g., "transactions", "users")
+	SourceKey string    // unique key from the source; empty is an error
+	RecordTS  string    // timestamp when the record was created at source; must be set before Load
+	Payload   any       // the actual data; will become the JSON column
+}
+
+// IngestionID returns the deterministic UUID v5 for this envelope.
+// This is the only place that computes the UUID; it's the idempotency key.
+//
+// The UUID is computed from:
+//   - namespace: fixed UUID for ingestion operations
+//   - key: "provider|entity|source_key|record_ts" (pipe-separated)
+//
+// Changing this function breaks idempotency with all prior loads.
+func (e *Envelope) IngestionID() (string, error) {
+	if e.SourceKey == "" {
+		return "", fmt.Errorf("SourceKey cannot be empty")
+	}
+
+	const ingestNS = "e3a4f8c0-1b9d-4ea0-9c2e-77f6a6c4a4d7"
+	ns, err := uuid.Parse(ingestNS)
+	if err != nil {
+		return "", err
+	}
+
+	key := fmt.Sprintf("%s|%s|%s|%s", e.Provider, e.Entity, e.SourceKey, e.RecordTS)
+	id := uuid.NewSHA1(ns, []byte(key))
+	return id.String(), nil
+}
+
+// LoadResult reports the outcome of a load operation.
+type LoadResult struct {
+	RowsLoaded    int64         // number of rows written to BigQuery
+	BytesStaged   int64         // number of bytes in the staging format
+	Duration      time.Duration // total time from start to finish
+	Strategy      string        // "inline" or "gcs"
+	Format        string        // "ndjson", "csv", or "parquet"
+	ErrorRows     []string      // error descriptions from BigQuery per row (truncated)
+}
+
+// RetryConfig controls retry behavior for extract.
+type RetryConfig struct {
+	MaxAttempts   int           // default: 3
+	InitialBackoff time.Duration // default: 1s
+	MaxBackoff    time.Duration // default: 60s
+	JitterFraction float64        // [0, 1]; default: 0.1
+}
+
+// LoadConfig controls load behavior.
+type LoadConfig struct {
+	ProjectID         string // GCP project ID; required
+	Dataset           string // BigQuery dataset; default: "landing"
+	StagingBucket     string // GCS bucket for staging; default: "{projectID}-bravis-staging"
+	StagingPrefix     string // prefix for staged files; default: "extracts/"
+	ThresholdForGCS   int    // row count above which to use GCS; default: 5000
+	Format            string // "ndjson", "csv", or "parquet"; default: "ndjson"
+	DeleteAfterLoad   bool   // delete staged file after successful load; default: true
+	WriteDisposition  string // WRITE_APPEND only; always validate this
+}
+
+// ExtractOption is a functional option for extract.Fonte.
+type ExtractOption func(*Fonte)
+
+// Fonte describes the source for extraction.
+type Fonte struct {
+	URL           string        // required
+	Method        string        // default: GET
+	Body          io.Reader     // for POST/PUT
+	Header        map[string][]string
+	Timeout       time.Duration // per attempt; default: 30s
+	TotalTimeout  time.Duration // total; default: 5 minutes
+	RetryConfig   *RetryConfig  // nil uses defaults
+	RateLimiter   any           // *rate.Limiter or nil
+	Guard         func(status int, body []byte) error
+	Format        string        // "json", "ndjson", "csv", "xml"; auto-detected if omitted
+	HasHeader     bool          // for CSV; ignored for others
+	CursorKey     string        // for pagination; e.g., "next_page"
+	OffsetKey     string        // alternative to cursor
+	PageSize      int           // page size if using offset
+}
+
+// LoadOption is a functional option for load.
+type LoadOption func(*LoadConfig)
+
+// WithProjectID sets the GCP project for BigQuery operations.
+func WithProjectID(id string) LoadOption {
+	return func(cfg *LoadConfig) {
+		cfg.ProjectID = id
+	}
+}
+
+// WithDataset sets the target BigQuery dataset.
+func WithDataset(name string) LoadOption {
+	return func(cfg *LoadConfig) {
+		cfg.Dataset = name
+	}
+}
+
+// WithStagingBucket sets the GCS bucket for staging.
+func WithStagingBucket(bucket string) LoadOption {
+	return func(cfg *LoadConfig) {
+		cfg.StagingBucket = bucket
+	}
+}
+
+// WithFormat sets the staging format: ndjson, csv, or parquet.
+func WithFormat(format string) LoadOption {
+	return func(cfg *LoadConfig) {
+		cfg.Format = format
+	}
+}
+
+// WithThresholdForGCS sets the row count above which to use GCS staging.
+func WithThresholdForGCS(threshold int) LoadOption {
+	return func(cfg *LoadConfig) {
+		cfg.ThresholdForGCS = threshold
+	}
+}
