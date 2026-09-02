@@ -24,15 +24,15 @@ type Loader struct {
 // New creates a new Loader.
 func New(ctx context.Context, cfg *sdk.LoadConfig) (*Loader, error) {
 	if cfg.ProjectID == "" {
-		return nil, fmt.Errorf("ProjectID is required")
+		return nil, fmt.Errorf("projectID is required")
 	}
 
 	if cfg.Dataset == "" {
-		return nil, fmt.Errorf("Dataset is required")
+		return nil, fmt.Errorf("dataset is required")
 	}
 
 	if cfg.Table == "" {
-		return nil, fmt.Errorf("Table is required")
+		return nil, fmt.Errorf("table is required")
 	}
 
 	if cfg.StagingBucket == "" {
@@ -227,8 +227,8 @@ func (l *Loader) loadViaGCS(ctx context.Context, table *bigquery.Table, envelope
 	for _, env := range envelopes {
 		data, err := json.Marshal(env.Payload)
 		if err != nil {
-			wc.Close()
-			obj.Delete(ctx)
+			_ = wc.Close()
+			_ = obj.Delete(ctx)
 			return 0, fmt.Errorf("marshal row: %w", err)
 		}
 
@@ -236,15 +236,15 @@ func (l *Loader) loadViaGCS(ctx context.Context, table *bigquery.Table, envelope
 
 		n, err := wc.Write(data)
 		if err != nil {
-			wc.Close()
-			obj.Delete(ctx)
+			_ = wc.Close()
+			_ = obj.Delete(ctx)
 			return 0, fmt.Errorf("write to gcs: %w", err)
 		}
 		bytesWritten += int64(n)
 	}
 
 	if err := wc.Close(); err != nil {
-		obj.Delete(ctx)
+		_ = obj.Delete(ctx)
 		return 0, fmt.Errorf("close gcs writer: %w", err)
 	}
 
@@ -256,24 +256,24 @@ func (l *Loader) loadViaGCS(ctx context.Context, table *bigquery.Table, envelope
 
 	job, err := loader.Run(ctx)
 	if err != nil {
-		obj.Delete(ctx)
+		_ = obj.Delete(ctx)
 		return 0, fmt.Errorf("start load job: %w", err)
 	}
 
 	status, err := job.Wait(ctx)
 	if err != nil {
-		obj.Delete(ctx)
+		_ = obj.Delete(ctx)
 		return 0, fmt.Errorf("wait for load job: %w", err)
 	}
 
 	if status.Err() != nil {
-		obj.Delete(ctx)
+		_ = obj.Delete(ctx)
 		return 0, fmt.Errorf("load job failed: %w", status.Err())
 	}
 
 	// Delete staging file if successful
 	if l.cfg.DeleteAfterLoad {
-		obj.Delete(ctx)
+		_ = obj.Delete(ctx)
 	}
 
 	return bytesWritten, nil

@@ -23,7 +23,7 @@ func TestRetryOn429(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "application/x-ndjson")
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, `{"data": "value"}`)
+		_, _ = fmt.Fprintf(w, `{"data": "value"}`)
 	}))
 	defer server.Close()
 
@@ -54,7 +54,7 @@ func TestNoRetryOn400(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		attempt++
 		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(w, `invalid request`)
+		_, _ = fmt.Fprintf(w, `invalid request`)
 	}))
 	defer server.Close()
 
@@ -82,7 +82,7 @@ func TestRetryAfterHeader(t *testing.T) {
 			return
 		}
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, `{"data": "value"}`)
+		_, _ = fmt.Fprintf(w, `{"data": "value"}`)
 	}))
 	defer server.Close()
 
@@ -133,7 +133,7 @@ func TestGuardFunction(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, `not json at all`)
+		_, _ = fmt.Fprintf(w, `not json at all`)
 	}))
 	defer server.Close()
 
@@ -163,7 +163,7 @@ func TestCSVWithoutHeader(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/csv")
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, "name,age\nAlice,30\nBob,25")
+		_, _ = fmt.Fprintf(w, "name,age\nAlice,30\nBob,25")
 	}))
 	defer server.Close()
 
@@ -192,11 +192,12 @@ func TestPagination(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		pages++
 		w.WriteHeader(http.StatusOK)
-		if pages == 1 {
+		switch pages {
+		case 1:
 			w.Header().Set("Link", `<http://example.com?page=2>; rel="next"`)
-			fmt.Fprintf(w, `{"id": 1}`)
-		} else if pages == 2 {
-			fmt.Fprintf(w, `{"id": 2}`)
+			_, _ = fmt.Fprintf(w, `{"id": 1}`)
+		case 2:
+			_, _ = fmt.Fprintf(w, `{"id": 2}`)
 		}
 	}))
 	defer server.Close()
@@ -209,7 +210,7 @@ func TestPagination(t *testing.T) {
 func TestContextCancellation(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		for i := 0; i < 100; i++ {
-			fmt.Fprintf(w, `{"id": %d}\n`, i)
+			_, _ = fmt.Fprintf(w, `{"id": %d}\n`, i)
 		}
 	}))
 	defer server.Close()

@@ -76,12 +76,11 @@ jobs:
           echo "✅ go mod tidy OK"
 
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v3
+        uses: golangci/golangci-lint-action@v8
         with:
-          version: latest
+          version: v2.13.2
           working-directory: sdk
           args: --timeout=5m
-          skip-pkg-cache: true
 
   security:
     name: Security Scan

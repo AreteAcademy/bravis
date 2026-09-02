@@ -137,14 +137,14 @@ func fetch(ctx context.Context, fonte sdk.Fonte) (iter.Seq2[sdk.Envelope, error]
 				"attempt", attempt+1,
 				"status", resp.StatusCode,
 				"backoff", backoff)
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			time.Sleep(backoff)
 			continue
 		}
 
 		// Non-retryable status code (400, 404, etc.)
 		body, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		cancelTotal()
 		return nil, fmt.Errorf("http %d: %s", resp.StatusCode, string(body))
 	}
@@ -153,12 +153,12 @@ func fetch(ctx context.Context, fonte sdk.Fonte) (iter.Seq2[sdk.Envelope, error]
 	if fonte.Guard != nil {
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			cancelTotal()
 			return nil, fmt.Errorf("read body for guard: %w", err)
 		}
 		if err := fonte.Guard(resp.StatusCode, body); err != nil {
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			cancelTotal()
 			return nil, fmt.Errorf("guard rejected response: %w", err)
 		}
@@ -168,7 +168,7 @@ func fetch(ctx context.Context, fonte sdk.Fonte) (iter.Seq2[sdk.Envelope, error]
 
 	return func(yield func(sdk.Envelope, error) bool) {
 		startTime := time.Now()
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 		defer cancelTotal()
 
 		// Decode based on format
@@ -273,10 +273,9 @@ func NewDecoder(r io.Reader, format string) Decoder {
 }
 
 type csvDecoder struct {
-	r        *csv.Reader
-	headers  []string
-	first    bool
-	returned bool
+	r       *csv.Reader
+	headers []string
+	first   bool
 }
 
 func (d *csvDecoder) Next(ctx context.Context) (sdk.Envelope, error) {

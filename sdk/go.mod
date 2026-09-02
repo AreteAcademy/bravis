@@ -1,6 +1,6 @@
 module github.com/AreteAcademy/bravis/sdk
 
-go 1.25.7
+go 1.23
 
 require (
 	cloud.google.com/go/bigquery v1.50.0
