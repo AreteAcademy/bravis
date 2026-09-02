@@ -1,0 +1,42 @@
+version: 2
+updates:
+  # Go dependencies
+  - package-ecosystem: "gomod"
+    directory: "/sdk"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "03:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "AreteAcademy/maintainers"
+    assignees:
+      - "AreteAcademy/maintainers"
+    labels:
+      - "dependencies"
+      - "go"
+    allow:
+      - dependency-type: "direct"
+      - dependency-type: "indirect"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    pull-request-branch-name:
+      separator: "/"
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "04:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "AreteAcademy/maintainers"
+    labels:
+      - "ci"
+      - "github-actions"
+    commit-message:
+      prefix: "ci"
+      include: "scope"

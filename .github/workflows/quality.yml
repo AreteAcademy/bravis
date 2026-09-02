@@ -1,0 +1,139 @@
+name: Code Quality
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
+
+jobs:
+  quality:
+    name: Quality Checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: true
+
+      - name: Run gofmt
+        run: |
+          cd sdk
+          files=$(go fmt ./...)
+          if [ -n "$files" ]; then
+            echo "❌ gofmt issues found:"
+            echo "$files"
+            exit 1
+          fi
+          echo "✅ gofmt: OK"
+
+      - name: Run go vet
+        run: |
+          cd sdk
+          go vet ./...
+          echo "✅ go vet: OK"
+
+      - name: Check test coverage
+        id: coverage
+        run: |
+          cd sdk
+          go test -v -coverprofile=coverage.out ./...
+          coverage=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | sed 's/%//')
+          echo "coverage=$coverage" >> $GITHUB_OUTPUT
+          echo "✅ Coverage: ${coverage}%"
+
+      - name: Comment PR with coverage
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const coverage = '${{ steps.coverage.outputs.coverage }}';
+            const color = coverage >= 80 ? '🟢' : coverage >= 60 ? '🟡' : '🔴';
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## Code Quality Report\n\n${color} **Coverage:** ${coverage}%\n- ✅ gofmt\n- ✅ go vet\n- ✅ tests passing`
+            })
+        continue-on-error: true
+
+  # Generate badge
+  coverage-badge:
+    name: Update Coverage Badge
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: quality
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: true
+
+      - name: Generate coverage badge
+        run: |
+          cd sdk
+          go test -coverprofile=coverage.out ./...
+          coverage=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | sed 's/%//')
+
+          # Determine color
+          if (( $(echo "$coverage >= 80" | bc -l) )); then
+            color="brightgreen"
+          elif (( $(echo "$coverage >= 60" | bc -l) )); then
+            color="yellow"
+          else
+            color="red"
+          fi
+
+          echo "Coverage: ${coverage}% (color: ${color})"
+
+          # Create badges directory
+          mkdir -p badges
+
+          # Create SVG badge
+          cat > badges/coverage.svg << EOF
+          <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="132" height="20">
+            <linearGradient id="b" x2="0" y2="100%">
+              <stop offset="0" stop-color="#bbb" stop-opacity=".1"/>
+              <stop offset="1" stop-opacity=".1"/>
+            </linearGradient>
+            <clipPath id="a">
+              <rect width="132" height="20" rx="3"/>
+            </clipPath>
+            <g clip-path="url(#a)">
+              <path fill="#555" d="M0 0h98v20H0z"/>
+              <path fill="${color}" d="M98 0h34v20H98z"/>
+              <path fill="url(#b)" d="M0 0h132v20H0z"/>
+            </g>
+            <g fill="#fff" text-anchor="middle" font-family="DejaVu Sans,Verdana,Geneva,sans-serif" font-size="11">
+              <text x="49" y="15" fill="#010101" fill-opacity=".3">coverage</text>
+              <text x="49" y="14">coverage</text>
+              <text x="114" y="15" fill="#010101" fill-opacity=".3">${coverage}%</text>
+              <text x="114" y="14">${coverage}%</text>
+            </g>
+          </svg>
+          EOF
+
+          echo "Badge created"
+
+      - name: Commit and push badge
+        run: |
+          cd sdk
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+
+          if [ -f badges/coverage.svg ]; then
+            git add badges/coverage.svg
+            git diff --quiet && git diff --staged --quiet || (
+              git commit -m "chore: update coverage badge" &&
+              git push
+            )
+          fi
+        continue-on-error: true

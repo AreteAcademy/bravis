@@ -1,0 +1,137 @@
+name: Test & Lint
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: ['1.25']
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go-version }}
+          cache: true
+
+      - name: Run tests
+        run: |
+          cd sdk
+          go test -v -race -coverprofile=coverage.out ./...
+          go tool cover -func=coverage.out
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./sdk/coverage.out
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: true
+
+      - name: Run go fmt
+        run: |
+          cd sdk
+          if [ "$(go fmt ./... | wc -l)" -gt 0 ]; then
+            echo "❌ gofmt found issues:"
+            go fmt ./...
+            exit 1
+          fi
+          echo "✅ gofmt OK"
+
+      - name: Run go vet
+        run: |
+          cd sdk
+          go vet ./...
+          echo "✅ go vet OK"
+
+      - name: Run go mod tidy
+        run: |
+          cd sdk
+          go mod tidy
+          git diff --exit-code go.mod go.sum || (echo "❌ go mod tidy not run"; exit 1)
+          echo "✅ go mod tidy OK"
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v3
+        with:
+          version: latest
+          working-directory: sdk
+          args: --timeout=5m
+          skip-pkg-cache: true
+
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+
+      - name: Run Gosec Security Scanner
+        uses: securego/gosec@master
+        with:
+          args: '-no-fail -fmt sarif -out gosec-results.sarif ./sdk/...'
+
+      - name: Upload Gosec results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: gosec-results.sarif
+          wait-for-processing: true
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: [test, lint]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: true
+
+      - name: Build SDK
+        run: |
+          cd sdk
+          go build ./...
+          echo "✅ Build successful"
+
+      - name: Build examples
+        run: |
+          for f in examples/*.go; do
+            if [[ "$f" != *"_test.go" ]]; then
+              echo "Building $f..."
+              go build -o /tmp/example_build "$f" || true
+            fi
+          done
+          echo "✅ Examples compiled (or skipped)"

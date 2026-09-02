@@ -1,0 +1,81 @@
+name: Generate Release Notes
+
+on:
+  release:
+    types: [created]
+
+jobs:
+  release-notes:
+    name: Generate Release Notes
+    runs-on: ubuntu-latest
+    if: startsWith(github.event.release.tag_name, 'sdk/v')
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract version
+        id: version
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          VERSION="${TAG#sdk/}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Get commits since last tag
+          LAST_TAG=$(git describe --tags --abbrev=0 ${{ github.event.release.tag_name }}^ 2>/dev/null || echo "")
+
+          if [ -z "$LAST_TAG" ]; then
+            # First release
+            COMMITS=$(git log --oneline ${{ github.event.release.tag_name }} -- sdk/ | head -20)
+          else
+            COMMITS=$(git log --oneline $LAST_TAG..${{ github.event.release.tag_name }} -- sdk/ | head -20)
+          fi
+
+          echo "commits<<EOF" >> $GITHUB_OUTPUT
+          echo "$COMMITS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Update release notes
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.event.release.tag_name }}
+          body: |
+            # 🚀 SDK ${{ steps.version.outputs.version }}
+
+            ## Installation
+            ```bash
+            go get github.com/AreteAcademy/bravis/sdk@${{ steps.version.outputs.version }}
+            ```
+
+            ## Documentation
+            - [SDK Reference](https://pkg.go.dev/github.com/AreteAcademy/bravis/sdk@${{ steps.version.outputs.version }})
+            - [Extract Package](https://pkg.go.dev/github.com/AreteAcademy/bravis/sdk/extract@${{ steps.version.outputs.version }})
+            - [Load Package](https://pkg.go.dev/github.com/AreteAcademy/bravis/sdk/load@${{ steps.version.outputs.version }})
+            - [Examples](https://github.com/AreteAcademy/bravis/tree/main/examples)
+
+            ## Recent Changes
+            ```
+            ${{ steps.changelog.outputs.commits }}
+            ```
+
+            ## Testing
+            ```bash
+            go test github.com/AreteAcademy/bravis/sdk/...@${{ steps.version.outputs.version }}
+            ```
+
+            ## Features
+            - 📤 Extract: HTTP data collection with retry, timeout, format handling
+            - 📥 Load: BigQuery writer with automatic strategy selection
+            - 🔐 Idempotency: Deterministic UUID v5 ingestion IDs
+            - 🎯 Flexible: You define the schema (no opinions)
+            - 📊 Optional metadata: _bravis_* fields for tracking
+
+            ---
+            **Powered by [Bravis](https://github.com/AreteAcademy/bravis)**
+          draft: false
+          prerelease: false

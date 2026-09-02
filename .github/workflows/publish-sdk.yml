@@ -1,0 +1,154 @@
+name: Publish SDK
+
+on:
+  push:
+    tags:
+      - 'sdk/v*'
+
+permissions:
+  contents: write
+
+jobs:
+  validate-tag:
+    name: Validate SDK Tag
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract version from tag
+        id: tag
+        run: |
+          TAG="${{ github.ref }}"
+          VERSION="${TAG#refs/tags/sdk/}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag_name=sdk/$VERSION" >> $GITHUB_OUTPUT
+          echo "Parsed version: $VERSION"
+
+      - name: Validate semver
+        run: |
+          VERSION="${{ steps.tag.outputs.version }}"
+          if ! [[ "$VERSION" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+)?(\+[a-zA-Z0-9]+)?$ ]]; then
+            echo "❌ Invalid semver: $VERSION"
+            exit 1
+          fi
+          echo "✅ Valid semver: $VERSION"
+
+  test-before-publish:
+    name: Run Tests Before Publishing
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: true
+
+      - name: Run SDK tests
+        run: |
+          cd sdk
+          go test -v -race ./...
+
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [validate-tag, test-before-publish]
+    outputs:
+      version: ${{ steps.tag.outputs.version }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract version
+        id: tag
+        run: |
+          TAG="${{ github.ref }}"
+          VERSION="${TAG#refs/tags/sdk/}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Extract changelog
+        id: changelog
+        run: |
+          # Extract from CHANGELOG.md or git log
+          echo "notes=SDK Release: ${{ steps.tag.outputs.version }}" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: SDK ${{ steps.tag.outputs.version }}
+          body: |
+            # Bravis SDK ${{ steps.tag.outputs.version }}
+
+            ## Installation
+            ```bash
+            go get github.com/AreteAcademy/bravis/sdk@${{ steps.tag.outputs.version }}
+            ```
+
+            ## Documentation
+            - [pkg.go.dev](https://pkg.go.dev/github.com/AreteAcademy/bravis/sdk)
+            - [GitHub](https://github.com/AreteAcademy/bravis/tree/main/sdk)
+
+            ## What's New
+            See commit history for details.
+          draft: false
+          prerelease: false
+
+  notify-pkg-go-dev:
+    name: Notify pkg.go.dev
+    runs-on: ubuntu-latest
+    needs: [create-release]
+
+    steps:
+      - name: Notify Go Proxy
+        run: |
+          VERSION="${{ needs.create-release.outputs.version }}"
+          MODULE="github.com/AreteAcademy/bravis/sdk"
+
+          echo "🔔 Notifying Go proxy about $MODULE@$VERSION"
+
+          # Force proxy to fetch the new version
+          curl -s "https://proxy.golang.org/$MODULE/@v/$VERSION.info" | head -20 || true
+
+          # Also try direct access
+          curl -s "https://pkg.go.dev/$MODULE@$VERSION" | head -20 || true
+
+          echo ""
+          echo "✅ Notification sent. pkg.go.dev will index within 5-10 minutes"
+          echo "📍 Check status at: https://pkg.go.dev/github.com/AreteAcademy/bravis/sdk"
+
+  verify-publication:
+    name: Verify Publication
+    runs-on: ubuntu-latest
+    needs: [create-release, notify-pkg-go-dev]
+    timeout-minutes: 10
+
+    steps:
+      - name: Wait for pkg.go.dev indexing
+        run: sleep 30
+
+      - name: Verify SDK is available
+        run: |
+          VERSION="${{ needs.create-release.outputs.version }}"
+          MODULE="github.com/AreteAcademy/bravis/sdk"
+
+          echo "🔍 Verifying publication of $MODULE@$VERSION..."
+
+          # Try to fetch the module info
+          for i in {1..10}; do
+            echo "Attempt $i..."
+            if curl -s "https://proxy.golang.org/$MODULE/@v/$VERSION.info" | grep -q '"Version"'; then
+              echo "✅ Module found on Go proxy!"
+              exit 0
+            fi
+            sleep 5
+          done
+
+          echo "⚠️  Module not yet indexed on Go proxy (might take a few more minutes)"
+          echo "📍 Check: https://pkg.go.dev/github.com/AreteAcademy/bravis/sdk@$VERSION"
+          exit 0  # Don't fail, indexing can take time
