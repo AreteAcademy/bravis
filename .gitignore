@@ -7,3 +7,10 @@
 # Identidade visual de uma instalacao especifica. O modelo versionado e
 # `brand.example.yaml`; o arquivo real e do cliente, nao do repositorio.
 /brand.yaml
+
+# go.work lets you point cmd/bravis at the local sdk while developing.
+# It stays out of the repo: cmd/bravis/go.mod must require the published
+# SDK, because `go install pkg@version` refuses a module carrying replace
+# directives -- which is exactly how the CLI is meant to be installed.
+go.work
+go.work.sum

@@ -16,6 +16,15 @@ go build -o bravis
 ./bravis --help
 ```
 
+To develop the CLI against your local SDK changes, create a `go.work` at the
+repo root (it is gitignored — `cmd/bravis/go.mod` must keep requiring the
+published SDK, since `go install pkg@version` rejects modules with `replace`
+directives):
+
+```bash
+go work init ./sdk ./cmd/bravis
+```
+
 ## Commands
 
 ### extract

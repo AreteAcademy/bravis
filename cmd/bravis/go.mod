@@ -3,7 +3,7 @@ module github.com/AreteAcademy/bravis/cmd/bravis
 go 1.23
 
 require (
-	github.com/AreteAcademy/bravis/sdk v0.1.0
+	github.com/AreteAcademy/bravis/sdk v0.1.1
 	github.com/spf13/cobra v1.10.2
 )
 
@@ -50,5 +50,3 @@ require (
 	google.golang.org/grpc v1.54.0 // indirect
 	google.golang.org/protobuf v1.30.0 // indirect
 )
-
-replace github.com/AreteAcademy/bravis/sdk => ../../sdk

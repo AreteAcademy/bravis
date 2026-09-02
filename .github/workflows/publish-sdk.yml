@@ -227,6 +227,11 @@ jobs:
             _, _ = extract.CSV(context.Background(), sdk.Fonte{URL: "http://x"})
           }
           EOF
+          # go mod tidy, not go get: go get resolves dependencies for the
+          # named package only, so importing sdk/load leaves its bigquery and
+          # storage deps out of go.sum. tidy is what a real user runs.
+          GOPROXY=https://proxy.golang.org go mod tidy
           GOPROXY=https://proxy.golang.org go get "$MODULE@$VERSION"
+          GOPROXY=https://proxy.golang.org go mod tidy
           GOPROXY=https://proxy.golang.org go build ./...
           echo "✅ A clean consumer compiles against $MODULE@$VERSION"
