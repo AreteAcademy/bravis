@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"iter"
 	"log"
 	"time"
 
@@ -46,7 +47,7 @@ Examples:
 			},
 		}
 
-		var lines interface{}
+		var lines iter.Seq2[sdk.Envelope, error]
 		var err error
 
 		switch format {
@@ -65,7 +66,7 @@ Examples:
 		}
 
 		count := 0
-		for env, err := range lines.(interface{}) {
+		for env, err := range lines {
 			if err != nil {
 				if outputFormat == "json" {
 					fmt.Printf(`{"error":"row error","message":"%v"}\n`, err)
