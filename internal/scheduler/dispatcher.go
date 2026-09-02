@@ -17,9 +17,9 @@ import (
 
 	"github.com/google/uuid"
 
-	dom "github.com/zarvhq/bravis/internal/domain/run"
-	"github.com/zarvhq/bravis/internal/notify"
-	"github.com/zarvhq/bravis/internal/queue"
+	dom "github.com/AreteAcademy/bravis/internal/domain/run"
+	"github.com/AreteAcademy/bravis/internal/notify"
+	"github.com/AreteAcademy/bravis/internal/queue"
 )
 
 // Executar roda um Run. Injetado para que o dispatcher nao conheca executor,

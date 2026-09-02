@@ -3,7 +3,7 @@ package config
 import (
 	"os"
 
-	"github.com/zarvhq/bravis/internal/auth"
+	"github.com/AreteAcademy/bravis/internal/auth"
 	"strings"
 	"testing"
 	"time"

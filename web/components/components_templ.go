@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/zarvhq/bravis/internal/infrastructure/postgres"
+	"github.com/AreteAcademy/bravis/internal/infrastructure/postgres"
 )
 
 // Estado desenha o estado de um Run.

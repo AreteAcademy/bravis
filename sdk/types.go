@@ -1,7 +1,6 @@
 package sdk
 
 import (
-	"crypto/sha1"
 	"fmt"
 	"io"
 	"time"

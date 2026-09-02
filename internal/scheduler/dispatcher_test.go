@@ -15,11 +15,11 @@ import (
 
 	"github.com/google/uuid"
 
-	dom "github.com/zarvhq/bravis/internal/domain/run"
-	"github.com/zarvhq/bravis/internal/infrastructure/postgres"
-	"github.com/zarvhq/bravis/internal/notify"
-	"github.com/zarvhq/bravis/internal/queue"
-	"github.com/zarvhq/bravis/internal/scheduler"
+	dom "github.com/AreteAcademy/bravis/internal/domain/run"
+	"github.com/AreteAcademy/bravis/internal/infrastructure/postgres"
+	"github.com/AreteAcademy/bravis/internal/notify"
+	"github.com/AreteAcademy/bravis/internal/queue"
+	"github.com/AreteAcademy/bravis/internal/scheduler"
 )
 
 // Estes testes exigem Postgres. Sem BRAVIS_TEST_DATABASE_URL eles pulam, para

@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/zarvhq/bravis/internal/execution"
+	"github.com/AreteAcademy/bravis/internal/execution"
 )
 
 // API e o que o executor precisa do servidor. Interface no consumidor: e ela

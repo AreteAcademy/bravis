@@ -7,22 +7,22 @@
 
 [[redirects]]
   from = "/github"
-  to = "https://github.com/zarvhq/bravis"
+  to = "https://github.com/AreteAcademy/bravis"
   status = 301
 
 [[redirects]]
   from = "/docs"
-  to = "https://github.com/zarvhq/bravis/tree/main/docs"
+  to = "https://github.com/AreteAcademy/bravis/tree/main/docs"
   status = 301
 
 [[redirects]]
   from = "/issues"
-  to = "https://github.com/zarvhq/bravis/issues"
+  to = "https://github.com/AreteAcademy/bravis/issues"
   status = 301
 
 [[redirects]]
   from = "/discussions"
-  to = "https://github.com/zarvhq/bravis/discussions"
+  to = "https://github.com/AreteAcademy/bravis/discussions"
   status = 301
 
 [[headers]]

@@ -7,7 +7,7 @@
 package api
 
 import (
-	"github.com/zarvhq/bravis/internal/auth"
+	"github.com/AreteAcademy/bravis/internal/auth"
 	"log/slog"
 	"net/http"
 	"time"

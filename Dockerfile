@@ -53,7 +53,7 @@ ARG VERSAO=dev
 ARG COMMIT=""
 LABEL org.opencontainers.image.title="Bravis" \
       org.opencontainers.image.description="Engine de orquestracao e transformacao de dados" \
-      org.opencontainers.image.source="https://github.com/zarvhq/bravis" \
+      org.opencontainers.image.source="https://github.com/AreteAcademy/bravis" \
       org.opencontainers.image.version="${VERSAO}" \
       org.opencontainers.image.revision="${COMMIT}" \
       org.opencontainers.image.licenses="Apache-2.0"
@@ -71,7 +71,7 @@ ARG VERSAO=dev
 ARG COMMIT=""
 LABEL org.opencontainers.image.title="Bravis worker" \
       org.opencontainers.image.description="Bravis com shell, para executar os passos dos workflows" \
-      org.opencontainers.image.source="https://github.com/zarvhq/bravis" \
+      org.opencontainers.image.source="https://github.com/AreteAcademy/bravis" \
       org.opencontainers.image.version="${VERSAO}" \
       org.opencontainers.image.revision="${COMMIT}"
 RUN apk add --no-cache ca-certificates tini

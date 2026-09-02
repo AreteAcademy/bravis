@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/zarvhq/bravis/internal/execution"
+	"github.com/AreteAcademy/bravis/internal/execution"
 )
 
 // GoExecutor roda tasks Go registradas, dentro do proprio processo.

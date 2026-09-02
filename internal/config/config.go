@@ -9,7 +9,7 @@ package config
 
 import (
 	"fmt"
-	"github.com/zarvhq/bravis/internal/auth"
+	"github.com/AreteAcademy/bravis/internal/auth"
 	"os"
 	"strconv"
 	"strings"

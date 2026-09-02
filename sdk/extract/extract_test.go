@@ -2,16 +2,14 @@ package extract
 
 import (
 	"context"
-	"encoding/csv"
 	"fmt"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/zarvhq/bravis/sdk"
+	"github.com/AreteAcademy/bravis/sdk"
 )
 
 // TestRetryOn429 verifies retry on rate limit.

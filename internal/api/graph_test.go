@@ -12,11 +12,11 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/zarvhq/bravis/internal/api"
-	"github.com/zarvhq/bravis/internal/branding"
-	dom "github.com/zarvhq/bravis/internal/domain/run"
-	wf "github.com/zarvhq/bravis/internal/domain/workflow"
-	"github.com/zarvhq/bravis/internal/infrastructure/postgres"
+	"github.com/AreteAcademy/bravis/internal/api"
+	"github.com/AreteAcademy/bravis/internal/branding"
+	dom "github.com/AreteAcademy/bravis/internal/domain/run"
+	wf "github.com/AreteAcademy/bravis/internal/domain/workflow"
+	"github.com/AreteAcademy/bravis/internal/infrastructure/postgres"
 )
 
 // Grafo em diamante: b e c dependem de a, d depende dos dois. O formato importa

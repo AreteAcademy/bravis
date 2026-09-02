@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/zarvhq/bravis/internal/execution"
+	"github.com/AreteAcademy/bravis/internal/execution"
 )
 
 func tarefa(nome string) execution.Task {

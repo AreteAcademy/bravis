@@ -51,7 +51,7 @@ driver de Postgres não é adotado.**
 > repositório público, nada é publicado.
 >
 > Some-se que o Bravis vai sair da Zarv (decisão de 2026-09-01), então
-> `github.com/zarvhq/bravis` pode não ser o caminho definitivo. **Trocar o
+> `github.com/AreteAcademy/bravis` pode não ser o caminho definitivo. **Trocar o
 > caminho do módulo depois de publicar é quebra para todo consumidor.**
 >
 > Ordem correta:

@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/zarvhq/bravis/internal/execution"
+	"github.com/AreteAcademy/bravis/internal/execution"
 )
 
 // nomeContainer e fixo: o pod tem um container so, e um nome estavel torna o

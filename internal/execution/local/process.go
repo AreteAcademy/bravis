@@ -16,7 +16,7 @@ import (
 	"os/exec"
 	"sync"
 
-	"github.com/zarvhq/bravis/internal/execution"
+	"github.com/AreteAcademy/bravis/internal/execution"
 )
 
 // ProcessExecutor roda comandos arbitrarios como processos do host.

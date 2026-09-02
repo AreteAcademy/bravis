@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/zarvhq/bravis/internal/auth"
+	"github.com/AreteAcademy/bravis/internal/auth"
 )
 
 func credencial(t *testing.T, usuario, senha string) auth.Credencial {

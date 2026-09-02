@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/zarvhq/bravis/internal/infrastructure/postgres"
-	"github.com/zarvhq/bravis/web/pages"
+	"github.com/AreteAcademy/bravis/internal/infrastructure/postgres"
+	"github.com/AreteAcademy/bravis/web/pages"
 )
 
 func lista() []postgres.ResumoWorkflow {

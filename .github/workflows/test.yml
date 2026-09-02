@@ -86,6 +86,9 @@ jobs:
   security:
     name: Security Scan
     runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      contents: read
 
     steps:
       - uses: actions/checkout@v4
@@ -101,7 +104,7 @@ jobs:
           args: '-no-fail -fmt sarif -out gosec-results.sarif ./sdk/...'
 
       - name: Upload Gosec results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v2
+        uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: gosec-results.sarif
           wait-for-processing: true

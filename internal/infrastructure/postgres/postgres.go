@@ -15,7 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
 
-	"github.com/zarvhq/bravis/migrations"
+	"github.com/AreteAcademy/bravis/migrations"
 )
 
 // Pool envolve o pgxpool. O tipo existe para que o resto do sistema dependa de

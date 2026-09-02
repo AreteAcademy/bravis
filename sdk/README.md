@@ -28,7 +28,7 @@ package main
 import (
 	"context"
 	"log"
-	"github.com/zarvhq/bravis/sdk/extract"
+	"github.com/AreteAcademy/bravis/sdk/extract"
 )
 
 func main() {
@@ -59,8 +59,8 @@ package main
 import (
 	"context"
 	"log"
-	"github.com/zarvhq/bravis/sdk"
-	"github.com/zarvhq/bravis/sdk/load"
+	"github.com/AreteAcademy/bravis/sdk"
+	"github.com/AreteAcademy/bravis/sdk/load"
 )
 
 func main() {

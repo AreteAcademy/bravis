@@ -1,11 +1,9 @@
 package load
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"time"
 
@@ -252,7 +250,6 @@ func (l *Loader) loadViaGCS(ctx context.Context, table *bigquery.Table, envelope
 
 	// Load from GCS
 	gcsRef := bigquery.NewGCSReference(fmt.Sprintf("gs://%s/%s", l.cfg.StagingBucket, objName))
-	gcsRef.Format = bigquery.NDJSON
 
 	loader := table.LoaderFrom(gcsRef)
 	loader.WriteDisposition = bigquery.WriteAppend

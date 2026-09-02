@@ -43,6 +43,11 @@ func TestIngestionID(t *testing.T) {
 				return
 			}
 
+			// If we expect an error, stop here
+			if tt.wantErr {
+				return
+			}
+
 			// Call twice to verify determinism
 			id2, _ := tt.env.IngestionID()
 			if id1 != id2 {

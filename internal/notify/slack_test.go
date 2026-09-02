@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/zarvhq/bravis/internal/notify"
+	"github.com/AreteAcademy/bravis/internal/notify"
 )
 
 func capturar(t *testing.T, status int, resposta string) (*notify.Slack, *string) {

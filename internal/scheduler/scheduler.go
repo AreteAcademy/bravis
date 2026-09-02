@@ -10,10 +10,10 @@ import (
 
 	"github.com/google/uuid"
 
-	dom "github.com/zarvhq/bravis/internal/domain/run"
-	sch "github.com/zarvhq/bravis/internal/domain/schedule"
-	"github.com/zarvhq/bravis/internal/infrastructure/postgres"
-	"github.com/zarvhq/bravis/internal/queue"
+	dom "github.com/AreteAcademy/bravis/internal/domain/run"
+	sch "github.com/AreteAcademy/bravis/internal/domain/schedule"
+	"github.com/AreteAcademy/bravis/internal/infrastructure/postgres"
+	"github.com/AreteAcademy/bravis/internal/queue"
 )
 
 // Scheduler materializa slots em Runs e os enfileira.

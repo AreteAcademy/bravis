@@ -4,7 +4,7 @@ package graph
 import (
 	"fmt"
 
-	wf "github.com/zarvhq/bravis/internal/domain/workflow"
+	wf "github.com/AreteAcademy/bravis/internal/domain/workflow"
 )
 
 // Niveis devolve os nos agrupados por nivel topologico: tudo no nivel N pode

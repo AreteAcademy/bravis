@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/zarvhq/bravis/internal/execution"
-	k8s "github.com/zarvhq/bravis/internal/execution/kubernetes"
+	"github.com/AreteAcademy/bravis/internal/execution"
+	k8s "github.com/AreteAcademy/bravis/internal/execution/kubernetes"
 )
 
 func tarefa() execution.TaskExec {

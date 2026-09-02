@@ -6,7 +6,7 @@ Concluída em 2026-08-31. Validada 100% local.
 
 | item | onde |
 |---|---|
-| Go module (`github.com/zarvhq/bravis`, Go 1.25) | `go.mod` |
+| Go module (`github.com/AreteAcademy/bravis`, Go 1.25) | `go.mod` |
 | Configuration | `internal/config` |
 | Logging estruturado | `internal/observability` |
 | Health checks (`/health`, `/ready`) | `internal/api` |

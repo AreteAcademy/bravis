@@ -11,10 +11,10 @@ import (
 	"testing"
 	"time"
 
-	app "github.com/zarvhq/bravis/internal/application/execution"
-	wf "github.com/zarvhq/bravis/internal/domain/workflow"
-	"github.com/zarvhq/bravis/internal/execution"
-	"github.com/zarvhq/bravis/internal/execution/local"
+	app "github.com/AreteAcademy/bravis/internal/application/execution"
+	wf "github.com/AreteAcademy/bravis/internal/domain/workflow"
+	"github.com/AreteAcademy/bravis/internal/execution"
+	"github.com/AreteAcademy/bravis/internal/execution/local"
 )
 
 type coletor struct {

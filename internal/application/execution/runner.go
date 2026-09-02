@@ -14,10 +14,10 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/zarvhq/bravis/internal/domain/run"
-	wf "github.com/zarvhq/bravis/internal/domain/workflow"
-	"github.com/zarvhq/bravis/internal/execution"
-	"github.com/zarvhq/bravis/internal/graph"
+	"github.com/AreteAcademy/bravis/internal/domain/run"
+	wf "github.com/AreteAcademy/bravis/internal/domain/workflow"
+	"github.com/AreteAcademy/bravis/internal/execution"
+	"github.com/AreteAcademy/bravis/internal/graph"
 	"sync"
 	"time"
 )

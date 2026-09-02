@@ -6,9 +6,9 @@ import (
 
 	"github.com/google/uuid"
 
-	wf "github.com/zarvhq/bravis/internal/domain/workflow"
-	"github.com/zarvhq/bravis/internal/graph"
-	"github.com/zarvhq/bravis/internal/infrastructure/postgres"
+	wf "github.com/AreteAcademy/bravis/internal/domain/workflow"
+	"github.com/AreteAcademy/bravis/internal/graph"
+	"github.com/AreteAcademy/bravis/internal/infrastructure/postgres"
 )
 
 // Este arquivo implementa o fluxo da secao 20 do plano:

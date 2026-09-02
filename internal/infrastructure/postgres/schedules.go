@@ -8,8 +8,8 @@ import (
 
 	"github.com/google/uuid"
 
-	sch "github.com/zarvhq/bravis/internal/domain/schedule"
-	wf "github.com/zarvhq/bravis/internal/domain/workflow"
+	sch "github.com/AreteAcademy/bravis/internal/domain/schedule"
+	wf "github.com/AreteAcademy/bravis/internal/domain/workflow"
 )
 
 // WorkflowRepo persiste a definicao publicada de um workflow.

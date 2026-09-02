@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	wf "github.com/zarvhq/bravis/internal/domain/workflow"
+	wf "github.com/AreteAcademy/bravis/internal/domain/workflow"
 )
 
 func comParams(ps ...wf.Param) wf.Workflow {

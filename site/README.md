@@ -127,9 +127,9 @@ Para adicionar analytics (Plausible, Fathom, Umami):
 
 ## Links Úteis
 
-- GitHub: https://github.com/zarvhq/bravis
-- Docs: https://github.com/zarvhq/bravis/tree/main/docs
-- Discussões: https://github.com/zarvhq/bravis/discussions
+- GitHub: https://github.com/AreteAcademy/bravis
+- Docs: https://github.com/AreteAcademy/bravis/tree/main/docs
+- Discussões: https://github.com/AreteAcademy/bravis/discussions
 
 ## Licença
 

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/zarvhq/bravis/internal/execution"
+	"github.com/AreteAcademy/bravis/internal/execution"
 )
 
 func TestRenderizarSubstituiOsParams(t *testing.T) {

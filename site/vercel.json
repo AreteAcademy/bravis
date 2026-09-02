@@ -36,22 +36,22 @@
   "redirects": [
     {
       "source": "/github",
-      "destination": "https://github.com/zarvhq/bravis",
+      "destination": "https://github.com/AreteAcademy/bravis",
       "permanent": false
     },
     {
       "source": "/docs",
-      "destination": "https://github.com/zarvhq/bravis/tree/main/docs",
+      "destination": "https://github.com/AreteAcademy/bravis/tree/main/docs",
       "permanent": false
     },
     {
       "source": "/issues",
-      "destination": "https://github.com/zarvhq/bravis/issues",
+      "destination": "https://github.com/AreteAcademy/bravis/issues",
       "permanent": false
     },
     {
       "source": "/discussions",
-      "destination": "https://github.com/zarvhq/bravis/discussions",
+      "destination": "https://github.com/AreteAcademy/bravis/discussions",
       "permanent": false
     }
   ]

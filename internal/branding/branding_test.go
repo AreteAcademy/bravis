@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/zarvhq/bravis/internal/branding"
+	"github.com/AreteAcademy/bravis/internal/branding"
 )
 
 func escrever(t *testing.T, conteudo string) string {

@@ -1,4 +1,4 @@
-module github.com/zarvhq/bravis
+module github.com/AreteAcademy/bravis
 
 go 1.25.7
 
@@ -24,3 +24,5 @@ require (
 	golang.org/x/text v0.40.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
+
+replace github.com/AreteAcademy/bravis/sdk => ./sdk
