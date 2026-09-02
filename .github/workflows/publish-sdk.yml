@@ -54,6 +54,48 @@ jobs:
           cd sdk
           go test -v -race ./...
 
+      - name: Gate - a clean consumer must compile against this tree
+        run: |
+          # This runs BEFORE create-release and before the proxy is told the
+          # version exists, so a bad go.mod can still be fixed by deleting the
+          # tag. Once the proxy caches a version it is immutable forever --
+          # that is how v0.1.0 was burned.
+          MODULE="github.com/AreteAcademy/bravis/sdk"
+          SDK_DIR="$GITHUB_WORKSPACE/sdk"
+          mkdir -p /tmp/pretag && cd /tmp/pretag
+          cat > go.mod <<EOF
+          module example.com/pretag
+
+          go 1.23
+
+          require $MODULE v0.0.0
+
+          replace $MODULE => $SDK_DIR
+          EOF
+          cat > main.go <<EOF
+          package main
+
+          import (
+            "context"
+            "fmt"
+
+            "$MODULE"
+            "$MODULE/extract"
+            "$MODULE/load"
+          )
+
+          func main() {
+            _ = load.Loader{}
+            env := sdk.Envelope{Provider: "p", Entity: "e", SourceKey: "k"}
+            id, err := env.IngestionID()
+            fmt.Println(id, err)
+            _, _ = extract.CSV(context.Background(), sdk.Fonte{URL: "http://x"})
+          }
+          EOF
+          go mod tidy
+          go build ./...
+          echo "✅ Consumer gate passed"
+
   create-release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
@@ -78,7 +120,7 @@ jobs:
           echo "notes=SDK Release: ${{ steps.tag.outputs.version }}" >> $GITHUB_OUTPUT
 
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
           name: SDK ${{ steps.tag.outputs.version }}
@@ -92,7 +134,7 @@ jobs:
 
             ## Documentation
             - [pkg.go.dev](https://pkg.go.dev/github.com/AreteAcademy/bravis/sdk)
-            - [GitHub](https://github.com/AreteAcademy/bravis/tree/main/sdk)
+            - [GitHub](https://github.com/AreteAcademy/bravis/tree/master/sdk)
 
             ## What's New
             See commit history for details.
@@ -105,22 +147,22 @@ jobs:
     needs: [create-release]
 
     steps:
-      - name: Notify Go Proxy
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+
+      - name: Notify Go proxy
+        env:
+          VERSION: ${{ needs.create-release.outputs.version }}
         run: |
-          VERSION="${{ needs.create-release.outputs.version }}"
           MODULE="github.com/AreteAcademy/bravis/sdk"
-
-          echo "🔔 Notifying Go proxy about $MODULE@$VERSION"
-
-          # Force proxy to fetch the new version
-          curl -s "https://proxy.golang.org/$MODULE/@v/$VERSION.info" | head -20 || true
-
-          # Also try direct access
-          curl -s "https://pkg.go.dev/$MODULE@$VERSION" | head -20 || true
-
-          echo ""
-          echo "✅ Notification sent. pkg.go.dev will index within 5-10 minutes"
-          echo "📍 Check status at: https://pkg.go.dev/github.com/AreteAcademy/bravis/sdk"
+          echo "🔔 Asking the Go proxy to fetch $MODULE@$VERSION"
+          # go list drives the proxy through the module path's case encoding
+          # (AreteAcademy -> !arete!academy); hand-built curl URLs 404 silently.
+          GOPROXY=https://proxy.golang.org GOFLAGS=-mod=mod \
+            go list -m "$MODULE@$VERSION" || true
+          echo "✅ Notification sent"
 
   verify-publication:
     name: Verify Publication
@@ -129,26 +171,62 @@ jobs:
     timeout-minutes: 10
 
     steps:
-      - name: Wait for pkg.go.dev indexing
-        run: sleep 30
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
 
-      - name: Verify SDK is available
+      - name: Wait for the proxy to serve the version
+        env:
+          VERSION: ${{ needs.create-release.outputs.version }}
         run: |
-          VERSION="${{ needs.create-release.outputs.version }}"
           MODULE="github.com/AreteAcademy/bravis/sdk"
-
-          echo "🔍 Verifying publication of $MODULE@$VERSION..."
-
-          # Try to fetch the module info
-          for i in {1..10}; do
+          for i in $(seq 1 20); do
             echo "Attempt $i..."
-            if curl -s "https://proxy.golang.org/$MODULE/@v/$VERSION.info" | grep -q '"Version"'; then
-              echo "✅ Module found on Go proxy!"
+            if GOPROXY=https://proxy.golang.org go list -m "$MODULE@$VERSION"; then
+              echo "✅ Proxy is serving $MODULE@$VERSION"
               exit 0
             fi
-            sleep 5
+            sleep 15
           done
+          echo "❌ Proxy never served $MODULE@$VERSION"
+          exit 1
 
-          echo "⚠️  Module not yet indexed on Go proxy (might take a few more minutes)"
-          echo "📍 Check: https://pkg.go.dev/github.com/AreteAcademy/bravis/sdk@$VERSION"
-          exit 0  # Don't fail, indexing can take time
+      - name: Build a real consumer against the published module
+        env:
+          VERSION: ${{ needs.create-release.outputs.version }}
+        run: |
+          # v0.1.0 shipped a go.mod pinning a nonexistent revision, so every
+          # consumer's build broke while the release itself looked green.
+          # Compiling a throwaway module against the published artifact is
+          # the only check that catches that.
+          MODULE="github.com/AreteAcademy/bravis/sdk"
+          mkdir -p /tmp/consumer && cd /tmp/consumer
+          cat > go.mod <<EOF
+          module example.com/consumer
+
+          go 1.23
+          EOF
+          cat > main.go <<EOF
+          package main
+
+          import (
+            "context"
+            "fmt"
+
+            "$MODULE"
+            "$MODULE/extract"
+            "$MODULE/load"
+          )
+
+          func main() {
+            _ = load.Loader{}
+            env := sdk.Envelope{Provider: "p", Entity: "e", SourceKey: "k"}
+            id, err := env.IngestionID()
+            fmt.Println(id, err)
+            _, _ = extract.CSV(context.Background(), sdk.Fonte{URL: "http://x"})
+          }
+          EOF
+          GOPROXY=https://proxy.golang.org go get "$MODULE@$VERSION"
+          GOPROXY=https://proxy.golang.org go build ./...
+          echo "✅ A clean consumer compiles against $MODULE@$VERSION"
