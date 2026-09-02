@@ -2,6 +2,8 @@ package load
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -112,62 +114,192 @@ func TestStrategyFor(t *testing.T) {
 	}
 }
 
-// --- toRow ----------------------------------------------------------------
+// --- format validation (SDK_LOAD.md 3) ----------------------------------
 
-func TestToRowConvertsObject(t *testing.T) {
-	row, n, err := toRow(map[string]any{"amount": 100, "currency": "BRL"})
-	if err != nil {
-		t.Fatalf("toRow: %v", err)
+func TestSourceFormatAcceptsOnlyWhatWeWrite(t *testing.T) {
+	for _, ok := range []string{"", "ndjson"} {
+		if got, err := sourceFormat(ok); err != nil || got != bigquery.JSON {
+			t.Errorf("sourceFormat(%q) = %v, %v", ok, got, err)
+		}
 	}
-	if len(row) != 2 {
-		t.Fatalf("Expected 2 columns, got %d: %v", len(row), row)
+
+	// These were accepted while every path wrote NDJSON, so LoadResult
+	// reported a Parquet load that never happened.
+	for _, bad := range []string{"csv", "parquet"} {
+		_, err := sourceFormat(bad)
+		if err == nil {
+			t.Errorf("sourceFormat(%q) should be refused until implemented", bad)
+		} else if !strings.Contains(err.Error(), "not implemented") {
+			t.Errorf("error for %q should say it is not implemented, got %v", bad, err)
+		}
 	}
-	if row["currency"] != bigquery.Value("BRL") {
-		t.Errorf("currency = %v", row["currency"])
-	}
-	if n == 0 {
-		t.Error("Expected the encoded byte count to be reported")
+
+	if _, err := sourceFormat("avro"); err == nil {
+		t.Error("unknown formats should be refused")
 	}
 }
 
-func TestToRowRejectsNonObject(t *testing.T) {
-	// BigQuery rows are columns and values; a bare scalar or array has no
-	// column names and must fail loudly rather than silently drop.
+func TestResolveConfigRejectsUnwrittenFormat(t *testing.T) {
+	_, err := resolveConfig(&sdk.LoadConfig{
+		ProjectID: "p", Dataset: "d", Table: "t", Format: "parquet",
+	})
+	if err == nil {
+		t.Fatal("New must refuse a format it does not write")
+	}
+}
+
+func TestResolveConfigRejectsBothMetadataModes(t *testing.T) {
+	_, err := resolveConfig(nil,
+		sdk.WithProjectID("p"), sdk.WithDataset("d"), sdk.WithTable("t"),
+		sdk.WithMetadata(true), sdk.WithEnvelopeColumns(true),
+	)
+	if err == nil {
+		t.Fatal("AddMetadata and WriteEnvelopeColumns contradict each other and must not both apply")
+	}
+}
+
+// --- encodeRows ----------------------------------------------------------
+
+func decodeNDJSON(t *testing.T, data []byte) []map[string]any {
+	t.Helper()
+	var out []map[string]any
+	for _, line := range strings.Split(strings.TrimRight(string(data), "\n"), "\n") {
+		if line == "" {
+			continue
+		}
+		var row map[string]any
+		if err := json.Unmarshal([]byte(line), &row); err != nil {
+			t.Fatalf("line %q is not a JSON object: %v", line, err)
+		}
+		out = append(out, row)
+	}
+	return out
+}
+
+func TestEncodeRowsWritesOneObjectPerLine(t *testing.T) {
+	l := &Loader{cfg: &sdk.LoadConfig{Format: "ndjson"}}
+
+	data, err := l.encodeRows([]sdk.Envelope{
+		{Payload: map[string]any{"amount": 1}},
+		{Payload: map[string]any{"amount": 2}},
+	})
+	if err != nil {
+		t.Fatalf("encodeRows: %v", err)
+	}
+
+	rows := decodeNDJSON(t, data)
+	if len(rows) != 2 {
+		t.Fatalf("Expected 2 lines, got %d", len(rows))
+	}
+	if rows[0]["amount"] != float64(1) || rows[1]["amount"] != float64(2) {
+		t.Errorf("rows = %v", rows)
+	}
+}
+
+func TestEncodeRowsRejectsNonObject(t *testing.T) {
+	l := &Loader{cfg: &sdk.LoadConfig{Format: "ndjson"}}
+
+	// BigQuery maps an NDJSON object's keys onto columns. A scalar or array
+	// has nothing to map, and must fail here rather than inside a load job.
 	for _, payload := range []any{42, "text", []int{1, 2}} {
-		if _, _, err := toRow(payload); err == nil {
+		if _, err := l.encodeRows([]sdk.Envelope{{Payload: payload}}); err == nil {
 			t.Errorf("Expected %v (%T) to be rejected", payload, payload)
 		}
 	}
 }
 
-func TestToRowStructPayload(t *testing.T) {
+func TestEncodeRowsStructPayloadUsesJSONTags(t *testing.T) {
+	l := &Loader{cfg: &sdk.LoadConfig{Format: "ndjson"}}
 	type tx struct {
 		ID     string `json:"id"`
 		Amount int    `json:"amount"`
 	}
-	row, _, err := toRow(tx{ID: "a", Amount: 7})
+
+	data, err := l.encodeRows([]sdk.Envelope{{Payload: tx{ID: "a", Amount: 7}}})
 	if err != nil {
-		t.Fatalf("toRow: %v", err)
+		t.Fatalf("encodeRows: %v", err)
 	}
-	if row["id"] != bigquery.Value("a") {
-		t.Errorf("struct payload should use json tags: %v", row)
+
+	rows := decodeNDJSON(t, data)
+	if rows[0]["id"] != "a" || rows[0]["amount"] != float64(7) {
+		t.Errorf("struct payload should honour json tags: %v", rows[0])
 	}
 }
 
-func TestJSONSaverImplementsValueSaver(t *testing.T) {
-	// The reason this type exists: StructSaver reflects over struct fields,
-	// so it cannot carry a schema-less payload.
-	var _ bigquery.ValueSaver = jsonSaver{}
+// --- envelope columns (SDK_LOAD.md 5) -----------------------------------
 
-	row, insertID, err := jsonSaver{row: map[string]bigquery.Value{"a": 1}}.Save()
+func TestEncodeRowsEnvelopeMode(t *testing.T) {
+	l := &Loader{cfg: &sdk.LoadConfig{
+		Format: "ndjson", WriteEnvelopeColumns: true,
+		MetadataNamespace: defaultMetadataNamespace,
+	}}
+
+	data, err := l.encodeRows([]sdk.Envelope{{
+		Provider: "gov", Entity: "tx", SourceKey: "k1",
+		RecordTS: "2026-01-01T00:00:00Z",
+		Payload:  map[string]any{"amount": 10},
+	}})
 	if err != nil {
-		t.Fatalf("Save: %v", err)
+		t.Fatalf("encodeRows: %v", err)
 	}
-	if row["a"] != bigquery.Value(1) {
-		t.Errorf("row = %v", row)
+
+	row := decodeNDJSON(t, data)[0]
+
+	for _, col := range []string{
+		"ingestion_id", "ingestion_loaded_at", "provider", "entity", "source_key", "payload",
+	} {
+		if _, ok := row[col]; !ok {
+			t.Errorf("missing envelope column %s", col)
+		}
 	}
-	if insertID != "" {
-		t.Errorf("insertID must stay empty: dedup is documented as downstream, got %q", insertID)
+	if len(row) != 6 {
+		t.Errorf("Expected exactly the 6 contract columns, got %d: %v", len(row), row)
+	}
+	if row["provider"] != "gov" || row["entity"] != "tx" || row["source_key"] != "k1" {
+		t.Errorf("identity columns wrong: %v", row)
+	}
+
+	// The payload must stay nested, not be flattened into the row.
+	payload, ok := row["payload"].(map[string]any)
+	if !ok {
+		t.Fatalf("payload should be a nested object, got %T", row["payload"])
+	}
+	if payload["amount"] != float64(10) {
+		t.Errorf("payload = %v", payload)
+	}
+}
+
+func TestEnvelopeIngestionIDMatchesEnvelope(t *testing.T) {
+	// The contract is that one place produces this id. If envelope mode
+	// computed it differently from Envelope.IngestionID, a row written here
+	// would not match the equivalent row written anywhere else.
+	env := sdk.Envelope{
+		Provider: "gov", Entity: "tx", SourceKey: "k1",
+		RecordTS: "2026-01-01T00:00:00Z",
+		Payload:  map[string]any{"amount": 10},
+	}
+
+	want, err := env.IngestionID()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	l := &Loader{cfg: &sdk.LoadConfig{Format: "ndjson", WriteEnvelopeColumns: true}}
+	data, err := l.encodeRows([]sdk.Envelope{env})
+	if err != nil {
+		t.Fatalf("encodeRows: %v", err)
+	}
+
+	if got := decodeNDJSON(t, data)[0]["ingestion_id"]; got != want {
+		t.Errorf("envelope mode ingestion_id = %v, Envelope.IngestionID() = %v", got, want)
+	}
+}
+
+func TestEnvelopeModeRequiresSourceKey(t *testing.T) {
+	l := &Loader{cfg: &sdk.LoadConfig{Format: "ndjson", WriteEnvelopeColumns: true}}
+	_, err := l.encodeRows([]sdk.Envelope{{Provider: "gov", Entity: "tx", Payload: map[string]any{}}})
+	if err == nil {
+		t.Fatal("Expected an error: without a source key there is no stable ingestion_id")
 	}
 }
 
@@ -309,5 +441,73 @@ func TestTruncate(t *testing.T) {
 	got := truncate([]byte(long), 10)
 	if got != strings.Repeat("x", 10)+"..." {
 		t.Errorf("truncate = %q", got)
+	}
+}
+
+// --- LoadResult on failure ------------------------------------------------
+
+func TestLoadReturnsResultOnFailure(t *testing.T) {
+	// The documented way to read per-row diagnostics is result.ErrorRows
+	// after a non-nil error. Load used to return nil on every error path, so
+	// following the documentation panicked.
+	l := &Loader{cfg: &sdk.LoadConfig{
+		ProjectID: "p", Dataset: "d", Table: "t", Format: "ndjson",
+		AddMetadata: true, MetadataNamespace: defaultMetadataNamespace,
+	}}
+
+	// A missing SourceKey fails in metadata, before any client is touched.
+	result, err := l.Load(context.Background(), sdk.Envelope{
+		Provider: "gov", Entity: "tx", Payload: map[string]any{},
+	})
+
+	if err == nil {
+		t.Fatal("Expected an error without a source key")
+	}
+	if result == nil {
+		t.Fatal("Load must return a result alongside the error, not nil")
+	}
+	if result.Strategy == "" || result.Format != "ndjson" {
+		t.Errorf("result should carry what is known: %+v", result)
+	}
+	if result.RowsLoaded != 0 {
+		t.Errorf("nothing was written, RowsLoaded = %d", result.RowsLoaded)
+	}
+}
+
+func TestRowErrorsTruncates(t *testing.T) {
+	var errs []*bigquery.Error
+	for i := 0; i < maxReportedErrors+5; i++ {
+		errs = append(errs, &bigquery.Error{Message: fmt.Sprintf("bad row %d", i)})
+	}
+
+	got := rowErrors(&bigquery.JobStatus{Errors: errs})
+	if len(got) != maxReportedErrors+1 {
+		t.Fatalf("Expected %d entries plus a summary, got %d", maxReportedErrors, len(got))
+	}
+	if !strings.Contains(got[len(got)-1], "and 5 more") {
+		t.Errorf("last entry should summarise the remainder, got %q", got[len(got)-1])
+	}
+}
+
+func TestRowErrorsIncludesLocation(t *testing.T) {
+	got := rowErrors(&bigquery.JobStatus{Errors: []*bigquery.Error{
+		{Location: "row 3", Message: "no such field: amount"},
+		{Message: "generic failure"},
+	}})
+
+	if len(got) != 2 {
+		t.Fatalf("got %v", got)
+	}
+	if got[0] != "row 3: no such field: amount" {
+		t.Errorf("location should be kept: %q", got[0])
+	}
+	if got[1] != "generic failure" {
+		t.Errorf("a location-less error should pass through: %q", got[1])
+	}
+}
+
+func TestRowErrorsNilStatus(t *testing.T) {
+	if got := rowErrors(nil); got != nil {
+		t.Errorf("nil status should yield nothing, got %v", got)
 	}
 }

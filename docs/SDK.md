@@ -42,34 +42,39 @@ Não é preferência de organização. O módulo raiz depende de `pgx`, `goose`,
 fetcher de 200 linhas baixa o orquestrador inteiro. **Um SDK que arrasta um
 driver de Postgres não é adotado.**
 
-### 2.2 Publicado — o bloqueio foi resolvido em 2026-09-02
+### 2.2 Publicado
 
-> **RESOLVIDO.** O módulo está em `github.com/AreteAcademy/bravis/sdk`, com
-> `v0.1.0` e `v0.1.1` no proxy. O histórico abaixo fica porque a armadilha da tag
-> com prefixo de diretório continua valendo para as próximas versões.
->
-> _Registro do que era o bloqueio:_
->
-> Este repositório não tem remote configurado: o código existe em uma máquina. O
-> pkg.go.dev indexa a partir do proxy de módulos, que busca do VCS público — sem
-> repositório público, nada é publicado.
->
-> Some-se que o Bravis vai sair da Zarv (decisão de 2026-09-01), então
-> `github.com/AreteAcademy/bravis` pode não ser o caminho definitivo. **Trocar o
-> caminho do módulo depois de publicar é quebra para todo consumidor.**
->
-> Ordem correta:
->
-> 1. decidir o caminho definitivo do módulo;
-> 2. repositório público naquele caminho;
-> 3. `git tag sdk/v0.1.0` — a tag de um módulo aninhado leva o prefixo do
->    diretório, e errar isso é o motivo mais comum de "o proxy não acha minha
->    versão";
-> 4. `GOPROXY=proxy.golang.org go list -m <caminho>/sdk@v0.1.0` para forçar a
->    indexação.
+O módulo está em `github.com/AreteAcademy/bravis/sdk`. Versões no proxy:
 
-Enquanto isso não existir, o consumidor usa `replace` para o diretório local.
-Funciona e não bloqueia o caso; só não é publicação.
+| versão | estado |
+|---|---|
+| `v0.1.0` | **não use.** `go.mod` fixava uma revisão inexistente de `groupcache`; não compila para ninguém. O proxy é imutável, então ela fica lá para sempre |
+| `v0.1.1` | primeira que compila |
+| `v0.2.0` | paginação, rate limiting, XML e as opções funcionais do `load` |
+
+A armadilha que continua valendo para as próximas versões: **a tag de um módulo
+aninhado leva o prefixo do diretório.** É `sdk/v0.2.0`, não `v0.2.0` — errar isso
+é o motivo mais comum de "o proxy não acha minha versão".
+
+Fluxo de publicação:
+
+```bash
+git tag sdk/v0.2.1
+git push origin sdk/v0.2.1
+# o workflow publish-sdk.yml faz o resto
+```
+
+Duas lições que custaram uma versão queimada, ambas agora automatizadas em
+`.github/workflows/publish-sdk.yml`:
+
+1. **O proxy é imutável.** Depois que uma versão é buscada uma vez, o conteúdo
+   dela está congelado — apagar a tag no git não desfaz nada. Por isso existe um
+   gate que compila um consumidor descartável **antes** do release: é o último
+   ponto onde um `go.mod` ruim ainda é recuperável.
+2. **URL do proxy usa case-encoding.** `AreteAcademy` vira `!arete!academy`. O
+   passo de verificação original montava a URL na mão, dava 404 sempre e saía com
+   `exit 0` — verificação que não pode falhar. Use `go list -m`, que codifica
+   sozinho.
 
 ### 2.3 `iter.Seq2` entre extract e load, não slices
 
@@ -105,19 +110,22 @@ Go é menos.
 
 ## 3. O contrato de saída
 
-> **DESATUALIZADA a partir da v0.1.1.** O `load` passou a ser agnóstico de schema
-> por decisão de desenho — a documentação do pacote diz "The SDK does NOT impose a
-> schema — you define it", e `Load` recusa criar a tabela. Logo o que está escrito
-> abaixo deixou de ser o que o SDK faz.
->
-> A pergunta de quem produz as 6 colunas está aberta e é decisão de produto; ver
-> [`SDK_LOAD.md`](SDK_LOAD.md) §5, que recomenda um modo envelope opt-in para o
-> `ingestion_id` continuar tendo um dono único.
->
-> O que segue valendo integralmente é o cálculo do `ingestion_id` — conferido
-> contra o Python em 2026-09-02, os UUIDs batem.
+O `load` é **agnóstico de schema por padrão**: escreve o payload como veio e
+recusa criar a tabela. Quem define as colunas é quem usa o SDK.
 
-O SDK escreve numa tabela de landing com esta forma exata:
+Mas o `ingestion_id` continua sendo contrato, e contrato precisa de um dono
+único. Por isso existe o **modo envelope**, opt-in:
+
+```go
+loader, _ := load.New(ctx, nil,
+    sdk.WithProjectID("proj"),
+    sdk.WithDataset("landing"),
+    sdk.WithTable("vendors_acme_transactions"),
+    sdk.WithEnvelopeColumns(true),   // emite as 6 colunas abaixo
+)
+```
+
+Com ele ligado, o SDK escreve nesta forma exata:
 
 ```sql
 CREATE TABLE IF NOT EXISTS <dataset>.vendors_<vendor>_<entidade>s (
@@ -132,6 +140,23 @@ PARTITION BY DATE(ingestion_loaded_at)
 CLUSTER BY provider, entity;
 ```
 
+**Por que opt-in e não padrão.** O desenho agnóstico é bom: a maioria dos casos
+não quer um envelope imposto. Mas espalhar a montagem das 6 colunas por cada
+consumidor faria o `ingestion_id` perder o dono único — e era exatamente essa
+unicidade que evitava a duplicação. Com o modo envelope, quem quer o contrato o
+pede, e um único lugar calcula o id.
+
+As três formas de escrever, e quando usar cada uma:
+
+| modo | escreve | quando |
+|---|---|---|
+| padrão | o payload, cru | você define o schema e não quer nada imposto |
+| `WithMetadata(true)` | payload + campos `_bravis_*` misturados nele | quer a proveniência junto do dado, num objeto plano |
+| `WithEnvelopeColumns(true)` | as 6 colunas, com o payload aninhado em `payload` | precisa casar com a camada bronze do `zarv-data-pipeline` |
+
+Os dois últimos são mutuamente exclusivos e `New` recusa os dois juntos — são
+duas respostas diferentes para a mesma pergunta.
+
 ### O `ingestion_id` é contrato, não detalhe de implementação
 
 ```
@@ -145,12 +170,12 @@ id        = UUID v5 (namespace, chave)
 > separador diferente ou `record_ts` formatado diferente faz a linha escrita pelo
 > SDK **não** casar com a escrita pelo fetcher Python equivalente — e a mesma
 > leitura entra duas vezes.
->
-> Escreva esse teste **antes** do resto: uma tabela de casos com valores gerados
-> pela implementação Python de referência, conferindo igualdade exata.
 
-`source_key` vazio é **erro**, não aviso. A implementação de referência levanta
-exceção; mantenha.
+Conferido contra `uuid.uuid5` do Python em 2026-09-02; os UUIDs batem
+exatamente. O modo envelope usa `Envelope.IngestionID()` — a mesma função, não
+uma cópia — e há teste que falha se as duas divergirem.
+
+`source_key` vazio é **erro**, não aviso, nos dois modos que calculam o id.
 
 ---
 
@@ -205,7 +230,7 @@ UUID.
 
 | estratégia | quando | por que |
 |---|---|---|
-| **Load job inline** (NDJSON) | até ~5 mil linhas | uma requisição, sem bucket; é o piso a superar |
+| **Load job inline** (NDJSON) | até ~5 mil linhas | uma requisição, sem bucket; é o piso a superar. Load job de verdade, não streaming insert — ver nota abaixo |
 | **Load job via GCS** | acima disso | escreve o objeto, dispara o load apontando para `gs://`, apaga. Sem limite prático de tamanho e sem prender a requisição |
 | **Storage Write API** | **fora do escopo agora** | é o caminho moderno para *streaming* com exactly-once. O padrão aqui é lote, e misturar dois modelos de consistência numa v1 é dívida. Fase 2. |
 
@@ -213,13 +238,35 @@ O consumidor não escolhe. Ele passa as linhas e o SDK decide — uma API que
 obriga a escolher estratégia de carga transfere ao consumidor uma decisão que
 depende de conhecer o BigQuery.
 
+> **As duas são load job.** A inline passou por `table.Inserter()` até a v0.2.1,
+> que é a *streaming insert API*: cobrada por linha, e as linhas ficam num buffer
+> onde o DML não as enxerga por até 90 minutos. A estratégia dizia `"inline"` e a
+> documentação dizia "load job", mas o modelo de consistência não era nenhum dos
+> dois. Hoje é `LoaderFrom` sobre um `ReaderSource` com o NDJSON em memória —
+> mesmo modelo da via GCS, mudando só de onde o BigQuery lê.
+
 ### Formatos no staging
 
-**NDJSON, CSV e Parquet.** Parquet é o default para volume: colunar, comprimido,
-e o BigQuery lê o schema do próprio arquivo. CSV existe porque alguns
-fornecedores já entregam CSV e reescrever é desperdício — mas CSV não carrega
-tipo, então `payload` JSON dentro de CSV exige escape e é o pior dos três.
-**Documente isso na função, não numa wiki.**
+**Hoje: só NDJSON.** `LoadConfig.Format` aceita `"ndjson"` e recusa `"csv"` e
+`"parquet"` com um erro que diz "not implemented in this version".
+
+Isso é deliberado. Antes o campo aceitava os três, todo caminho escrevia NDJSON
+de qualquer jeito, e o `LoadResult.Format` devolvia o valor configurado — então
+`WithFormat("parquet")` reportava uma carga Parquet que nunca aconteceu. **Número
+errado na telemetria é pior que número ausente**, porque ninguém desconfia dele.
+Uma API que recusa o que não faz é confiável; uma que aceita e ignora, não.
+
+O que os dois valeriam quando forem implementados:
+
+- **Parquet** seria o default para volume: colunar, comprimido, e o BigQuery lê
+  o schema do próprio arquivo. Mas exige dependência — **meça o custo em bytes
+  da imagem antes**, porque o argumento do SDK é o tamanho do binário. Se
+  dobrar, Parquet vira subpacote opcional (`sdk/load/parquet`).
+- **CSV** existe porque alguns fornecedores já entregam CSV e reescrever é
+  desperdício — mas CSV não carrega tipo, então `payload` JSON dentro de CSV
+  exige escape e é o pior dos três.
+
+`LoadResult.Format` reporta o formato **efetivamente escrito**.
 
 ### Requisitos, todos verificáveis
 
@@ -230,7 +277,9 @@ tipo, então `payload` JSON dentro de CSV exige escape e é o pior dos três.
   bem-sucedido — lixo em bucket é conta que ninguém revisa.
 - **Erro que diz o que fazer.** Reporte tabela, contagem de linhas, formato e os
   erros por linha que o BigQuery devolve (`job.Status.Errors`), truncados. "load
-  failed" sozinho custa uma investigação.
+  failed" sozinho custa uma investigação. `Load` devolve um `LoadResult` **junto
+  com** o erro — nunca `nil` —, porque a forma documentada de ler o diagnóstico é
+  `result.ErrorRows` depois de um erro não-nulo.
 - **`Resultado`** com linhas escritas, bytes, duração e estratégia usada. É o que
   permite **medir** a diferença contra a implementação Python em vez de afirmá-la.
 - **Idempotência é do bronze, não do load.** O mesmo lote carregado duas vezes

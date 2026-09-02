@@ -1,71 +1,94 @@
-// Package load writes Envelopes to BigQuery as generic JSON.
+// Package load writes Envelopes to BigQuery.
 //
-// The SDK does NOT impose a schema — you define it. This makes load
-// flexible for any data shape, not just opinionated landing tables.
+// By default the SDK imposes no schema: it writes your payload as-is, and the
+// destination table must already exist. You decide what the columns are.
 //
 // # Basic usage
 //
-//	loader := load.New(ctx, &sdk.LoadConfig{
-//		ProjectID: "my-project",
-//		Dataset:   "landing",
-//		Table:     "raw_data",
-//	})
-//
-//	result, err := loader.Load(ctx, envelopes...)
+//	loader, err := load.New(ctx, nil,
+//		sdk.WithProjectID("my-project"),
+//		sdk.WithDataset("landing"),
+//		sdk.WithTable("raw_data"),
+//	)
 //	if err != nil {
 //		log.Fatal(err)
 //	}
 //
-//	log.Printf("Loaded %d rows in %v", result.RowsLoaded, result.Duration)
+//	result, err := loader.Load(ctx, envelopes...)
+//	if err != nil {
+//		log.Printf("load failed: %v", err)
+//		for _, e := range result.ErrorRows {
+//			log.Printf("  %s", e)
+//		}
+//		return
+//	}
 //
-// # Schema design
+//	log.Printf("loaded %d rows in %v", result.RowsLoaded, result.Duration)
 //
-// You create the table with whatever schema fits your use case.
-// The loader writes the payload as JSON:
+// Load always returns a LoadResult, failures included, so ErrorRows is safe to
+// read after a non-nil error.
+//
+// New takes a *LoadConfig, a list of options, or both, and never mutates the
+// config you hand it.
+//
+// # Three ways to shape a row
+//
+// Default: the payload, exactly as given.
+//
+//	CREATE TABLE dataset.raw_data (payload JSON NOT NULL);
+//
+// WithMetadata(true): provenance folded into the payload as a flat object,
+// under these keys:
+//
+//   - _bravis_ingestion_id          deterministic UUID v5
+//   - _bravis_ingestion_loaded_at   load timestamp
+//   - _bravis_provider              data source
+//   - _bravis_entity                entity type
+//   - _bravis_source_key            unique key at the source
+//   - _bravis_record_ts             record timestamp at the source
+//
+// WithEnvelopeColumns(true): the six-column landing contract, with your
+// payload nested rather than merged.
 //
 //	CREATE TABLE dataset.raw_data (
-//	  payload JSON NOT NULL
-//	);
+//	  ingestion_id        STRING    NOT NULL,
+//	  ingestion_loaded_at TIMESTAMP NOT NULL,
+//	  provider            STRING    NOT NULL,
+//	  entity              STRING    NOT NULL,
+//	  source_key          STRING,
+//	  payload             JSON      NOT NULL
+//	)
+//	PARTITION BY DATE(ingestion_loaded_at)
+//	CLUSTER BY provider, entity;
 //
-// Or extract fields:
+// Envelope mode exists so ingestion_id keeps a single owner: a row written
+// here matches the row any other producer writes for the same record. Rebuild
+// those columns per consumer and the ids drift apart.
 //
-//	CREATE TABLE dataset.raw_data (
-//	  id STRING,
-//	  name STRING,
-//	  amount FLOAT64,
-//	  data JSON
-//	);
-//
-// # Metadata (optional)
-//
-// Enable AddMetadata to inject fields into each payload:
-//
-//	loader := load.New(ctx, &sdk.LoadConfig{
-//		ProjectID: "my-project",
-//		Dataset:   "landing",
-//		Table:     "raw_data",
-//		AddMetadata: true,
-//	})
-//
-// This adds to each payload:
-//   - _bravis_ingestion_id (deterministic UUID v5 for idempotency)
-//   - _bravis_ingestion_loaded_at (load timestamp)
-//   - _bravis_provider (data source)
-//   - _bravis_entity (entity type)
-//   - _bravis_source_key (unique key from source)
-//   - _bravis_record_ts (record timestamp at source)
+// The last two modes are mutually exclusive; New refuses both at once.
 //
 // # Strategy selection
 //
-// The loader automatically chooses:
-//   - Inline (NDJSON): up to ~5000 rows, no external staging
-//   - GCS staging: larger volumes, deletes file after successful load
+// Both strategies are batch load jobs and differ only in where BigQuery reads
+// from:
 //
-// The threshold is configurable via LoadConfig.ThresholdForGCS.
+//   - inline: up to ThresholdForGCS rows (5000 by default), NDJSON embedded in
+//     the job request
+//   - gcs: above it, staged as an object and deleted after a successful load
+//
+// The SDK never uses streaming inserts, so rows are visible to DML as soon as
+// the job finishes.
+//
+// # Format
+//
+// Only "ndjson" is written today. LoadConfig.Format refuses "csv" and
+// "parquet" rather than accepting them and writing NDJSON anyway, and
+// LoadResult.Format reports what was actually written.
 //
 // # Idempotency
 //
-// The ingestion_id (when metadata is enabled) is deterministic UUID v5,
-// derived from provider|entity|source_key|record_ts. Use it for deduplication
-// downstream. The SDK does not deduplicate — that's a business-layer concern.
+// ingestion_id is a deterministic UUID v5 over
+// provider|entity|source_key|record_ts. Deduplicate on it downstream: the same
+// batch loaded twice produces duplicate rows here, by design. WRITE_APPEND is
+// the only disposition the SDK uses; it never truncates.
 package load

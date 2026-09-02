@@ -1,6 +1,7 @@
 package load
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -93,6 +94,15 @@ func resolveConfig(cfg *sdk.LoadConfig, opts ...sdk.LoadOption) (*sdk.LoadConfig
 	if c.Format == "" {
 		c.Format = "ndjson"
 	}
+	if _, err := sourceFormat(c.Format); err != nil {
+		return nil, err
+	}
+
+	if c.AddMetadata && c.WriteEnvelopeColumns {
+		return nil, fmt.Errorf("AddMetadata and WriteEnvelopeColumns are two different answers " +
+			"to the same question: the first folds _bravis_* fields into your payload, the " +
+			"second wraps it in the six envelope columns. Pick one")
+	}
 	if c.MetadataNamespace == "" {
 		c.MetadataNamespace = defaultMetadataNamespace
 	}
@@ -104,6 +114,26 @@ const (
 	defaultThresholdForGCS   = 5000
 	defaultMetadataNamespace = "e3a4f8c0-1b9d-4ea0-9c2e-77f6a6c4a4d7"
 )
+
+// sourceFormat maps a configured format onto the BigQuery source format, and
+// refuses the ones the SDK does not actually write.
+//
+// LoadConfig.Format used to accept "csv" and "parquet" while every code path
+// wrote NDJSON regardless, and LoadResult echoed the configured value back --
+// so WithFormat("parquet") reported a Parquet load that never happened. An API
+// that rejects what it cannot do is trustworthy; one that accepts and ignores
+// is not.
+func sourceFormat(format string) (bigquery.DataFormat, error) {
+	switch format {
+	case "", "ndjson":
+		return bigquery.JSON, nil
+	case "csv", "parquet":
+		return "", fmt.Errorf("format %q is not implemented in this version: the SDK writes ndjson. "+
+			"Track it at https://github.com/AreteAcademy/bravis/issues", format)
+	default:
+		return "", fmt.Errorf("unknown format %q, want \"ndjson\"", format)
+	}
+}
 
 // strategyFor picks how a batch of n rows reaches BigQuery. Small batches go
 // inline in one request; large ones stage through GCS so memory stays flat.
@@ -120,62 +150,97 @@ func strategyFor(n, threshold int) string {
 func (l *Loader) Load(ctx context.Context, envelopes ...sdk.Envelope) (*sdk.LoadResult, error) {
 	start := time.Now()
 
-	if len(envelopes) == 0 {
-		return &sdk.LoadResult{
-			Duration: time.Since(start),
-			Strategy: "inline",
-			Format:   l.cfg.Format,
-		}, nil
+	// Every return carries a result, including the failures: the documented
+	// way to read per-row diagnostics is result.ErrorRows after a non-nil
+	// error, and returning nil there turns a failed load into a panic.
+	result := &sdk.LoadResult{
+		Format:   l.cfg.Format,
+		Strategy: strategyFor(len(envelopes), l.cfg.ThresholdForGCS),
+	}
+	fail := func(err error) (*sdk.LoadResult, error) {
+		result.Duration = time.Since(start)
+		return result, err
 	}
 
-	// Add metadata if requested
+	if len(envelopes) == 0 {
+		return fail(nil)
+	}
+
 	if l.cfg.AddMetadata {
 		for i := range envelopes {
 			if err := l.addMetadataToEnvelope(&envelopes[i]); err != nil {
-				return nil, fmt.Errorf("add metadata: %w", err)
+				return fail(fmt.Errorf("add metadata: %w", err))
 			}
 		}
 	}
 
 	table := l.bq.Dataset(l.cfg.Dataset).Table(l.cfg.Table)
 
-	// Verify table exists (don't create it)
-	_, err := table.Metadata(ctx)
+	// The table must already exist: the SDK does not own your schema.
+	if _, err := table.Metadata(ctx); err != nil {
+		return fail(fmt.Errorf("table %s.%s not found: %w. Create it manually with your desired schema",
+			l.cfg.Dataset, l.cfg.Table, err))
+	}
+
+	data, err := l.encodeRows(envelopes)
 	if err != nil {
-		return nil, fmt.Errorf("table %s.%s not found: %w. Create it manually with your desired schema",
-			l.cfg.Dataset, l.cfg.Table, err)
+		return fail(err)
 	}
 
-	// Choose strategy based on envelope count
 	var bytesStaged int64
-	strategy := strategyFor(len(envelopes), l.cfg.ThresholdForGCS)
+	var rowErrs []string
 
-	var loadErr error
-	if strategy == "gcs" {
-		bytesStaged, loadErr = l.loadViaGCS(ctx, table, envelopes)
+	if result.Strategy == "gcs" {
+		bytesStaged, rowErrs, err = l.loadViaGCS(ctx, table, data)
 	} else {
-		bytesStaged, loadErr = l.loadInline(ctx, table, envelopes)
-	}
-	if loadErr != nil {
-		return nil, loadErr
+		bytesStaged, rowErrs, err = l.loadInline(ctx, table, data)
 	}
 
-	result := &sdk.LoadResult{
-		RowsLoaded:  int64(len(envelopes)),
-		BytesStaged: bytesStaged,
-		Duration:    time.Since(start),
-		Strategy:    strategy,
-		Format:      l.cfg.Format,
+	result.BytesStaged = bytesStaged
+	result.ErrorRows = rowErrs
+	if err != nil {
+		return fail(err)
 	}
+
+	result.RowsLoaded = int64(len(envelopes))
+	result.Duration = time.Since(start)
 
 	slog.InfoContext(ctx, "load complete",
 		"table", fmt.Sprintf("%s.%s", l.cfg.Dataset, l.cfg.Table),
 		"rows", result.RowsLoaded,
 		"bytes", result.BytesStaged,
-		"strategy", strategy,
+		"strategy", result.Strategy,
 		"duration", result.Duration)
 
 	return result, nil
+}
+
+// envelopeColumns is the six-column landing contract: one place produces the
+// ingestion_id, so a row written by this SDK matches the row a Python fetcher
+// writes for the same record. That single owner is the whole point -- rebuild
+// these columns per consumer and the ids drift apart, which is exactly the
+// duplication the contract exists to prevent.
+//
+//	ingestion_id        STRING    NOT NULL
+//	ingestion_loaded_at TIMESTAMP NOT NULL
+//	provider            STRING    NOT NULL
+//	entity              STRING    NOT NULL
+//	source_key          STRING
+//	payload             JSON      NOT NULL
+func (l *Loader) envelopeColumns(env sdk.Envelope) (map[string]any, error) {
+	id, err := env.IngestionID()
+	if err != nil {
+		return nil, err
+	}
+
+	return map[string]any{
+		"ingestion_id":        id,
+		"ingestion_loaded_at": time.Now().UTC().Format(time.RFC3339),
+		"provider":            env.Provider,
+		"entity":              env.Entity,
+		"source_key":          env.SourceKey,
+		"payload":             env.Payload,
+	}, nil
 }
 
 // addMetadataToEnvelope adds metadata fields to the envelope's payload.
@@ -221,40 +286,40 @@ func (l *Loader) addMetadataToEnvelope(env *sdk.Envelope) error {
 	return nil
 }
 
-// jsonSaver adapts an arbitrary decoded payload to BigQuery's ValueSaver.
+// encodeRows renders the batch as NDJSON, which is what both strategies load.
 //
-// StructSaver cannot be used here: it reflects over the fields of a struct,
-// and the SDK deliberately has no struct for the payload -- the whole point
-// is that the caller owns the schema.
-//
-// insertID is left empty on purpose. Populating it would enable BigQuery's
-// best-effort streaming dedup, which contradicts the documented contract
-// that deduplication happens downstream, keyed on _bravis_ingestion_id.
-type jsonSaver struct {
-	row map[string]bigquery.Value
-}
+// Every line must be a JSON object: BigQuery maps its keys onto the columns of
+// the destination table, so a bare scalar or an array has nothing to map and
+// must fail here rather than halfway through a load job.
+func (l *Loader) encodeRows(envelopes []sdk.Envelope) ([]byte, error) {
+	var buf bytes.Buffer
 
-func (s jsonSaver) Save() (map[string]bigquery.Value, string, error) {
-	return s.row, "", nil
-}
+	for i, env := range envelopes {
+		row := env.Payload
 
-// toRow converts a payload into the column/value map BigQuery expects.
-func toRow(payload any) (map[string]bigquery.Value, int, error) {
-	data, err := json.Marshal(payload)
-	if err != nil {
-		return nil, 0, err
+		if l.cfg.WriteEnvelopeColumns {
+			cols, err := l.envelopeColumns(env)
+			if err != nil {
+				return nil, fmt.Errorf("row %d: %w", i, err)
+			}
+			row = cols
+		}
+
+		data, err := json.Marshal(row)
+		if err != nil {
+			return nil, fmt.Errorf("marshal row %d: %w", i, err)
+		}
+
+		var probe map[string]json.RawMessage
+		if err := json.Unmarshal(data, &probe); err != nil {
+			return nil, fmt.Errorf("row %d must encode to a JSON object, got %s", i, truncate(data, 80))
+		}
+
+		buf.Write(data)
+		buf.WriteByte('\n')
 	}
 
-	var obj map[string]any
-	if err := json.Unmarshal(data, &obj); err != nil {
-		return nil, 0, fmt.Errorf("payload must encode to a JSON object, got %s: %w", truncate(data, 80), err)
-	}
-
-	row := make(map[string]bigquery.Value, len(obj))
-	for k, v := range obj {
-		row[k] = v
-	}
-	return row, len(data), nil
+	return buf.Bytes(), nil
 }
 
 func truncate(b []byte, n int) string {
@@ -264,93 +329,122 @@ func truncate(b []byte, n int) string {
 	return string(b[:n]) + "..."
 }
 
-func (l *Loader) loadInline(ctx context.Context, table *bigquery.Table, envelopes []sdk.Envelope) (int64, error) {
-	rows := make([]*jsonSaver, len(envelopes))
+// maxReportedErrors caps how many per-row failures travel back in
+// LoadResult. A load job can fail on every row; the first handful say what is
+// wrong, and the rest only make the message unreadable.
+const maxReportedErrors = 10
 
-	var totalBytes int64
-	for i, env := range envelopes {
-		row, n, err := toRow(env.Payload)
-		if err != nil {
-			return 0, fmt.Errorf("marshal row %d: %w", i, err)
-		}
-		totalBytes += int64(n)
-		rows[i] = &jsonSaver{row: row}
-	}
-
-	inserter := table.Inserter()
-	if err := inserter.Put(ctx, rows); err != nil {
-		return totalBytes, fmt.Errorf("insert rows: %w", err)
-	}
-
-	return totalBytes, nil
-}
-
-func (l *Loader) loadViaGCS(ctx context.Context, table *bigquery.Table, envelopes []sdk.Envelope) (int64, error) {
-	// Generate staging file path
-	today := time.Now().UTC().Format("2006-01-02")
-	objName := fmt.Sprintf("%s%s/%d.ndjson", l.cfg.StagingPrefix, today, time.Now().UnixNano())
-
-	bucket := l.gcs.Bucket(l.cfg.StagingBucket)
-	obj := bucket.Object(objName)
-
-	// Write envelopes to staging as NDJSON
-	wc := obj.NewWriter(ctx)
-	bytesWritten := int64(0)
-
-	for _, env := range envelopes {
-		data, err := json.Marshal(env.Payload)
-		if err != nil {
-			_ = wc.Close()
-			_ = obj.Delete(ctx)
-			return 0, fmt.Errorf("marshal row: %w", err)
-		}
-
-		data = append(data, '\n')
-
-		n, err := wc.Write(data)
-		if err != nil {
-			_ = wc.Close()
-			_ = obj.Delete(ctx)
-			return 0, fmt.Errorf("write to gcs: %w", err)
-		}
-		bytesWritten += int64(n)
-	}
-
-	if err := wc.Close(); err != nil {
-		_ = obj.Delete(ctx)
-		return 0, fmt.Errorf("close gcs writer: %w", err)
-	}
-
-	// Load from GCS
-	gcsRef := bigquery.NewGCSReference(fmt.Sprintf("gs://%s/%s", l.cfg.StagingBucket, objName))
-	// We stage NDJSON. Without this BigQuery assumes CSV and every row of
-	// every GCS-strategy load is parsed wrong.
-	gcsRef.SourceFormat = bigquery.JSON
-
-	loader := table.LoaderFrom(gcsRef)
+// runLoadJob submits a load job and waits for it. Both strategies end here;
+// they differ only in where BigQuery reads the NDJSON from.
+//
+// It returns the per-row failures BigQuery reported alongside the error,
+// because "load failed" on its own costs an investigation.
+func runLoadJob(ctx context.Context, loader *bigquery.Loader) ([]string, error) {
 	loader.WriteDisposition = bigquery.WriteAppend
 
 	job, err := loader.Run(ctx)
 	if err != nil {
-		_ = obj.Delete(ctx)
-		return 0, fmt.Errorf("start load job: %w", err)
+		return nil, fmt.Errorf("start load job: %w", err)
 	}
 
 	status, err := job.Wait(ctx)
 	if err != nil {
-		_ = obj.Delete(ctx)
-		return 0, fmt.Errorf("wait for load job: %w", err)
+		return nil, fmt.Errorf("wait for load job: %w", err)
+	}
+	if err := status.Err(); err != nil {
+		return rowErrors(status), fmt.Errorf("load job failed: %w", err)
 	}
 
-	if status.Err() != nil {
-		_ = obj.Delete(ctx)
-		return 0, fmt.Errorf("load job failed: %w", status.Err())
+	return nil, nil
+}
+
+// rowErrors renders the per-row diagnostics BigQuery attaches to a failed job.
+func rowErrors(status *bigquery.JobStatus) []string {
+	if status == nil {
+		return nil
 	}
 
-	// Delete staging file if successful
+	out := make([]string, 0, len(status.Errors))
+	for i, e := range status.Errors {
+		if i == maxReportedErrors {
+			out = append(out, fmt.Sprintf("... and %d more", len(status.Errors)-maxReportedErrors))
+			break
+		}
+		if e == nil {
+			continue
+		}
+		if e.Location != "" {
+			out = append(out, fmt.Sprintf("%s: %s", e.Location, e.Message))
+			continue
+		}
+		out = append(out, e.Message)
+	}
+	return out
+}
+
+// loadInline embeds the NDJSON in the load job itself.
+//
+// This used to go through table.Inserter(), which is the streaming insert API:
+// billed per row, and rows sit in a streaming buffer where DML cannot see them
+// for up to 90 minutes. Strategy said "inline" and the docs said "load job",
+// but the consistency model was neither. It is a batch load job now, matching
+// what the rest of the SDK promises; the Storage Write API stays out of v1 for
+// the same reason.
+func (l *Loader) loadInline(ctx context.Context, table *bigquery.Table, data []byte) (int64, []string, error) {
+	format, err := sourceFormat(l.cfg.Format)
+	if err != nil {
+		return 0, nil, err
+	}
+
+	source := bigquery.NewReaderSource(bytes.NewReader(data))
+	source.SourceFormat = format
+
+	if rows, err := runLoadJob(ctx, table.LoaderFrom(source)); err != nil {
+		return 0, rows, err
+	}
+
+	return int64(len(data)), nil, nil
+}
+
+func (l *Loader) loadViaGCS(ctx context.Context, table *bigquery.Table, data []byte) (int64, []string, error) {
+	format, err := sourceFormat(l.cfg.Format)
+	if err != nil {
+		return 0, nil, err
+	}
+
+	today := time.Now().UTC().Format("2006-01-02")
+	objName := fmt.Sprintf("%s%s/%d.ndjson", l.cfg.StagingPrefix, today, time.Now().UnixNano())
+
+	obj := l.gcs.Bucket(l.cfg.StagingBucket).Object(objName)
+
+	wc := obj.NewWriter(ctx)
+	if _, err := wc.Write(data); err != nil {
+		_ = wc.Close()
+		_ = obj.Delete(ctx)
+		return 0, nil, fmt.Errorf("write to gcs: %w", err)
+	}
+	if err := wc.Close(); err != nil {
+		_ = obj.Delete(ctx)
+		return 0, nil, fmt.Errorf("close gcs writer: %w", err)
+	}
+
+	gcsRef := bigquery.NewGCSReference(fmt.Sprintf("gs://%s/%s", l.cfg.StagingBucket, objName))
+	// NewGCSReference leaves SourceFormat empty and BigQuery reads empty as
+	// CSV. We stage NDJSON, so without this every row of every GCS-strategy
+	// load was parsed wrong -- and the job still succeeded.
+	gcsRef.SourceFormat = format
+
+	rows, err := runLoadJob(ctx, table.LoaderFrom(gcsRef))
+	if err != nil {
+		_ = obj.Delete(ctx)
+		return 0, rows, err
+	}
+
 	if l.cfg.DeleteAfterLoad {
-		_ = obj.Delete(ctx)
+		if err := obj.Delete(ctx); err != nil {
+			slog.WarnContext(ctx, "staged object left behind", "object", objName, "error", err)
+		}
 	}
 
-	return bytesWritten, nil
+	return int64(len(data)), nil, nil
 }

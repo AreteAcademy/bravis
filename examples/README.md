@@ -1,211 +1,106 @@
-# Bravis SDK Examples
+# Bravis SDK — exemplos
 
-Exemplos práticos do SDK em ação.
-
-## 📋 Exemplos Disponíveis
-
-### 1. Basic Extract
-**Arquivo:** `01_basic_extract.go`
-
-O exemplo mais simples: extrair dados CSV de uma URL.
+Cada exemplo é um módulo executável próprio. O `go.mod` daqui aponta para
+`../sdk` via `replace`, então eles compilam contra a árvore de trabalho — o CI
+os constrói e testa a cada push, o que faz deles um portão sobre a API, não
+apenas documentação.
 
 ```bash
-go run examples/01_basic_extract.go -url "https://example.gov/api/data.csv"
+cd examples
+go build ./...   # todos compilam
+go test ./...    # o 05 tem testes de verdade
 ```
 
-**O que você aprende:**
-- Usar `extract.CSV()` com configuração mínima
-- Iterar sobre resultados com `iter.Seq2`
-- Tratamento de erros básico
+## Extract
 
-### 2. Advanced Extract
-**Arquivo:** `02_advanced_extract.go`
-
-Configuração completa de extract com retry, timeout e guard function.
+### [01-basic-extract](01-basic-extract/) — o caso mínimo
 
 ```bash
-go run examples/02_advanced_extract.go
+go run ./01-basic-extract -url https://example.gov/data.csv
 ```
 
-**O que você aprende:**
-- Configurar retry com backoff exponencial
-- Usar timeouts per-attempt e total
-- Guard function para validar responses
-- Headers customizados (User-Agent, Authorization)
-- Logging estruturado
+`extract.CSV` com configuração zero. A primeira linha do CSV vira as chaves;
+`NoHeader: true` trata todas as linhas como dado, com chaves `field_0`,
+`field_1`…
 
-### 3. Basic Load
-**Arquivo:** `03_basic_load.go`
+### [02-advanced-extract](02-advanced-extract/) — o que importa contra uma API real
 
-Escrever dados em BigQuery (requer autenticação Google Cloud).
+Headers, os dois timeouts (por tentativa e total), retry com backoff, um
+`Guard` que rejeita 200 com corpo de erro, e rate limiting.
+
+O `RateLimiter` aceita qualquer coisa com `Wait(ctx) error` — inclusive
+`*rate.Limiter` de `golang.org/x/time/rate`, sem o SDK carregar a dependência.
+
+## Load
+
+### [03-basic-load](03-basic-load/) — escrever no BigQuery
 
 ```bash
-# Setup: autenticar com Google Cloud
+go run ./03-basic-load -project meu-projeto -dataset landing -table raw_data
+```
+
+A tabela precisa existir: o SDK não é dono do seu schema. Mostra as opções
+funcionais e `WithMetadata`, que dobra os campos `_bravis_*` para dentro do
+payload.
+
+### [07-envelope-columns](07-envelope-columns/) — o contrato de 6 colunas
+
+Quando as linhas precisam casar com uma camada bronze que deduplica por
+`ingestion_id`. `WithEnvelopeColumns(true)` embrulha o payload nas colunas
+`ingestion_id`, `ingestion_loaded_at`, `provider`, `entity`, `source_key`,
+`payload`.
+
+Existe para o `ingestion_id` ter **um** dono: remontar essas colunas em cada
+consumidor faz os ids divergirem, que é a duplicação que o contrato evita.
+
+## Pipeline
+
+### [04-complete-pipeline](04-complete-pipeline/) — extract → load paginado
+
+Percorre uma API paginada por `Link: rel="next"` e carrega em lotes de mil, para
+a memória ficar plana independente do tamanho total.
+
+As três estratégias de paginação:
+
+```go
+sdk.Fonte{URL: url, FollowLinks: true}                              // Link header
+sdk.Fonte{URL: url, CursorKey: "next_page", DataKey: "results"}     // cursor no corpo
+sdk.Fonte{URL: url, OffsetKey: "offset", PageSize: 100}             // offset
+```
+
+Todas param em `MaxPages` (mil por padrão), para um servidor que sempre anuncia
+próxima página não girar para sempre.
+
+## Operação
+
+### [05-testing](05-testing/) — como testar código que usa o SDK
+
+O único com testes rodáveis:
+
+```bash
+go test ./05-testing -v
+```
+
+`httptest.Server` no lugar da API real: rápido, offline, determinístico. Cobre
+retry num 503, ausência de retry num 404, e a propagação de erro do seu próprio
+processamento.
+
+### [06-config-from-env](06-config-from-env/) — configuração por ambiente
+
+```bash
+export BRAVIS_PROJECT=meu-projeto
+export BRAVIS_DATASET=landing
+go run ./06-config-from-env
+```
+
+Como isso normalmente roda no Kubernetes.
+
+## Autenticação
+
+Os exemplos de load precisam de credenciais GCP:
+
+```bash
 gcloud auth application-default login
-
-# Rodar exemplo
-export GOOGLE_CLOUD_PROJECT=my-project
-go run examples/03_basic_load.go -project $GOOGLE_CLOUD_PROJECT
+# ou
+export GOOGLE_APPLICATION_CREDENTIALS=/caminho/para/credenciais.json
 ```
-
-**O que você aprende:**
-- Criar um `Loader` com configuração
-- Preparar `Envelope` com payload JSON
-- Load automático (inline ou GCS)
-- Interpretar resultados
-
-### 4. Complete Pipeline
-**Arquivo:** `04_complete_pipeline.go`
-
-Exemplo realista: Extract → Transform → Load.
-
-```bash
-# Requer autenticação Google Cloud
-gcloud auth application-default login
-
-go run examples/04_complete_pipeline.go \
-  -url "https://api.example.gov/data.csv" \
-  -project my-project \
-  -provider gov_agency \
-  -entity permits \
-  -dataset landing
-
-# Ou com dry-run (só extrai, não carrega)
-go run examples/04_complete_pipeline.go \
-  -url "https://api.example.gov/data.csv" \
-  --dry-run
-```
-
-**O que você aprende:**
-- Pipelineend-to-end realista
-- Tratamento de erros em escala
-- Transformação de dados
-- Logging estruturado com `slog`
-- Versioning e retry inteligente
-
-## 🚀 Pré-requisitos
-
-### Para Extract (exemplos 1, 2, 4)
-- Go 1.25+
-- Conexão com Internet
-- (Nenhuma autenticação necessária)
-
-### Para Load (exemplos 3, 4)
-- Google Cloud SDK instalado
-- Credenciais configuradas:
-  ```bash
-  gcloud auth application-default login
-  ```
-- Projeto GCP com BigQuery habilitado
-- Permissões: `bigquery.datasets.get`, `bigquery.tables.create`, `bigquery.tables.update`
-
-## 📊 Dados de Teste
-
-Os exemplos usam URLs públicas (quando disponíveis) ou dados em memória.
-
-Para testar com dados reais:
-
-```bash
-# CSV público
-go run examples/01_basic_extract.go -url "https://raw.githubusercontent.com/mledoze/countries/master/countries.json"
-
-# Ou use seu próprio servidor
-python3 -m http.server 8000 --directory ./data
-go run examples/01_basic_extract.go -url "http://localhost:8000/sample.csv"
-```
-
-## 🔧 Configuração Avançada
-
-### Retry Configuration
-```go
-RetryConfig: &sdk.RetryConfig{
-    MaxAttempts:    5,              // quantas vezes tentar
-    InitialBackoff: 500 * time.Millisecond,
-    MaxBackoff:     30 * time.Second,
-    JitterFraction: 0.2,            // 20% jitter para evitar thundering herd
-}
-```
-
-### Load Configuration
-```go
-&sdk.LoadConfig{
-    ProjectID:       "my-project",
-    Dataset:         "landing",
-    StagingBucket:   "my-bucket",
-    ThresholdForGCS: 5000,          // acima disso, usa GCS
-    Format:          "ndjson",      // ou "csv", "parquet"
-    DeleteAfterLoad: true,          // limpar file após load
-}
-```
-
-### Guard Function
-```go
-Guard: func(status int, body []byte) error {
-    // Validar ANTES de decodificar
-    if !json.Valid(body) {
-        return fmt.Errorf("invalid JSON")
-    }
-    return nil
-}
-```
-
-## 📈 Performance
-
-| Exemplo | Rows | Time | Memory |
-|---------|------|------|--------|
-| Extract 1M CSV | 1,000,000 | ~30s | ~50MB |
-| Load 5K inline | 5,000 | ~2s | ~100MB |
-| Load 50K GCS | 50,000 | ~10s | ~200MB |
-
-## 🐛 Troubleshooting
-
-### "Permission denied" ao carregar
-- Verificar credenciais: `gcloud auth application-default print-access-token`
-- Verificar projeto: `gcloud config get-value project`
-- Verificar permissões no IAM
-
-### "Table not found"
-- BigQuery leva ~30s para criar tabela
-- Verificar dataset existe: `bq ls my-dataset`
-- Verificar nome (case-sensitive)
-
-### "Context deadline exceeded"
-- Aumentar `TotalTimeout` em `sdk.Fonte`
-- Para load grande, aumentar timeout do contexto
-
-### "API rate limit"
-- Reduza `concurrency` em load
-- Use rate limiter em extract:
-  ```go
-  RateLimiter: rate.NewLimiter(rate.Limit(100), 1), // 100 req/s
-  ```
-
-## 📚 Links Úteis
-
-- [SDK Documentation](../sdk/README.md)
-- [Bravis GitHub](https://github.com/AreteAcademy/bravis)
-- [BigQuery Go Client](https://cloud.google.com/go/docs/reference/cloud.google.com/go/bigquery)
-
-## 💡 Próximos Passos
-
-1. **Adapte um exemplo** para sua fonte de dados
-2. **Configure retry** para sua API
-3. **Teste com dry-run** antes de carregar
-4. **Monitore logs** para otimizar performance
-5. **Configure alertas** no BigQuery para anormalidades
-
-## 📝 Exemplo Real: API de Governo
-
-```bash
-# Simular API de governo (dados públicos)
-go run examples/04_complete_pipeline.go \
-  -url "https://www.dados.gov.br/api/dados" \
-  -project meu-projeto \
-  -provider dados_gov_br \
-  -entity public_datasets \
-  --dry-run
-```
-
----
-
-**Dúvidas?** Abra uma issue em https://github.com/AreteAcademy/bravis/issues

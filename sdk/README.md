@@ -174,13 +174,47 @@ The loader automatically chooses:
 
 | Rows | Strategy | Benefit |
 |------|----------|---------|
-| < 5000 | Inline | One request, no external staging |
-| >= 5000 | GCS staging | No memory limit, deletes after load |
+| <= 5000 | Inline | One request, no external staging |
+| > 5000 | GCS staging | No memory limit, deletes after load |
+
+Both are batch load jobs; they differ only in where BigQuery reads from. The
+SDK never uses streaming inserts, so rows are visible to DML as soon as the job
+finishes.
 
 Configure the threshold with `sdk.WithThresholdForGCS(n)`, or set
 `LoadConfig.ThresholdForGCS` directly. `load.New` accepts either a
 `*LoadConfig`, a list of options, or both — and never mutates the config you
 pass it.
+
+## Three ways to shape a row
+
+| mode | writes | use when |
+|---|---|---|
+| default | the payload, as-is | you own the schema and want nothing imposed |
+| `WithMetadata(true)` | payload with `_bravis_*` fields folded in | you want provenance beside the data, in one flat object |
+| `WithEnvelopeColumns(true)` | the six-column landing contract, payload nested | you need rows to match a bronze layer keyed on `ingestion_id` |
+
+The last two are mutually exclusive and `New` refuses both at once — they are
+two different answers to the same question.
+
+Envelope mode writes exactly this:
+
+```sql
+CREATE TABLE <dataset>.<table> (
+  ingestion_id        STRING    NOT NULL,
+  ingestion_loaded_at TIMESTAMP NOT NULL,
+  provider            STRING    NOT NULL,
+  entity              STRING    NOT NULL,
+  source_key          STRING,
+  payload             JSON      NOT NULL
+)
+PARTITION BY DATE(ingestion_loaded_at)
+CLUSTER BY provider, entity;
+```
+
+It exists so `ingestion_id` keeps a single owner. Rebuild those columns in each
+consumer and the ids drift apart, which is the duplication the contract exists
+to prevent.
 
 ## BigQuery Schema
 
@@ -236,11 +270,16 @@ The `ingestion_id` is a deterministic UUID v5 derived from:
 
 Extract errors include URL, attempt number, and duration. Load errors include table name, row count, and per-row BigQuery errors (truncated).
 
+`Load` always returns a `LoadResult`, including on failure, so the per-row
+diagnostics BigQuery reported are readable after an error:
+
 ```go
 result, err := loader.Load(ctx, envelopes...)
 if err != nil {
-	log.Printf("Load failed: %v", err)
-	log.Printf("Errors by row: %v", result.ErrorRows)
+	log.Printf("load failed: %v", err)
+	for _, e := range result.ErrorRows { // never nil-derefs
+		log.Printf("  %s", e)
+	}
 }
 ```
 
@@ -276,7 +315,7 @@ cfg := &sdk.LoadConfig{
 	Dataset:         "landing",
 	StagingBucket:   "my-staging-bucket",
 	ThresholdForGCS: 5000,
-	Format:          "ndjson",
+	Format:          "ndjson", // the only format written today; csv and parquet are refused
 	DeleteAfterLoad: true,
 }
 ```

@@ -63,17 +63,28 @@ type RetryConfig struct {
 
 // LoadConfig controls load behavior.
 type LoadConfig struct {
-	ProjectID         string // GCP project ID; required
-	Dataset           string // BigQuery dataset; required
-	Table             string // BigQuery table; required
-	StagingBucket     string // GCS bucket for staging; default: "{projectID}-bravis-staging"
-	StagingPrefix     string // prefix for staged files; default: "extracts/"
-	ThresholdForGCS   int    // row count above which to use GCS; default: 5000
-	Format            string // "ndjson", "csv", or "parquet"; default: "ndjson"
-	DeleteAfterLoad   bool   // delete staged file after successful load; default: true
-	AddMetadata       bool   // add metadata fields to payload; default: false
-	MetadataNamespace string // namespace UUID for ingestion_id; default: "e3a4f8c0-1b9d-4ea0-9c2e-77f6a6c4a4d7"
-	SourceKeyField    string // which field in payload contains the source key; if empty, uses Envelope.SourceKey
+	ProjectID       string // GCP project ID; required
+	Dataset         string // BigQuery dataset; required
+	Table           string // BigQuery table; required
+	StagingBucket   string // GCS bucket for staging; default: "{projectID}-bravis-staging"
+	StagingPrefix   string // prefix for staged files; default: "extracts/"
+	ThresholdForGCS int    // row count above which to use GCS; default: 5000
+	Format          string // "ndjson", "csv", or "parquet"; default: "ndjson"
+	DeleteAfterLoad bool   // delete staged file after successful load; default: true
+	AddMetadata     bool   // fold _bravis_* fields into the payload; default: false
+
+	// WriteEnvelopeColumns wraps each payload in the six-column landing
+	// contract instead of writing it flat:
+	//
+	//	ingestion_id, ingestion_loaded_at, provider, entity, source_key, payload
+	//
+	// Off by default -- the SDK stays schema-agnostic, and callers who want
+	// the contract ask for it. Turning it on is what keeps a single owner for
+	// ingestion_id, so a row written here matches the row a Python fetcher
+	// writes for the same record. Mutually exclusive with AddMetadata.
+	WriteEnvelopeColumns bool
+	MetadataNamespace    string // namespace UUID for ingestion_id; default: "e3a4f8c0-1b9d-4ea0-9c2e-77f6a6c4a4d7"
+	SourceKeyField       string // which field in payload contains the source key; if empty, uses Envelope.SourceKey
 }
 
 // ExtractOption is a functional option for extract.Fonte.
@@ -166,6 +177,14 @@ func WithFormat(format string) LoadOption {
 func WithThresholdForGCS(threshold int) LoadOption {
 	return func(cfg *LoadConfig) {
 		cfg.ThresholdForGCS = threshold
+	}
+}
+
+// WithEnvelopeColumns writes the six-column landing contract instead of a
+// flat payload. See LoadConfig.WriteEnvelopeColumns.
+func WithEnvelopeColumns(enabled bool) LoadOption {
+	return func(cfg *LoadConfig) {
+		cfg.WriteEnvelopeColumns = enabled
 	}
 }
 
