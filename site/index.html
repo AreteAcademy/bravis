@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bravis – Motor de Orquestração de Dados em Go</title>
+  <meta name="description" content="Bravis: motor de transformação e orquestração de dados em Go + Kubernetes. Um binário único que substitui dbt, Airflow e LeoFlow.">
+  <meta name="keywords" content="data engineering, data orchestration, go, kubernetes, dbt, airflow, pipeline, data transformation">
+  <meta name="author" content="Zarv">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lora:wght@400;600&display=swap">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <!-- HERO -->
+  <section class="hero container">
+    <div class="hero-content">
+      <h1 class="fade-in fade-in-1">Bravis</h1>
+      <div class="hero-subheading fade-in fade-in-2">
+        Motor de transformação e orquestração de dados.<br>
+        Um binário. Uma filosofia.
+      </div>
+      <div class="hero-quote fade-in fade-in-3">
+        "Não é que temos pouco tempo, é que desperdiçamos muito." — Sêneca
+      </div>
+
+      <div class="cta-group">
+        <a href="#getting-started" class="cta-primary">Iniciar Grátis</a>
+        <a href="#demo" class="cta-secondary">Ver Demo (3 min)</a>
+      </div>
+
+      <!-- Social Proof -->
+      <div class="social-proof">
+        <p>Integrado com</p>
+        <div class="logo-cloud">
+          <span class="logo">Go 1.25+</span>
+          <span class="logo">Kubernetes</span>
+          <span class="logo">PostgreSQL</span>
+          <span class="logo">BigQuery</span>
+          <span class="logo">Docker</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- O PROBLEMA -->
+  <section class="container">
+    <h2>O Problema</h2>
+    <p>
+      Orquestração de dados exige <strong>múltiplas ferramentas</strong>. Você escolhe entre Airflow (pesado), dbt (sem orquestração), Kestra (complexo), LeoFlow (incompleto). E ainda assim tem que montar a interface você mesmo.
+    </p>
+
+    <div class="features-grid">
+      <div class="feature-card">
+        <span class="feature-icon">🗂️</span>
+        <h4>dbt</h4>
+        <p>Excelente para transformação. Não faz orquestração, nem agendamento, nem fila.</p>
+      </div>
+      <div class="feature-card">
+        <span class="feature-icon">⚙️</span>
+        <h4>Airflow</h4>
+        <p>Orquestração poderosa, mas pesada. UI complexa. Curva de aprendizado brutal.</p>
+      </div>
+      <div class="feature-card">
+        <span class="feature-icon">🔗</span>
+        <h4>Kestra</h4>
+        <p>Promete unificar. Acaba sendo mais uma dependência. Segue complexo.</p>
+      </div>
+      <div class="feature-card">
+        <span class="feature-icon">📦</span>
+        <h4>LeoFlow</h4>
+        <p>Focado em fila. Não traz transformação integrada. Você segue montando peças.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- A SOLUÇÃO -->
+  <section class="container">
+    <h2>A Solução: Bravis</h2>
+    <p>
+      Um binário único, escrito em Go, que <strong>substitui dbt + Airflow + LeoFlow</strong> por uma arquitetura moderna: transformação, orquestração, fila, scheduler e UI integrados.
+    </p>
+
+    <div class="pillars">
+      <div class="pillar">
+        <span class="pillar-icon">⚙️</span>
+        <h4>Transform</h4>
+        <p>Transformação inspirada em dbt. Modelos, testes, materialização integrados.</p>
+      </div>
+      <div class="pillar">
+        <span class="pillar-icon">🔀</span>
+        <h4>Orchestrate</h4>
+        <p>DAGs em YAML. Scheduler com cron. Fila persistente. Backfill automático.</p>
+      </div>
+      <div class="pillar">
+        <span class="pillar-icon">👁️</span>
+        <h4>Observe</h4>
+        <p>UI server-rendered. DAG ao vivo. Métricas, gráficos e controle completo.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- CARACTERÍSTICAS -->
+  <section class="container">
+    <h2>Características</h2>
+    <div class="features-grid">
+      <div class="feature-card">
+        <span class="feature-icon">⚡</span>
+        <h4>Um Binário Único</h4>
+        <p>Escrito em Go. Executa em Kubernetes, Docker ou localmente. Sem dependências externas.</p>
+      </div>
+      <div class="feature-card">
+        <span class="feature-icon">📄</span>
+        <h4>Workflows em YAML</h4>
+        <p>Declarativo, versionável, humano-legível. Sem UI complexa para definir jobs.</p>
+      </div>
+      <div class="feature-card">
+        <span class="feature-icon">☸️</span>
+        <h4>Kubernetes-Native</h4>
+        <p>Cada passo vira um pod. Seu runtime, sua imagem, sua responsabilidade.</p>
+      </div>
+      <div class="feature-card">
+        <span class="feature-icon">⏱️</span>
+        <h4>Scheduler + Fila</h4>
+        <p>Dois laços independentes. Cron, backfill, retry automático. Um falha, outro segue.</p>
+      </div>
+      <div class="feature-card">
+        <span class="feature-icon">📦</span>
+        <h4>Imagens Otimizadas</h4>
+        <p>5.8 MB em Go, 118 MB em Python, 620 MB em dbt. Observabilidade integrada.</p>
+      </div>
+      <div class="feature-card">
+        <span class="feature-icon">🎨</span>
+        <h4>Marca Branca</h4>
+        <p>Customize título, frase e paleta. Seus dados, sua marca, nossa orquestração.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ESCALABILIDADE -->
+  <section class="container">
+    <h2>Escalabilidade em Kubernetes</h2>
+    <p>
+      Bravis é desenhado para EKS. Cada passo de um workflow vira um pod independente. Você não tem workers genéricos esperando trabalho—<strong>o trabalho traz seu próprio runtime</strong>.
+    </p>
+
+    <div class="pillars">
+      <div class="pillar">
+        <span class="pillar-icon">📦</span>
+        <h4>Isolamento Total</h4>
+        <p>Cada passo roda em seu próprio container. Sem crosstalk, sem contaminação de estado.</p>
+      </div>
+      <div class="pillar">
+        <span class="pillar-icon">📈</span>
+        <h4>Escala Horizontal</h4>
+        <p>Kubernetes distribui pods conforme necessário. Carga spike? Novos pods sobem automaticamente.</p>
+      </div>
+      <div class="pillar">
+        <span class="pillar-icon">📊</span>
+        <h4>Observabilidade Nativa</h4>
+        <p>Logs, métricas, traces. Seu cluster já coleta. Bravis integra sem overhead.</p>
+      </div>
+    </div>
+
+    <div class="philosophy">
+      <div class="philosophy-text">
+        "A ferramenta não limita.<br>O desenvolvedor escolhe.<br>A arquitetura escala."
+      </div>
+    </div>
+  </section>
+
+  <!-- COMO COMEÇAR -->
+  <section class="container">
+    <h2 id="getting-started">Primeiros Passos</h2>
+
+    <p><strong>1. Instalar:</strong></p>
+    <div class="code-block">$ go install github.com/zarvhq/bravis@latest</div>
+
+    <p><strong>2. Validar um workflow (sem banco):</strong></p>
+    <div class="code-block">$ bravis validate examples/hello.yaml</div>
+
+    <p><strong>3. Executar agora:</strong></p>
+    <div class="code-block">$ bravis run examples/hello.yaml</div>
+
+    <p><strong>4. Publicar e agendar:</strong></p>
+    <div class="code-block">$ bravis publish examples/hello.yaml<br>$ bravis scheduler --concurrency 5</div>
+
+    <p>
+      <a href="https://github.com/zarvhq/bravis/tree/main/docs" style="color: var(--accent); border-bottom: 1px solid var(--accent);">Ver documentação completa →</a>
+    </p>
+  </section>
+
+  <!-- EXEMPLO WORKFLOW -->
+  <section class="container">
+    <h2>Exemplo: Um Workflow Real</h2>
+    <p>Tudo é YAML. Simples. Declarativo.</p>
+    <div class="code-block">name: diario
+schedule: "0 8 * * *"  # 8AM todo dia
+concurrency: 1
+
+params:
+  - name: load_full
+    type: boolean
+    default: "false"
+
+steps:
+  - id: bronze
+    run: dbt build --select bronze+
+
+  - id: silver
+    run: dbt build --select silver+
+    depends_on: [bronze]
+
+  - id: gold
+    run: dbt build --select gold+
+    depends_on: [silver]</div>
+  </section>
+
+  <!-- CTA FINAL -->
+  <section class="container" style="text-align: center; padding: 6rem 0 4rem 0; border-bottom: none;">
+    <h2>Pronto para simplificar sua stack?</h2>
+    <p>Bravis é open source. Gratuito. Sem restrições.</p>
+    <div class="cta-group" style="margin-top: 2rem; justify-content: center;">
+      <a href="https://github.com/zarvhq/bravis" class="cta-primary">Abrir no GitHub</a>
+      <a href="https://github.com/zarvhq/bravis/tree/main/docs" class="cta-secondary">Ler Documentação</a>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer>
+    <div class="container">
+      <p style="color: var(--text-secondary); margin: 0 0 2rem 0; font-style: italic; font-family: var(--font-serif);">
+        "Brevidade não é pobreza de informação. É clareza de propósito."
+      </p>
+
+      <div class="footer-links">
+        <a href="https://github.com/zarvhq/bravis">GitHub</a>
+        <a href="https://github.com/zarvhq/bravis/tree/main/docs">Documentação</a>
+        <a href="https://github.com/zarvhq/bravis/issues">Issues</a>
+        <a href="https://github.com/zarvhq/bravis/discussions">Discussions</a>
+      </div>
+
+      <p style="margin-top: 2rem; font-size: 0.9rem; opacity: 0.7; color: var(--text-secondary);">
+        Bravis © 2026 • Construído com filosofia e Go<br>
+        Inspirado em Sêneca. Open source. Para todos.
+      </p>
+    </div>
+  </footer>
+
+  <script src="js/main.js"></script>
+</body>
+</html>

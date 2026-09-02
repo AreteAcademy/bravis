@@ -1,0 +1,58 @@
+{
+  "version": 2,
+  "buildCommand": "",
+  "installCommand": "",
+  "framework": null,
+  "public": true,
+  "headers": [
+    {
+      "source": "/index.html",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=3600, must-revalidate"
+        }
+      ]
+    },
+    {
+      "source": "/css/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    },
+    {
+      "source": "/js/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    }
+  ],
+  "redirects": [
+    {
+      "source": "/github",
+      "destination": "https://github.com/zarvhq/bravis",
+      "permanent": false
+    },
+    {
+      "source": "/docs",
+      "destination": "https://github.com/zarvhq/bravis/tree/main/docs",
+      "permanent": false
+    },
+    {
+      "source": "/issues",
+      "destination": "https://github.com/zarvhq/bravis/issues",
+      "permanent": false
+    },
+    {
+      "source": "/discussions",
+      "destination": "https://github.com/zarvhq/bravis/discussions",
+      "permanent": false
+    }
+  ]
+}

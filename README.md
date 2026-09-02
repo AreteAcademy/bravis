@@ -7,6 +7,8 @@ execução em pod no Kubernetes.
 Arquitetura e faseamento: [`docs/plan.md`](docs/plan.md).
 Relatórios por fase: [`docs/phases/`](docs/phases/).
 
+SDK público (`extract` e `load`, em construção): [`docs/SDK.md`](docs/SDK.md).
+
 **Estado: PHASE 6 concluída.** Workflows em YAML, fila persistente, scheduler com
 cron, backfill, UI server-rendered (Overview com métricas e gráficos, lista de
 workflows com busca/filtros/pausar/executar) e visualização da DAG com o estado
