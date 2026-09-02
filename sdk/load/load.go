@@ -33,47 +33,9 @@ type Loader struct {
 //		sdk.WithTable("raw_data"),
 //	)
 func New(ctx context.Context, cfg *sdk.LoadConfig, opts ...sdk.LoadOption) (*Loader, error) {
-	var c sdk.LoadConfig
-	if cfg != nil {
-		c = *cfg
-	}
-	for _, opt := range opts {
-		if opt != nil {
-			opt(&c)
-		}
-	}
-	cfg = &c
-
-	if cfg.ProjectID == "" {
-		return nil, fmt.Errorf("projectID is required")
-	}
-
-	if cfg.Dataset == "" {
-		return nil, fmt.Errorf("dataset is required")
-	}
-
-	if cfg.Table == "" {
-		return nil, fmt.Errorf("table is required")
-	}
-
-	if cfg.StagingBucket == "" {
-		cfg.StagingBucket = fmt.Sprintf("%s-bravis-staging", cfg.ProjectID)
-	}
-
-	if cfg.StagingPrefix == "" {
-		cfg.StagingPrefix = "extracts/"
-	}
-
-	if cfg.ThresholdForGCS == 0 {
-		cfg.ThresholdForGCS = 5000
-	}
-
-	if cfg.Format == "" {
-		cfg.Format = "ndjson"
-	}
-
-	if cfg.MetadataNamespace == "" {
-		cfg.MetadataNamespace = "e3a4f8c0-1b9d-4ea0-9c2e-77f6a6c4a4d7"
+	cfg, err := resolveConfig(cfg, opts...)
+	if err != nil {
+		return nil, err
 	}
 
 	bq, err := bigquery.NewClient(ctx, cfg.ProjectID)
@@ -91,6 +53,65 @@ func New(ctx context.Context, cfg *sdk.LoadConfig, opts ...sdk.LoadOption) (*Loa
 		bq:  bq,
 		gcs: gcs,
 	}, nil
+}
+
+// resolveConfig merges cfg with opts and fills in defaults. It is separate
+// from New so the whole configuration contract is testable without GCP
+// credentials -- New itself cannot run without them.
+//
+// The caller's cfg is never modified.
+func resolveConfig(cfg *sdk.LoadConfig, opts ...sdk.LoadOption) (*sdk.LoadConfig, error) {
+	var c sdk.LoadConfig
+	if cfg != nil {
+		c = *cfg
+	}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(&c)
+		}
+	}
+
+	if c.ProjectID == "" {
+		return nil, fmt.Errorf("projectID is required")
+	}
+	if c.Dataset == "" {
+		return nil, fmt.Errorf("dataset is required")
+	}
+	if c.Table == "" {
+		return nil, fmt.Errorf("table is required")
+	}
+
+	if c.StagingBucket == "" {
+		c.StagingBucket = fmt.Sprintf("%s-bravis-staging", c.ProjectID)
+	}
+	if c.StagingPrefix == "" {
+		c.StagingPrefix = "extracts/"
+	}
+	if c.ThresholdForGCS == 0 {
+		c.ThresholdForGCS = defaultThresholdForGCS
+	}
+	if c.Format == "" {
+		c.Format = "ndjson"
+	}
+	if c.MetadataNamespace == "" {
+		c.MetadataNamespace = defaultMetadataNamespace
+	}
+
+	return &c, nil
+}
+
+const (
+	defaultThresholdForGCS   = 5000
+	defaultMetadataNamespace = "e3a4f8c0-1b9d-4ea0-9c2e-77f6a6c4a4d7"
+)
+
+// strategyFor picks how a batch of n rows reaches BigQuery. Small batches go
+// inline in one request; large ones stage through GCS so memory stays flat.
+func strategyFor(n, threshold int) string {
+	if n > threshold {
+		return "gcs"
+	}
+	return "inline"
 }
 
 // Load writes envelopes to BigQuery.
@@ -127,22 +148,16 @@ func (l *Loader) Load(ctx context.Context, envelopes ...sdk.Envelope) (*sdk.Load
 
 	// Choose strategy based on envelope count
 	var bytesStaged int64
-	var strategy string
+	strategy := strategyFor(len(envelopes), l.cfg.ThresholdForGCS)
 
-	if len(envelopes) > l.cfg.ThresholdForGCS {
-		strategy = "gcs"
-		var err error
-		bytesStaged, err = l.loadViaGCS(ctx, table, envelopes)
-		if err != nil {
-			return nil, err
-		}
+	var loadErr error
+	if strategy == "gcs" {
+		bytesStaged, loadErr = l.loadViaGCS(ctx, table, envelopes)
 	} else {
-		strategy = "inline"
-		var err error
-		bytesStaged, err = l.loadInline(ctx, table, envelopes)
-		if err != nil {
-			return nil, err
-		}
+		bytesStaged, loadErr = l.loadInline(ctx, table, envelopes)
+	}
+	if loadErr != nil {
+		return nil, loadErr
 	}
 
 	result := &sdk.LoadResult{
