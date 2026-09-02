@@ -128,12 +128,13 @@ jobs:
           go build ./...
           echo "✅ Build successful"
 
-      - name: Build examples
+      - name: Build and test examples
         run: |
-          for f in examples/*.go; do
-            if [[ "$f" != *"_test.go" ]]; then
-              echo "Building $f..."
-              go build -o /tmp/example_build "$f" || true
-            fi
-          done
-          echo "✅ Examples compiled (or skipped)"
+          # No '|| true' here. This step used to swallow every failure and
+          # print a success line, which is how six examples that did not
+          # compile at all sat in the repo unnoticed.
+          cd examples
+          go build ./...
+          go vet ./...
+          go test ./...
+          echo "✅ Examples compile and pass"

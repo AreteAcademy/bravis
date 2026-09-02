@@ -1,115 +1,84 @@
+// Command 02-advanced-extract shows the knobs that matter against a real API:
+// headers, separate per-attempt and total timeouts, retry tuning, a guard that
+// rejects a 200 carrying an error body, and a rate limiter.
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"log"
 	"log/slog"
-	"net/http"
+	"os"
 	"time"
 
 	"github.com/AreteAcademy/bravis/sdk"
 	"github.com/AreteAcademy/bravis/sdk/extract"
 )
 
-// Example 2: Advanced extraction with retry, timeout, and guard function
-//
-// This example demonstrates:
-// - Custom retry configuration
-// - Per-attempt and total timeouts
-// - Guard function to validate API responses
-// - Custom headers (User-Agent, Authorization)
-// - Structured logging
-//
-// Use this pattern when dealing with:
-// - APIs that return 200 OK with error messages
-// - APIs with strict rate limiting (429)
-// - Large datasets requiring timeout tuning
+// throttle is anything with Wait(ctx) error, so *rate.Limiter from
+// golang.org/x/time/rate drops straight in. This one is hand-rolled to keep
+// the example dependency-free.
+type throttle struct{ every time.Duration }
+
+func (t throttle) Wait(ctx context.Context) error {
+	select {
+	case <-time.After(t.every):
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
 func main() {
-	ctx := context.Background()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
+		Level: slog.LevelDebug,
+	})))
 
-	// Setup structured logging
-	logger := slog.New(slog.NewJSONHandler(nil))
-	slog.SetDefault(logger)
-
-	// Fonte with advanced configuration
 	fonte := sdk.Fonte{
-		URL:    "https://api.example.gov/v1/data",
+		URL:    "https://api.example.com/v1/transactions",
 		Method: "GET",
-
-		// Headers
-		Header: http.Header{
-			"User-Agent":    {"bravis-sdk/0.1.0"},
-			"Authorization": {"Bearer YOUR_API_KEY"},
+		Header: map[string][]string{
+			"Accept":        {"application/x-ndjson"},
+			"Authorization": {"Bearer " + os.Getenv("API_TOKEN")},
 		},
 
-		// Timeouts: per-attempt and total are separate
-		Timeout:      10 * time.Second, // per attempt
-		TotalTimeout: 2 * time.Minute,  // total time across all retries
+		// Per attempt vs. overall. A slow page fails its attempt and is
+		// retried; the total budget still caps the whole walk.
+		Timeout:      15 * time.Second,
+		TotalTimeout: 2 * time.Minute,
 
-		// Retry configuration
 		RetryConfig: &sdk.RetryConfig{
-			MaxAttempts:    5,           // retry up to 5 times
-			InitialBackoff: 500 * time.Millisecond,
+			MaxAttempts:    5,
+			InitialBackoff: time.Second,
 			MaxBackoff:     30 * time.Second,
-			JitterFraction: 0.2, // 20% jitter
+			JitterFraction: 0.2,
 		},
 
-		// Guard function: validate response before decoding
-		// This catches cases where API returns 200 OK with an error message
+		// Plenty of APIs answer 200 with an error document. The guard runs
+		// before decoding, so this fails loudly instead of loading garbage.
 		Guard: func(status int, body []byte) error {
-			if status != http.StatusOK {
-				return fmt.Errorf("unexpected status %d", status)
+			if bytes.Contains(body, []byte(`"error"`)) {
+				return fmt.Errorf("api returned an error document: %s", body)
 			}
-
-			// Check that response is valid JSON/CSV, not error page
-			if len(body) == 0 {
-				return fmt.Errorf("empty response body")
-			}
-
-			// Example: reject responses that are error pages
-			if bytes.Contains(body, []byte("error")) && bytes.Contains(body, []byte("message")) {
-				return fmt.Errorf("API returned error response")
-			}
-
 			return nil
 		},
+
+		RateLimiter: throttle{every: 200 * time.Millisecond},
 	}
 
-	// Extract NDJSON (newline-delimited JSON)
-	fmt.Println("Extracting data with advanced configuration...")
-	lines, err := extract.NDJSON(ctx, fonte)
+	lines, err := extract.NDJSON(context.Background(), fonte)
 	if err != nil {
-		log.Fatalf("Failed to extract: %v", err)
+		log.Fatalf("extract: %v", err)
 	}
 
-	// Process with error handling
-	successCount := 0
-	errorCount := 0
-
-	for env, err := range lines {
+	rows := 0
+	for _, err := range lines {
 		if err != nil {
-			errorCount++
-			slog.ErrorContext(ctx, "row error",
-				"error", err,
-				"total_errors", errorCount)
-			continue
+			log.Fatalf("row %d: %v", rows, err)
 		}
-
-		successCount++
-
-		// Set envelope metadata
-		env.Provider = "example_gov"
-		env.Entity = "transactions"
-
-		// Process envelope
-		fmt.Printf("✓ Processed row %d: %+v\n", successCount, env.Payload)
-
-		// Demo: stop after 5 successful rows
-		if successCount >= 5 {
-			break
-		}
+		rows++
 	}
 
-	fmt.Printf("\n✓ Success: %d rows\n✗ Errors: %d rows\n", successCount, errorCount)
+	fmt.Printf("%d rows\n", rows)
 }

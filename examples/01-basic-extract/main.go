@@ -1,3 +1,5 @@
+// Command 01-basic-extract is the smallest useful thing the SDK does:
+// pull a CSV off an HTTP endpoint and walk its rows.
 package main
 
 import (
@@ -6,53 +8,28 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/AreteAcademy/bravis/sdk"
 	"github.com/AreteAcademy/bravis/sdk/extract"
 )
 
-// Example 1: Basic CSV extraction
-//
-// This example shows the simplest way to extract data from an HTTP endpoint.
-// The SDK handles retry, timeout, and format detection automatically.
-//
-// Run:
-//   go run examples/01_basic_extract.go -url "https://example.com/data.csv"
 func main() {
-	url := flag.String("url", "", "URL to fetch (required)")
+	url := flag.String("url", "https://raw.githubusercontent.com/AreteAcademy/bravis/master/examples/testdata/people.csv", "CSV endpoint")
 	flag.Parse()
 
-	if *url == "" {
-		fmt.Println("Usage: go run 01_basic_extract.go -url <url>")
-		fmt.Println("\nExample:")
-		fmt.Println("  go run 01_basic_extract.go -url 'https://example.gov/api/data.csv'")
-		return
-	}
-
-	ctx := context.Background()
-
-	// Extract CSV data
-	lines, err := extract.CSV(ctx, extract.Fonte{
-		URL: *url,
-	})
+	// The first row names the columns; pass NoHeader to key rows positionally.
+	lines, err := extract.CSV(context.Background(), sdk.Fonte{URL: *url})
 	if err != nil {
-		log.Fatalf("Failed to extract: %v", err)
+		log.Fatalf("extract: %v", err)
 	}
 
-	// Process each row
-	count := 0
+	rows := 0
 	for env, err := range lines {
 		if err != nil {
-			log.Printf("Row error: %v", err)
-			continue
+			log.Fatalf("row %d: %v", rows, err)
 		}
-
-		count++
-		fmt.Printf("Row %d: %+v\n", count, env.Payload)
-
-		// Stop after first 10 for demo
-		if count >= 10 {
-			break
-		}
+		rows++
+		fmt.Printf("%d: %v\n", rows, env.Payload)
 	}
 
-	fmt.Printf("\nProcessed %d rows\n", count)
+	fmt.Printf("\n%d rows\n", rows)
 }

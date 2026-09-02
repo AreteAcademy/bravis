@@ -6,17 +6,16 @@ Extract HTTP data with retry, timeout, and format handling. Load to BigQuery wit
 
 ## Installation
 
-The SDK is published at `pkg.go.dev` once the repository is public.
-
-For now, use local `replace` in your `go.mod`:
-
-```go
-module github.com/yourorg/yourproject
-
-go 1.25.7
-
-require github.com/AreteAcademy/bravis/sdk v0.1.0
+```bash
+go get github.com/AreteAcademy/bravis/sdk@latest
+go mod tidy
 ```
+
+Requires Go 1.23 or newer (the SDK streams rows as `iter.Seq2`).
+
+> **Do not use `v0.1.0`.** It shipped a `go.mod` pinning a revision that does
+> not exist, so it fails to build for everyone. The Go module proxy is
+> immutable and cannot be corrected after the fact. Start at `v0.1.1`.
 
 ## Quick Start
 
@@ -28,12 +27,14 @@ package main
 import (
 	"context"
 	"log"
+
+	"github.com/AreteAcademy/bravis/sdk"
 	"github.com/AreteAcademy/bravis/sdk/extract"
 )
 
 func main() {
 	ctx := context.Background()
-	lines, err := extract.CSV(ctx, extract.Fonte{
+	lines, err := extract.CSV(ctx, sdk.Fonte{
 		URL: "https://example.gov/api/data.csv",
 	})
 	if err != nil {
@@ -66,10 +67,11 @@ import (
 func main() {
 	ctx := context.Background()
 	
-	loader, err := load.New(ctx, &sdk.LoadConfig{
-		ProjectID: "my-project",
-		Dataset:   "landing",
-	})
+	loader, err := load.New(ctx, nil,
+		sdk.WithProjectID("my-project"),
+		sdk.WithDataset("landing"),
+		sdk.WithTable("raw_data"),
+	)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -85,7 +87,7 @@ func main() {
 		},
 	}
 
-	result, err := loader.Load(ctx, "example_api", "transactions", envelopes...)
+	result, err := loader.Load(ctx, envelopes...)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -119,20 +121,50 @@ lines, _ := extract.CSV(ctx, sdk.Fonte{URL: url, NoHeader: true})
 // -> {field_0: Bob,   field_1: 25}
 ```
 
+## Pagination
+
+Three strategies, picked by which field you set. All of them cap out at
+`MaxPages` (1000 by default) so a server that always advertises a next page
+cannot spin forever.
+
+```go
+// Link: <...>; rel="next"
+extract.NDJSON(ctx, sdk.Fonte{URL: url, FollowLinks: true})
+
+// {"results": [...], "next_page": "abc"} -- the cursor is sent back as the
+// query parameter of the same name, and DataKey says where the rows live.
+extract.JSON(ctx, sdk.Fonte{URL: url, CursorKey: "next_page", DataKey: "results"})
+
+// ?offset=0, ?offset=100, ... until a page comes back empty
+extract.NDJSON(ctx, sdk.Fonte{URL: url, OffsetKey: "offset", PageSize: 100})
+```
+
+## Rate limiting
+
+`Fonte.RateLimiter` is any type with `Wait(ctx) error`, which
+`*golang.org/x/time/rate.Limiter` satisfies as-is — so you get it without the
+SDK taking on the dependency:
+
+```go
+fonte.RateLimiter = rate.NewLimiter(rate.Every(time.Second), 1)
+```
+
+It is consulted before every attempt, retries included.
+
 ## Extract Formats
 
 - **CSV** — tabular data; the first row names the columns (set `NoHeader: true` to key rows positionally instead)
 - **NDJSON** — newline-delimited JSON; streaming friendly
 - **JSON** — array or single object
-- **XML** — structured data (partial support)
+- **XML** — the repeated element under the root becomes one Envelope each
 
 ## Extract Features
 
 - **Retry with exponential backoff** — 429, 5xx, and network errors only
 - **Timeout** — per-attempt and total, separate
 - **Guard function** — validate 200-OK-but-wrong-content
-- **Pagination** — cursor, offset, or Link headers
-- **Rate limiting** — optional `rate.Limiter`
+- **Pagination** — Link headers, body cursor, or offset (see below)
+- **Rate limiting** — any `Wait(ctx) error`, including `*rate.Limiter`
 - **Observability** — structured logs with redacted URLs
 - **Stream decoding** — no materializing entire response
 
@@ -145,7 +177,10 @@ The loader automatically chooses:
 | < 5000 | Inline | One request, no external staging |
 | >= 5000 | GCS staging | No memory limit, deletes after load |
 
-Configure threshold with `WithThresholdForGCS()`.
+Configure the threshold with `sdk.WithThresholdForGCS(n)`, or set
+`LoadConfig.ThresholdForGCS` directly. `load.New` accepts either a
+`*LoadConfig`, a list of options, or both — and never mutates the config you
+pass it.
 
 ## BigQuery Schema
 
@@ -202,7 +237,7 @@ The `ingestion_id` is a deterministic UUID v5 derived from:
 Extract errors include URL, attempt number, and duration. Load errors include table name, row count, and per-row BigQuery errors (truncated).
 
 ```go
-result, err := loader.Load(ctx, provider, entity, envelopes...)
+result, err := loader.Load(ctx, envelopes...)
 if err != nil {
 	log.Printf("Load failed: %v", err)
 	log.Printf("Errors by row: %v", result.ErrorRows)
