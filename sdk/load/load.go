@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"strings"
 	"time"
 
 	"cloud.google.com/go/bigquery"
@@ -15,7 +14,9 @@ import (
 	"github.com/AreteAcademy/bravis/sdk"
 )
 
-// Loader writes Envelopes to BigQuery.
+// Loader writes Envelopes to BigQuery as generic JSON.
+// The SDK does NOT impose a table schema — you define it.
+// Metadata can be optionally added to the payload itself.
 type Loader struct {
 	cfg *sdk.LoadConfig
 	bq  *bigquery.Client
@@ -29,7 +30,11 @@ func New(ctx context.Context, cfg *sdk.LoadConfig) (*Loader, error) {
 	}
 
 	if cfg.Dataset == "" {
-		cfg.Dataset = "landing"
+		return nil, fmt.Errorf("Dataset is required")
+	}
+
+	if cfg.Table == "" {
+		return nil, fmt.Errorf("Table is required")
 	}
 
 	if cfg.StagingBucket == "" {
@@ -46,6 +51,10 @@ func New(ctx context.Context, cfg *sdk.LoadConfig) (*Loader, error) {
 
 	if cfg.Format == "" {
 		cfg.Format = "ndjson"
+	}
+
+	if cfg.MetadataNamespace == "" {
+		cfg.MetadataNamespace = "e3a4f8c0-1b9d-4ea0-9c2e-77f6a6c4a4d7"
 	}
 
 	bq, err := bigquery.NewClient(ctx, cfg.ProjectID)
@@ -66,8 +75,9 @@ func New(ctx context.Context, cfg *sdk.LoadConfig) (*Loader, error) {
 }
 
 // Load writes envelopes to BigQuery.
-// The table name is derived as: vendors_{provider}_{entity}s
-func (l *Loader) Load(ctx context.Context, provider string, entity string, envelopes ...sdk.Envelope) (*sdk.LoadResult, error) {
+// The table must already exist with the schema you define.
+// Metadata can be optionally added to each payload.
+func (l *Loader) Load(ctx context.Context, envelopes ...sdk.Envelope) (*sdk.LoadResult, error) {
 	start := time.Now()
 
 	if len(envelopes) == 0 {
@@ -78,28 +88,22 @@ func (l *Loader) Load(ctx context.Context, provider string, entity string, envel
 		}, nil
 	}
 
-	// Validate all envelopes
-	for _, e := range envelopes {
-		if e.SourceKey == "" {
-			return nil, fmt.Errorf("SourceKey cannot be empty")
+	// Add metadata if requested
+	if l.cfg.AddMetadata {
+		for i := range envelopes {
+			if err := l.addMetadataToEnvelope(&envelopes[i]); err != nil {
+				return nil, fmt.Errorf("add metadata: %w", err)
+			}
 		}
 	}
 
-	// Ensure timestamps are set
-	for i := range envelopes {
-		if envelopes[i].RecordTS == "" {
-			envelopes[i].RecordTS = time.Now().UTC().Format(time.RFC3339)
-		}
-		envelopes[i].Provider = provider
-		envelopes[i].Entity = entity
-	}
+	table := l.bq.Dataset(l.cfg.Dataset).Table(l.cfg.Table)
 
-	tableName := fmt.Sprintf("vendors_%s_%ss", provider, entity)
-	table := l.bq.Dataset(l.cfg.Dataset).Table(tableName)
-
-	// Ensure table exists with correct schema
-	if err := l.ensureTable(ctx, table); err != nil {
-		return nil, fmt.Errorf("ensure table: %w", err)
+	// Verify table exists (don't create it)
+	_, err := table.Metadata(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("table %s.%s not found: %w. Create it manually with your desired schema",
+			l.cfg.Dataset, l.cfg.Table, err)
 	}
 
 	// Choose strategy based on envelope count
@@ -131,7 +135,7 @@ func (l *Loader) Load(ctx context.Context, provider string, entity string, envel
 	}
 
 	slog.InfoContext(ctx, "load complete",
-		"table", tableName,
+		"table", fmt.Sprintf("%s.%s", l.cfg.Dataset, l.cfg.Table),
 		"rows", result.RowsLoaded,
 		"bytes", result.BytesStaged,
 		"strategy", strategy,
@@ -140,42 +144,74 @@ func (l *Loader) Load(ctx context.Context, provider string, entity string, envel
 	return result, nil
 }
 
+// addMetadataToEnvelope adds metadata fields to the envelope's payload.
+func (l *Loader) addMetadataToEnvelope(env *sdk.Envelope) error {
+	// Calculate ingestion ID
+	id, err := env.IngestionID()
+	if err != nil {
+		return err
+	}
+
+	// Convert payload to map if it isn't already
+	var payloadMap map[string]interface{}
+	switch p := env.Payload.(type) {
+	case map[string]interface{}:
+		payloadMap = p
+	default:
+		// Try to marshal and unmarshal to convert to map
+		data, err := json.Marshal(env.Payload)
+		if err != nil {
+			return fmt.Errorf("marshal payload: %w", err)
+		}
+		if err := json.Unmarshal(data, &payloadMap); err != nil {
+			return fmt.Errorf("unmarshal to map: %w", err)
+		}
+	}
+
+	// Add metadata fields
+	metadata := map[string]interface{}{
+		"_bravis_ingestion_id":        id,
+		"_bravis_ingestion_loaded_at": time.Now().UTC().Format(time.RFC3339),
+		"_bravis_provider":            env.Provider,
+		"_bravis_entity":              env.Entity,
+		"_bravis_source_key":          env.SourceKey,
+		"_bravis_record_ts":           env.RecordTS,
+	}
+
+	// Merge metadata into payload
+	for k, v := range metadata {
+		payloadMap[k] = v
+	}
+
+	env.Payload = payloadMap
+	return nil
+}
+
 func (l *Loader) loadInline(ctx context.Context, table *bigquery.Table, envelopes []sdk.Envelope) (int64, error) {
+	// Convert envelopes to JSON rows
 	rows := make([]*bigquery.StructSaver, len(envelopes))
 
-	for i, e := range envelopes {
-		id, err := e.IngestionID()
+	var totalBytes int64
+	for i, env := range envelopes {
+		// Marshal payload to JSON
+		data, err := json.Marshal(env.Payload)
 		if err != nil {
-			return 0, fmt.Errorf("ingestion id: %w", err)
+			return 0, fmt.Errorf("marshal row %d: %w", i, err)
 		}
 
-		now := time.Now().UTC()
+		totalBytes += int64(len(data))
+
 		rows[i] = &bigquery.StructSaver{
-			Struct: &bqRow{
-				IngestionID:     id,
-				IngestionLoadedAt: now,
-				Provider:        e.Provider,
-				Entity:          e.Entity,
-				SourceKey:       e.SourceKey,
-				Payload:         mustJSON(e.Payload),
-			},
+			Struct: json.RawMessage(data),
 		}
 	}
 
 	inserter := table.Inserter()
 	if err := inserter.Put(ctx, rows); err != nil {
-		return 0, fmt.Errorf("insert rows: %w", err)
+		return totalBytes, fmt.Errorf("insert rows: %w", err)
 	}
 
-	// Calculate bytes (rough estimate)
-	var buf bytes.Buffer
-	for _, env := range envelopes {
-		b, _ := json.Marshal(env.Payload)
-		buf.Write(b)
-		buf.WriteString("\n")
-	}
-
-	return int64(buf.Len()), nil
+	return totalBytes, nil
 }
 
 func (l *Loader) loadViaGCS(ctx context.Context, table *bigquery.Table, envelopes []sdk.Envelope) (int64, error) {
@@ -186,27 +222,18 @@ func (l *Loader) loadViaGCS(ctx context.Context, table *bigquery.Table, envelope
 	bucket := l.gcs.Bucket(l.cfg.StagingBucket)
 	obj := bucket.Object(objName)
 
-	// Write envelopes to staging
+	// Write envelopes to staging as NDJSON
 	wc := obj.NewWriter(ctx)
 	bytesWritten := int64(0)
 
-	for _, e := range envelopes {
-		id, err := e.IngestionID()
+	for _, env := range envelopes {
+		data, err := json.Marshal(env.Payload)
 		if err != nil {
-			return 0, fmt.Errorf("ingestion id: %w", err)
+			wc.Close()
+			obj.Delete(ctx)
+			return 0, fmt.Errorf("marshal row: %w", err)
 		}
 
-		now := time.Now().UTC()
-		row := bqRow{
-			IngestionID:     id,
-			IngestionLoadedAt: now,
-			Provider:        e.Provider,
-			Entity:          e.Entity,
-			SourceKey:       e.SourceKey,
-			Payload:         mustJSON(e.Payload),
-		}
-
-		data, _ := json.Marshal(row)
 		data = append(data, '\n')
 
 		n, err := wc.Write(data)
@@ -253,52 +280,4 @@ func (l *Loader) loadViaGCS(ctx context.Context, table *bigquery.Table, envelope
 	}
 
 	return bytesWritten, nil
-}
-
-func (l *Loader) ensureTable(ctx context.Context, table *bigquery.Table) error {
-	_, err := table.Metadata(ctx)
-	if err == nil {
-		return nil // table exists
-	}
-
-	schema := bigquery.Schema{
-		{Name: "ingestion_id", Type: bigquery.StringFieldType, Required: true},
-		{Name: "ingestion_loaded_at", Type: bigquery.TimestampFieldType, Required: true},
-		{Name: "provider", Type: bigquery.StringFieldType, Required: true},
-		{Name: "entity", Type: bigquery.StringFieldType, Required: true},
-		{Name: "source_key", Type: bigquery.StringFieldType},
-		{Name: "payload", Type: bigquery.JSONFieldType, Required: true},
-	}
-
-	// Create table with partitioning and clustering
-	meta := &bigquery.TableMetadata{
-		Schema: schema,
-		TimePartitioning: &bigquery.TimePartitioning{
-			Type:  bigquery.DayPartitioningType,
-			Field: "ingestion_loaded_at",
-		},
-		Clustering: &bigquery.Clustering{
-			Fields: []string{"provider", "entity"},
-		},
-	}
-
-	if err := table.Create(ctx, meta); err != nil {
-		return fmt.Errorf("create table: %w", err)
-	}
-
-	return nil
-}
-
-func mustJSON(v any) json.RawMessage {
-	b, _ := json.Marshal(v)
-	return b
-}
-
-type bqRow struct {
-	IngestionID      string          `bigquery:"ingestion_id"`
-	IngestionLoadedAt time.Time        `bigquery:"ingestion_loaded_at"`
-	Provider         string          `bigquery:"provider"`
-	Entity           string          `bigquery:"entity"`
-	SourceKey        string          `bigquery:"source_key"`
-	Payload          json.RawMessage `bigquery:"payload"`
 }

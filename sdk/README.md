@@ -125,19 +125,44 @@ Configure threshold with `WithThresholdForGCS()`.
 
 ## BigQuery Schema
 
-The loader creates or verifies:
+**You define the schema.** The SDK writes raw JSON payloads.
+
+Create your table with whatever schema makes sense for your data:
 
 ```sql
-CREATE TABLE {dataset}.vendors_{provider}_{entity}s (
-  ingestion_id        STRING NOT NULL,
-  ingestion_loaded_at TIMESTAMP NOT NULL,
-  provider            STRING NOT NULL,
-  entity              STRING NOT NULL,
-  source_key          STRING,
-  payload             JSON   NOT NULL
+-- Simple: just store the payload
+CREATE TABLE {dataset}.{table} (
+  payload JSON NOT NULL
 )
-PARTITION BY DATE(ingestion_loaded_at)
-CLUSTER BY provider, entity;
+```
+
+Or with metadata:
+
+```sql
+-- Rich: store payload + metadata
+CREATE TABLE {dataset}.{table} (
+  payload JSON NOT NULL
+)
+-- Metadata fields (if AddMetadata=true) will be inside payload:
+-- - _bravis_ingestion_id (deterministic UUID v5)
+-- - _bravis_ingestion_loaded_at (load timestamp)
+-- - _bravis_provider (data source)
+-- - _bravis_entity (entity type)
+-- - _bravis_source_key (unique key from source)
+-- - _bravis_record_ts (record timestamp at source)
+```
+
+Or structured:
+
+```sql
+-- Structured: extract fields from JSON
+CREATE TABLE {dataset}.{table} (
+  ingestion_id STRING NOT NULL,
+  loaded_at TIMESTAMP NOT NULL,
+  data JSON NOT NULL
+)
+PARTITION BY DATE(loaded_at)
+CLUSTER BY ingestion_id
 ```
 
 ## Idempotency

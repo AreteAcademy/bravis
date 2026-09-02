@@ -63,14 +63,17 @@ type RetryConfig struct {
 
 // LoadConfig controls load behavior.
 type LoadConfig struct {
-	ProjectID         string // GCP project ID; required
-	Dataset           string // BigQuery dataset; default: "landing"
-	StagingBucket     string // GCS bucket for staging; default: "{projectID}-bravis-staging"
-	StagingPrefix     string // prefix for staged files; default: "extracts/"
-	ThresholdForGCS   int    // row count above which to use GCS; default: 5000
-	Format            string // "ndjson", "csv", or "parquet"; default: "ndjson"
-	DeleteAfterLoad   bool   // delete staged file after successful load; default: true
-	WriteDisposition  string // WRITE_APPEND only; always validate this
+	ProjectID           string // GCP project ID; required
+	Dataset             string // BigQuery dataset; required
+	Table               string // BigQuery table; required
+	StagingBucket       string // GCS bucket for staging; default: "{projectID}-bravis-staging"
+	StagingPrefix       string // prefix for staged files; default: "extracts/"
+	ThresholdForGCS     int    // row count above which to use GCS; default: 5000
+	Format              string // "ndjson", "csv", or "parquet"; default: "ndjson"
+	DeleteAfterLoad     bool   // delete staged file after successful load; default: true
+	AddMetadata         bool   // add metadata fields to payload; default: false
+	MetadataNamespace   string // namespace UUID for ingestion_id; default: "e3a4f8c0-1b9d-4ea0-9c2e-77f6a6c4a4d7"
+	SourceKeyField      string // which field in payload contains the source key; if empty, uses Envelope.SourceKey
 }
 
 // ExtractOption is a functional option for extract.Fonte.
@@ -111,6 +114,13 @@ func WithDataset(name string) LoadOption {
 	}
 }
 
+// WithTable sets the target BigQuery table.
+func WithTable(name string) LoadOption {
+	return func(cfg *LoadConfig) {
+		cfg.Table = name
+	}
+}
+
 // WithStagingBucket sets the GCS bucket for staging.
 func WithStagingBucket(bucket string) LoadOption {
 	return func(cfg *LoadConfig) {
@@ -129,5 +139,19 @@ func WithFormat(format string) LoadOption {
 func WithThresholdForGCS(threshold int) LoadOption {
 	return func(cfg *LoadConfig) {
 		cfg.ThresholdForGCS = threshold
+	}
+}
+
+// WithMetadata enables adding metadata fields to payloads.
+func WithMetadata(enabled bool) LoadOption {
+	return func(cfg *LoadConfig) {
+		cfg.AddMetadata = enabled
+	}
+}
+
+// WithMetadataNamespace sets the UUID namespace for ingestion IDs.
+func WithMetadataNamespace(ns string) LoadOption {
+	return func(cfg *LoadConfig) {
+		cfg.MetadataNamespace = ns
 	}
 }
