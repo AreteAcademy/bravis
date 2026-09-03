@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"sort"
 	"strings"
 	"time"
 
@@ -190,11 +191,20 @@ func (l *Loader) Load(ctx context.Context, envelopes ...core.Envelope) (*core.Lo
 	}
 
 	if l.cfg.ExtraMetadata {
-		for i := range envelopes {
-			if err := l.addMetadataToEnvelope(&envelopes[i]); err != nil {
+		// On a copy. `loader.Load(ctx, batch...)` hands us the caller's own
+		// slice -- a variadic call shares the backing array -- so writing the
+		// metadata back into it would alter what they still hold. Loading the
+		// same batch twice then failed on the second try with "payload
+		// already has ingestion_id", which is exactly what a retry does, and
+		// exactly what DedupMerge exists to handle.
+		stamped := make([]core.Envelope, len(envelopes))
+		copy(stamped, envelopes)
+		for i := range stamped {
+			if err := l.addMetadataToEnvelope(&stamped[i]); err != nil {
 				return fail(fmt.Errorf("add metadata: %w", err))
 			}
 		}
+		envelopes = stamped
 	}
 
 	table := l.bq.Dataset(l.cfg.Dataset).Table(l.cfg.Table)
@@ -209,7 +219,31 @@ func (l *Loader) Load(ctx context.Context, envelopes ...core.Envelope) (*core.Lo
 		return fail(err)
 	}
 
+	// Checked here rather than left to BigQuery. With autodetect the schema
+	// comes from these very rows, so the SDK already knows whether the
+	// clustering columns are in them -- and failing before submitting a job
+	// says which field is missing and what the rows actually have. BigQuery's
+	// own error arrives after the job and names only the field.
+	if !existed && l.cfg.CreateTable {
+		if err := checkClusterFields(l.cfg.ClusterBy, envelopes); err != nil {
+			return fail(err)
+		}
+	}
+
 	var rowErrs []string
+
+	// A merge needs something to match against. On a destination that does
+	// not exist yet there is nothing: every row is new, and the plain path is
+	// also what creates the table -- with the merge, the load job targets the
+	// staging table, so the destination would never come into being and the
+	// MERGE would fail with "table not found". Found by the integration test
+	// on its first real run.
+	if dedup == core.DedupMerge && !existed && l.cfg.CreateTable {
+		slog.InfoContext(ctx, "first load into a new table: nothing to deduplicate against",
+			"table", fmt.Sprintf("%s.%s", l.cfg.Dataset, l.cfg.Table))
+		dedup = core.DedupNone
+		result.Dedup = core.DedupNone
+	}
 
 	if dedup == core.DedupMerge {
 		inserted, ignored, errs, err := l.loadWithMerge(ctx, table, data, int64(len(envelopes)))
@@ -338,6 +372,40 @@ func (l *Loader) encodeRows(envelopes []core.Envelope) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// checkClusterFields confirms every clustering column is present in the rows
+// about to create the table.
+func checkClusterFields(fields []string, envelopes []core.Envelope) error {
+	if len(fields) == 0 || len(envelopes) == 0 {
+		return nil
+	}
+
+	first, ok := envelopes[0].Payload.(map[string]any)
+	if !ok {
+		return nil // encodeRows already refused anything that is not an object
+	}
+
+	var missing []string
+	for _, f := range fields {
+		if _, present := first[f]; !present {
+			missing = append(missing, f)
+		}
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+
+	available := make([]string, 0, len(first))
+	for k := range first {
+		available = append(available, k)
+	}
+	sort.Strings(available)
+	sort.Strings(missing)
+
+	return fmt.Errorf("ClusterBy names %s, which the rows do not have. The table is created "+
+		"from these rows, so a clustering column has to be one of them: %s",
+		strings.Join(missing, ", "), strings.Join(available, ", "))
+}
+
 func truncate(b []byte, n int) string {
 	if len(b) <= n {
 		return string(b)
@@ -462,7 +530,7 @@ func (l *Loader) loadViaGCS(ctx context.Context, table *bigquery.Table, data []b
 		return 0, rows, err
 	}
 
-	if l.cfg.DeleteAfterLoad {
+	if !l.cfg.KeepStagedFile {
 		if err := obj.Delete(ctx); err != nil {
 			slog.WarnContext(ctx, "staged object left behind", "object", objName, "error", err)
 		}

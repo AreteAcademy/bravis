@@ -168,7 +168,6 @@ func (d Target) resolveWith(run RunContext) (*core.LoadConfig, map[string]origin
 		StagingBucket:          bucket.value,
 		ThresholdForGCS:        limite,
 		Format:                 "ndjson",
-		DeleteAfterLoad:        true,
 		Dedup:                  d.Dedup,
 		ExtraMetadata:          d.ExtraMetadata,
 		ClusterBy:              d.ClusterBy,

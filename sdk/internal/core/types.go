@@ -93,7 +93,15 @@ type LoadConfig struct {
 	StagingPrefix   string // prefix for staged files; default: "extracts/"
 	ThresholdForGCS int    // row count above which to use GCS; default: 5000
 	Format          string // "ndjson", "csv", or "parquet"; default: "ndjson"
-	DeleteAfterLoad bool   // delete staged file after successful load; default: true
+	// KeepStagedFile leaves the staged object in the bucket after a
+	// successful load. The default is to delete it: a bucket filling up with
+	// files nobody looks at is a bill nobody reviews.
+	//
+	// This used to be DeleteAfterLoad, documented as defaulting to true --
+	// which a bool cannot do. Anyone using load.New directly got the zero
+	// value, false, and never cleaned up. The integration test found three
+	// objects left behind, one per run.
+	KeepStagedFile bool
 
 	// Driver selects the destination. Empty means DriverBigQuery, the only
 	// one implemented today.

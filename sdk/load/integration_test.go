@@ -267,7 +267,9 @@ func TestIntegrationCreatesTableFromData(t *testing.T) {
 		core.WithTable(name),
 		core.WithCreateTable(true),
 		core.WithExtraMetadata(true),
-		core.WithClusterBy("provider"),
+		// Um campo que os próprios registros têm: o SDK não impõe coluna
+		// nenhuma desde a v0.9.0, então "provider" não existe mais aqui.
+		core.WithClusterBy("label"),
 	)
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -291,7 +293,7 @@ func TestIntegrationCreatesTableFromData(t *testing.T) {
 	if md.TimePartitioning == nil || md.TimePartitioning.Field != "ingestion_loaded_at" {
 		t.Errorf("created without partitioning on ingestion_loaded_at: %+v", md.TimePartitioning)
 	}
-	if md.Clustering == nil || md.Clustering.Fields[0] != "provider" {
+	if md.Clustering == nil || md.Clustering.Fields[0] != "label" {
 		t.Errorf("created without the clustering asked for: %+v", md.Clustering)
 	}
 

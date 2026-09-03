@@ -723,3 +723,85 @@ func TestLayoutPartitionsOnMetadataTimestamp(t *testing.T) {
 		t.Errorf("clustering = %+v", loader.Clustering)
 	}
 }
+
+func TestClusterByMustBeInTheRows(t *testing.T) {
+	// The table is created from these rows, so a clustering column has to be
+	// one of them. BigQuery says so too, but only after the job is submitted
+	// and without saying what the rows do have.
+	err := checkClusterFields([]string{"provider", "label"}, []core.Envelope{{
+		Payload: map[string]any{"amount": 1, "label": "x"},
+	}})
+	if err == nil {
+		t.Fatal("clustering on an absent column must be refused")
+	}
+	if !strings.Contains(err.Error(), "provider") {
+		t.Errorf("the error must name the missing field: %v", err)
+	}
+	if !strings.Contains(err.Error(), "amount") {
+		t.Errorf("the error must list what the rows do have: %v", err)
+	}
+	if strings.Contains(err.Error(), "label,") || strings.Contains(err.Error(), ", label") {
+		// label exists, so it must not be reported as missing
+		if strings.Contains(err.Error(), "ClusterBy names provider, label") {
+			t.Errorf("only the absent field should be reported: %v", err)
+		}
+	}
+
+	if err := checkClusterFields([]string{"label"}, []core.Envelope{{
+		Payload: map[string]any{"label": "x"},
+	}}); err != nil {
+		t.Errorf("a present column must pass: %v", err)
+	}
+	if err := checkClusterFields(nil, nil); err != nil {
+		t.Errorf("nothing to check must not be an error: %v", err)
+	}
+}
+
+func TestLoadDoesNotMutateTheCallersBatch(t *testing.T) {
+	// A variadic call shares the backing array, so stamping metadata into
+	// `envelopes` writes into the slice the caller still holds. Loading the
+	// same batch twice then failed on the second try -- which is what a retry
+	// does, and what DedupMerge exists to handle.
+	//
+	// The narrower test above proves the payload map is copied; this one
+	// proves the slice element is too. Found by the integration test.
+	l := metaLoader()
+	batch := []core.Envelope{{
+		Provider: "gov", Entity: "tx", SourceKey: "k1", RecordTS: "2026-01-01T00:00:00Z",
+		Payload: map[string]any{"amount": 10},
+	}}
+
+	stamped := make([]core.Envelope, len(batch))
+	copy(stamped, batch)
+	for i := range stamped {
+		if err := l.addMetadataToEnvelope(&stamped[i]); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	original, ok := batch[0].Payload.(map[string]any)
+	if !ok {
+		t.Fatalf("payload = %T", batch[0].Payload)
+	}
+	if len(original) != 1 {
+		t.Errorf("the caller's envelope was altered: %v", original)
+	}
+	if _, present := original["ingestion_id"]; present {
+		t.Error("a second load of the same batch would now fail on a collision")
+	}
+}
+
+func TestStagedFileIsDeletedByDefault(t *testing.T) {
+	// DeleteAfterLoad was a bool documented as defaulting to true, which a
+	// bool cannot do: load.New got the zero value and never cleaned up. The
+	// integration test found three objects left in the bucket, one per run.
+	cfg, err := resolveConfig(nil,
+		core.WithProjectID("p"), core.WithDataset("d"), core.WithTable("t"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.KeepStagedFile {
+		t.Error("the zero value must clean up: a bucket filling with files nobody " +
+			"looks at is a bill nobody reviews")
+	}
+}

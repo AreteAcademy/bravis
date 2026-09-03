@@ -36,6 +36,17 @@ export BRAVIS_IT_BUCKET=meu-bucket     # para a estratégia GCS
 go test ./load/... -run Integration
 ```
 
+Use um dataset e um bucket **dedicados**: os testes criam tabelas `it_*` e as
+apagam no `t.Cleanup`, mas uma execução interrompida deixa uma para trás, e
+apagar o dataset inteiro é a limpeza mais simples. O bucket precisa estar
+colocado com o dataset — um dataset `US` com bucket em outra região faz o load
+job falhar só na estratégia GCS.
+
+Eles pagam por si: na primeira execução real acharam quatro defeitos que os
+testes em memória não podiam pegar — `CreateTable` e `DedupMerge` que não
+compunham, `Load` mutando a fatia do chamador, `ClusterBy` sem validação, e o
+`DeleteAfterLoad` que nunca limpava.
+
 ## Lint
 
 O CI roda `golangci-lint` v2.13.2. Para rodar igual localmente:
