@@ -329,7 +329,55 @@ vendors em Python ou duplicar a chave.
 
 ---
 
-## 5. Critério de pronto para a `v0.10.1`
+## 5. `Source.Preview` amostra do lado errado do `Expand` — **v0.13.0**
+
+O preview da `v0.13.0` é útil e o desenho está certo em quase tudo: a amostra é
+colhida enquanto os registros passam, sai também quando a fonte morre no meio, e
+não passa por `slog` porque o `TextHandler` escaparia as quebras de linha. Mas
+ele mostra o payload **antes** do `Expand`.
+
+`extract/extract.go:121` embrulha o `yield` e amostra `env.Payload`. O `Expand`
+é aplicado em `sdk.go:111`, **fora** do pacote `extract` — então para qualquer
+fetcher com `Expand`, o preview mostra o envelope cru e não os registros.
+
+No consumidor, `Source.Expand = ParallelArrays("hourly", "time",
+"temperature_2m")`:
+
+```
+msg="extract complete" pages=1 rows=1 bytes=846 per_page=51µs
+
+   elevation  generationtime_ms  hourly                                    hourly_units       latitude    longitude
+0        737  0.0983476638793945  {"temperature_2m":[14.1,13.6,13.2,12.6,…  {"temperature_2m…  -23.514938  -46.610504
+
+[1 row · 9 columns (2 not shown) · 846 B · 1 page in 51µs]
+dry-run open_meteo/hourly_temperature -> ... (24 records, 1 page(s), 1 attempt(s), 781ms)
+```
+
+`1 row` no rodapé, `24 records` na linha seguinte, para o mesmo extract. E as
+colunas exibidas — `elevation`, `hourly_units`, `generationtime_ms` — não são as
+que chegam à tabela; `generationtime_ms` é justamente o campo que o consumidor
+remove no `Transform` porque muda a cada chamada.
+
+O caso em que "o que eu puxei, afinal?" mais importa é exatamente o do `Expand`:
+uma resposta com arrays paralelos ou coleção aninhada é onde ninguém consegue
+prever a forma do registro de cabeça. É onde o preview mostra menos.
+
+**O conserto** é amostrar onde os registros do consumidor existem: mover a
+amostragem e a renderização para o embrulho de expansão do `sdk.Extract`, ou
+passar um tap pós-`Expand` para o `extract`. `Stats.Bytes` deve continuar
+medindo o fio — 846 B está certo e é útil.
+
+**Como provar:** um teste com `Expand` definido, afirmando que o preview traz os
+registros expandidos e que o rodapé conta o mesmo que o consumidor recebe. Todo
+teste de preview de hoje roda sem `Expand`, e é por isso que isto passou.
+
+Menor, no mesmo caminho: `rows` do `extract complete` conta o que o pacote
+`extract` emitiu, não o que o consumidor recebe. Ou os dois números viram um, ou
+o nome diz qual dos dois é.
+
+---
+
+## 6. Critério de pronto para a `v0.10.1`
 
 > Os itens 1 e 2 têm spec de execução própria, com implementação e provas:
 > [`plan/2026-09-03-sdk-conserto-do-merge.md`](plan/2026-09-03-sdk-conserto-do-merge.md).
