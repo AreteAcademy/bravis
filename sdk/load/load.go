@@ -328,7 +328,9 @@ func (l *Loader) addMetadataToEnvelope(env *core.Envelope) error {
 			return fmt.Errorf("marshal payload: %w", err)
 		}
 		if err := json.Unmarshal(data, &payload); err != nil {
-			return fmt.Errorf("unmarshal to map: %w", err)
+			return fmt.Errorf("ExtraMetadata adds two fields to the record, so it has to be a "+
+				"JSON object; this one is %s. Wrap it in Transform, or leave ExtraMetadata off",
+				truncate(data, 80))
 		}
 	}
 

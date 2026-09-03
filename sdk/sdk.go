@@ -220,7 +220,28 @@ func loadWith(ctx context.Context, data *Data, target Target, run RunContext) (*
 // collect drains the stream, stamping provenance from Target onto each
 // record. Load needs the batch in hand to choose a strategy and to size the
 // staged file, so this is where streaming ends.
+// collect drains the stream into envelopes.
+//
+// The payload is passed through untouched. Provenance -- provider, entity,
+// source_key, record_ts -- is filled in only when ExtraMetadata is on, because
+// that is the only thing it is for: those four build ingestion_id. With the
+// flag off the SDK never reads a field out of your payload, never needs to
+// know its shape, and cannot fail a load because a selector missed.
+//
+// What a row looks like is the caller's decision, made in Transform. The SDK
+// writes it and, on request, adds two fields.
 func collect(data *Data, target Target) ([]Envelope, error) {
+	if !target.ExtraMetadata {
+		var envelopes []Envelope
+		for env, err := range data.Records {
+			if err != nil {
+				return nil, err
+			}
+			envelopes = append(envelopes, env)
+		}
+		return envelopes, nil
+	}
+
 	when := target.When
 	if when == nil {
 		when = Now()

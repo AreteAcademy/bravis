@@ -26,17 +26,33 @@ dados, err := sdk.Extract(ctx, sdk.Source{
 	Expand: sdk.ParallelArrays("hourly", "time", "temperature_2m"),
 })
 
+res, err := sdk.Load(ctx, dados, sdk.Target{Table: "hourly_temperature"})
+```
+
+**The payload is yours.** The SDK writes the record as `Transform` left it and
+adds nothing — no wrapper column, no provenance columns, no shape it decided
+for you.
+
+The one thing it will add, on request, is two metadata fields. `ingestion_id`
+is built out of provenance, which is why asking for it is what makes
+`Provider`, `Entity` and `Key` necessary:
+
+```go
 res, err := sdk.Load(ctx, dados, sdk.Target{
-	Provider: "open_meteo",
-	Entity:   "hourly_temperature",
-	Key:    sdk.Key("latitude", "longitude", "time"),
-	When:   sdk.Field("time"),
+	Provider:      "open_meteo",
+	Entity:        "hourly_temperature",
+	Key:           sdk.Key("latitude", "longitude", "time"),
+	When:          sdk.Field("time"),
+	ExtraMetadata: true,
 })
 ```
 
+With the flag off, `Key` and `When` are never called: the SDK does not read a
+field out of your payload to build a column it is not writing.
+
 Everything between those two calls that is not specific to the vendor lives in
-the SDK: config, retry, pagination, expansion, provenance, table creation,
-deduplication and the result you log.
+the SDK: config, retry, pagination, expansion, table creation, deduplication
+and the result you log.
 
 ## Transform
 
@@ -430,8 +446,8 @@ stats := data.Stats()   // read after the stream is drained
 looks like is your decision.
 
 ```go
-sdk.Target{Provider: "open_meteo", Entity: "hourly", Key: sdk.Key("id")}
-// writes exactly the payload
+sdk.Target{Table: "hourly"}
+// writes exactly the payload -- nothing asked for, nothing added
 ```
 
 `ExtraMetadata` adds two fields, and nothing else:
@@ -445,8 +461,12 @@ sdk.Target{Provider: "open_meteo", Entity: "hourly", Key: sdk.Key("id")}
 do not become columns. A payload that already owns one of the two names is an
 error naming the field, never a silent overwrite.
 
-Required by `DedupMerge`, which matches on `ingestion_id`, and by the partition
-options, which partition on `ingestion_loaded_at`.
+Turning the flag on is also what makes `Provider`, `Entity` and `Key`
+necessary, and the only reason the SDK reads your payload at all. With it off
+they are optional and never called.
+
+`ExtraMetadata` is required by `DedupMerge`, which matches on `ingestion_id`,
+and by the partition options, which partition on `ingestion_loaded_at`.
 
 ### A row shape of your own
 

@@ -468,3 +468,130 @@ func TestIntegrationFirstMergeLoadStillPartitions(t *testing.T) {
 		t.Errorf("ClusterBy did not reach the created table: %+v", meta.Clustering)
 	}
 }
+
+// TestIntegrationWritesOnlyTheCallersFields is the contract, checked against
+// the thing that actually decides it.
+//
+// With ExtraMetadata off the SDK adds nothing: the columns in the destination
+// are the caller's fields and no others. No provider, no entity, no
+// source_key, no payload wrapper, no ingestion_id -- the row shape is the
+// caller's decision, made in Transform, and the SDK writes it.
+func TestIntegrationWritesOnlyTheCallersFields(t *testing.T) {
+	env := requireIntegration(t)
+	ctx := context.Background()
+
+	client, err := bigquery.NewClient(ctx, env.project)
+	if err != nil {
+		t.Fatalf("bigquery client: %v", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	name := fmt.Sprintf("it_own_shape_%d", time.Now().UnixNano())
+	table := client.Dataset(env.dataset).Table(name)
+	t.Cleanup(func() { _ = table.Delete(context.Background()) })
+
+	loader, err := New(ctx, nil,
+		core.WithProjectID(env.project),
+		core.WithDataset(env.dataset),
+		core.WithTable(name),
+		core.WithCreateTable(true),
+	)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	// Provenance is deliberately filled in: it must not reach the table.
+	batch := []core.Envelope{{
+		Provider:  "acme",
+		Entity:    "widgets",
+		SourceKey: "k-1",
+		RecordTS:  "2026-01-01T00:00:00Z",
+		Payload:   map[string]any{"sku": "W-1", "quantidade": 3},
+	}}
+
+	if _, err := loader.Load(ctx, batch...); err != nil {
+		t.Fatalf("load: %v", err)
+	}
+
+	meta, err := table.Metadata(ctx)
+	if err != nil {
+		t.Fatalf("reading metadata: %v", err)
+	}
+
+	got := map[string]bool{}
+	for _, f := range meta.Schema {
+		got[f.Name] = true
+	}
+	for _, want := range []string{"sku", "quantidade"} {
+		if !got[want] {
+			t.Errorf("the caller's field %q is not in the table", want)
+		}
+	}
+	for _, forbidden := range []string{"provider", "entity", "source_key", "payload", "ingestion_id", "ingestion_loaded_at"} {
+		if got[forbidden] {
+			t.Errorf("the SDK wrote %q without being asked", forbidden)
+		}
+	}
+	if len(meta.Schema) != 2 {
+		t.Errorf("the table has %d columns, expected exactly the caller's 2", len(meta.Schema))
+	}
+}
+
+// And the other half: with the flag on, exactly two fields are added.
+func TestIntegrationExtraMetadataAddsExactlyTwoFields(t *testing.T) {
+	env := requireIntegration(t)
+	ctx := context.Background()
+
+	client, err := bigquery.NewClient(ctx, env.project)
+	if err != nil {
+		t.Fatalf("bigquery client: %v", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	name := fmt.Sprintf("it_meta_%d", time.Now().UnixNano())
+	table := client.Dataset(env.dataset).Table(name)
+	t.Cleanup(func() { _ = table.Delete(context.Background()) })
+
+	loader, err := New(ctx, nil,
+		core.WithProjectID(env.project),
+		core.WithDataset(env.dataset),
+		core.WithTable(name),
+		core.WithCreateTable(true),
+		core.WithExtraMetadata(true),
+	)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	batch := []core.Envelope{{
+		Provider: "acme", Entity: "widgets", SourceKey: "k-1",
+		RecordTS: "2026-01-01T00:00:00Z",
+		Payload:  map[string]any{"sku": "W-1", "quantidade": 3},
+	}}
+	if _, err := loader.Load(ctx, batch...); err != nil {
+		t.Fatalf("load: %v", err)
+	}
+
+	meta, err := table.Metadata(ctx)
+	if err != nil {
+		t.Fatalf("reading metadata: %v", err)
+	}
+
+	got := map[string]bool{}
+	for _, f := range meta.Schema {
+		got[f.Name] = true
+	}
+	for _, want := range []string{"sku", "quantidade", "ingestion_id", "ingestion_loaded_at"} {
+		if !got[want] {
+			t.Errorf("%q is missing from the table", want)
+		}
+	}
+	for _, forbidden := range []string{"provider", "entity", "source_key", "payload"} {
+		if got[forbidden] {
+			t.Errorf("ExtraMetadata wrote %q; it adds two fields, not six", forbidden)
+		}
+	}
+	if len(meta.Schema) != 4 {
+		t.Errorf("the table has %d columns, expected the caller's 2 plus exactly 2", len(meta.Schema))
+	}
+}

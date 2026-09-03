@@ -194,3 +194,47 @@ func TestConsumidorLeOTamanhoDoQueFoiExtraido(t *testing.T) {
 		t.Errorf("Data.Stats().Bytes = %d depois de drenar o fluxo", data.Stats().Bytes)
 	}
 }
+
+// O payload é do cliente. Sem ExtraMetadata o SDK não pede provenance, não lê
+// campo nenhum do registro, e não escreve nada além do que recebeu.
+func TestConsumidorCarregaSemProvenienciaNenhuma(t *testing.T) {
+	t.Setenv("GOOGLE_PROJECT_ID", "um-projeto")
+
+	srv := fonte(t)
+	data, err := sdk.Extract(context.Background(), sdk.Source{URL: srv.URL})
+	if err != nil {
+		t.Fatalf("Extract: %v", err)
+	}
+
+	// Nem Provider, nem Entity, nem Key. Só onde escrever.
+	_, err = sdk.Load(context.Background(), data, sdk.Target{Table: "minha_tabela"})
+
+	// Sem credencial o load não chega ao BigQuery, e isso basta: o que este
+	// teste prova é que a validação da fachada deixa passar. Um erro citando
+	// Provider, Entity ou Key seria a regressão.
+	if err != nil {
+		for _, proibido := range []string{"Provider", "Entity", "Target.Key"} {
+			if strings.Contains(err.Error(), proibido) {
+				t.Errorf("o SDK ainda exige %s sem ExtraMetadata: %v", proibido, err)
+			}
+		}
+	}
+}
+
+// E com a flag ligada ele cobra, porque aí tem o que construir.
+func TestConsumidorComExtraMetadataPrecisaDeProveniencia(t *testing.T) {
+	t.Setenv("GOOGLE_PROJECT_ID", "um-projeto")
+
+	srv := fonte(t)
+	data, err := sdk.Extract(context.Background(), sdk.Source{URL: srv.URL})
+	if err != nil {
+		t.Fatalf("Extract: %v", err)
+	}
+
+	_, err = sdk.Load(context.Background(), data, sdk.Target{
+		Table: "minha_tabela", ExtraMetadata: true,
+	})
+	if err == nil || !strings.Contains(err.Error(), "Provider") {
+		t.Errorf("ExtraMetadata sem Provider deveria falhar nomeando o campo: %v", err)
+	}
+}

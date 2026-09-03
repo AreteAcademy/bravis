@@ -290,8 +290,9 @@ func TestTransformFeedsTheKeyAndTimestamp(t *testing.T) {
 
 	envelopes, err := collect(data, Target{
 		Provider: "open_meteo", Entity: "hourly",
-		Key:  Key("latitude", "longitude", "observed_at"),
-		When: Field("observed_at"),
+		Key:           Key("latitude", "longitude", "observed_at"),
+		When:          Field("observed_at"),
+		ExtraMetadata: true,
 	})
 	if err != nil {
 		t.Fatalf("collect: %v", err)
@@ -317,7 +318,7 @@ func TestTransformKeyOnARenamedFieldFailsLoudly(t *testing.T) {
 	data := Transform(meteoRecords(t, srv), Rename(map[string]string{"time": "observed_at"}))
 
 	_, err := collect(data, Target{
-		Provider: "open_meteo", Entity: "hourly", Key: Key("time"),
+		Provider: "open_meteo", Entity: "hourly", Key: Key("time"), ExtraMetadata: true,
 	})
 	if err == nil {
 		t.Fatal("a key naming a field that no longer exists must fail")

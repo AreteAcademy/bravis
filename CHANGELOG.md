@@ -8,6 +8,52 @@ A tag de um módulo aninhado leva o prefixo do diretório: `sdk/v0.2.1`.
 
 ---
 
+## [0.14.0] — 2026-09-03
+
+**BREAKING**, e é uma retirada de responsabilidade: o payload é do cliente.
+
+### Alterado
+- **`Provider`, `Entity` e `Key` passam a ser exigidos só com
+  `ExtraMetadata`.** Eles existem para construir o `ingestion_id` e nada mais,
+  então são necessários exatamente quando o SDK vai carimbar um. Antes eram
+  obrigatórios sempre, mesmo numa carga que não adicionava metadado nenhum.
+- **Sem `ExtraMetadata`, o SDK não lê um campo sequer do payload.** `Key` e
+  `When` não são chamados: não faz sentido o SDK aprender a ler o registro
+  para escrever uma coluna que ele não vai escrever — e um seletor que erra
+  derrubava uma carga que nunca pediu inspeção nenhuma. A proveniência
+  (`Provider`, `Entity`, `SourceKey`, `RecordTS`) também deixa de ser
+  carimbada no envelope quando ninguém a consome.
+- `Target.Table` passa a ser exigido quando `Provider` e `Entity` estão
+  vazios. Sem os dois não há nome padrão para cair, e `vendors__s` são dois
+  valores ausentes se passando por um.
+- `-dry-run` deixa de imprimir `ingestion_id`, `key` e `ts` quando
+  `ExtraMetadata` está desligado. Imprimir um id calculado ali mostraria uma
+  coluna que nunca vai pousar.
+
+### Corrigido
+- O erro de um payload que não é objeto com `ExtraMetadata` ligado dizia
+  `unmarshal to map: json: cannot unmarshal string into Go value of type
+  map[string]interface {}`. Agora diz o que fazer.
+
+### Migração
+
+Uma carga que já usava `ExtraMetadata: true` não muda. Uma que não usava pode
+apagar `Provider`, `Entity`, `Key` e `When`, e precisa definir `Table` se
+dependia do nome padrão:
+
+```go
+// antes
+sdk.Target{Provider: "open_meteo", Entity: "hourly", Key: sdk.Key("id")}
+// depois
+sdk.Target{Table: "vendors_open_meteo_hourlys"}
+```
+
+Dois testes de integração novos verificam no BigQuery de verdade que a tabela
+criada tem exatamente as colunas do chamador, e que com a flag ligada tem
+exatamente essas mais duas.
+
+---
+
 ## [0.13.0] — 2026-09-03
 
 ### Adicionado
@@ -348,6 +394,7 @@ Primeira versão que compila.
 > versão de `proxy.golang.org`, então ela permanece publicada e quebrada para
 > sempre. Comece pela `v0.1.1`.
 
+[0.14.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.14.0
 [0.13.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.13.0
 [0.12.1]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.12.1
 [0.12.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.12.0

@@ -209,10 +209,11 @@ func TestExtractExpandeEMapeia(t *testing.T) {
 	}
 
 	target := Target{
-		Provider: "open_meteo",
-		Entity:   "hourly_temperature",
-		Key:      Key("latitude", "longitude", "time"),
-		When:     Field("time"),
+		Provider:      "open_meteo",
+		Entity:        "hourly_temperature",
+		Key:           Key("latitude", "longitude", "time"),
+		When:          Field("time"),
+		ExtraMetadata: true,
 	}
 
 	envelopes, err := collect(data, target)
@@ -316,7 +317,7 @@ func TestErroDeFormatoEmChaveAusente(t *testing.T) {
 	// A field that does not exist is a format error, not a source error: the
 	// action is to fix the mapping, not to wait and retry.
 	_, err = collect(data, Target{
-		Provider: "p", Entity: "e", Key: Key("campo_inexistente"),
+		Provider: "p", Entity: "e", Key: Key("campo_inexistente"), ExtraMetadata: true,
 	})
 	var formato *FormatError
 	if !errors.As(err, &formato) {
@@ -329,15 +330,19 @@ func TestErroDeFormatoEmChaveAusente(t *testing.T) {
 
 // --- Target ---------------------------------------------------------------
 
-func TestDestinoExigeIdentidade(t *testing.T) {
+// Provenance is required exactly when the SDK is going to stamp an id, and
+// not otherwise.
+func TestDestinoExigeIdentidadeSomenteComExtraMetadata(t *testing.T) {
+	t.Setenv(EnvProject, "a-project")
+
 	cases := []struct {
 		name     string
 		target   Target
 		expected string
 	}{
-		{"no provider", Target{Entity: "e", Key: Key("id")}, "Provider"},
-		{"no entity", Target{Provider: "p", Key: Key("id")}, "Entity"},
-		{"no key", Target{Provider: "p", Entity: "e"}, "Key"},
+		{"no provider", Target{Entity: "e", Key: Key("id"), ExtraMetadata: true}, "Provider"},
+		{"no entity", Target{Provider: "p", Key: Key("id"), ExtraMetadata: true}, "Entity"},
+		{"no key", Target{Provider: "p", Entity: "e", ExtraMetadata: true}, "Key"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -349,6 +354,34 @@ func TestDestinoExigeIdentidade(t *testing.T) {
 				t.Errorf("the error should name %s: %v", c.expected, err)
 			}
 		})
+	}
+}
+
+// The other half, and the point of the change: with the flag off none of the
+// three is needed, because the SDK has nothing to build out of them.
+func TestDestinoSemExtraMetadataNaoExigeProveniencia(t *testing.T) {
+	t.Setenv(EnvProject, "a-project")
+
+	cfg, _, err := Target{Table: "minha_tabela"}.resolve()
+	if err != nil {
+		t.Fatalf("a load that adds no metadata needs no provenance: %v", err)
+	}
+	if cfg.Table != "minha_tabela" {
+		t.Errorf("Table = %q", cfg.Table)
+	}
+}
+
+// Without Provider and Entity there is no default name to fall back on, and
+// "vendors__s" is two missing values pretending to be one.
+func TestDestinoSemNomeDeTabelaFalaClaro(t *testing.T) {
+	t.Setenv(EnvProject, "a-project")
+
+	_, _, err := Target{}.resolve()
+	if err == nil {
+		t.Fatal("a target with no table and no provider must not resolve")
+	}
+	if !strings.Contains(err.Error(), "table not set") {
+		t.Errorf("the error should say the table is missing: %v", err)
 	}
 }
 
@@ -752,6 +785,85 @@ func TestEveryCoreOptionIsReachable(t *testing.T) {
 		name := m[1]
 		if !regexp.MustCompile(`\b` + name + `\s*=\s*core\.` + name + `\b`).Match(src) {
 			t.Errorf("core.%s is not re-exported in types.go, so no consumer can call it", name)
+		}
+	}
+}
+
+// --- the payload is the caller's, not the SDK's -------------------------
+
+// With ExtraMetadata off the SDK has nothing to build out of the payload, so
+// it must not read one field out of it. Proved with selectors that fail if
+// they are ever called: a selector that runs is a selector whose failure can
+// sink a load the caller never asked the SDK to inspect.
+func TestSemExtraMetadataOSDKNaoTocaNoPayload(t *testing.T) {
+	srv := openMeteoServer(t)
+	defer srv.Close()
+
+	data, err := Extract(context.Background(), Source{
+		URL:    srv.URL,
+		Expand: ParallelArrays("hourly", "time", "temperature_2m"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	chamou := false
+	envelopes, err := collect(data, Target{
+		Table: "qualquer",
+		Key: func(any) (string, error) {
+			chamou = true
+			return "", fmt.Errorf("Key should never run without ExtraMetadata")
+		},
+		When: func(any) (string, error) {
+			chamou = true
+			return "", fmt.Errorf("When should never run without ExtraMetadata")
+		},
+	})
+	if err != nil {
+		t.Fatalf("collect: %v", err)
+	}
+	if chamou {
+		t.Error("the SDK read the payload for provenance it was not asked to add")
+	}
+	if len(envelopes) == 0 {
+		t.Fatal("no records came through")
+	}
+	for i, e := range envelopes {
+		if e.Provider != "" || e.Entity != "" || e.SourceKey != "" || e.RecordTS != "" {
+			t.Errorf("record %d was stamped with provenance nobody asked for: %+v", i, e)
+		}
+	}
+}
+
+// And what comes out is what went in, field for field.
+func TestSemExtraMetadataOPayloadSaiComoEntrou(t *testing.T) {
+	srv := openMeteoServer(t)
+	defer srv.Close()
+
+	data, err := Extract(context.Background(), Source{
+		URL:    srv.URL,
+		Expand: ParallelArrays("hourly", "time", "temperature_2m"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	envelopes, err := collect(data, Target{Table: "qualquer"})
+	if err != nil {
+		t.Fatalf("collect: %v", err)
+	}
+
+	got, ok := envelopes[0].Payload.(map[string]any)
+	if !ok {
+		t.Fatalf("payload changed shape: %T", envelopes[0].Payload)
+	}
+	want := []string{"latitude", "longitude", "temperature_2m", "time"}
+	if len(got) != len(want) {
+		t.Errorf("the SDK added or removed fields: %v", got)
+	}
+	for _, f := range want {
+		if _, present := got[f]; !present {
+			t.Errorf("field %q went missing", f)
 		}
 	}
 }

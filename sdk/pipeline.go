@@ -197,11 +197,20 @@ func runDryRun(ctx context.Context, p *Pipeline, n int) error {
 			_, _ = fmt.Fprintf(os.Stdout, "... and %d more\n", len(envelopes)-n)
 			break
 		}
-		id, err := env.IngestionID()
+		body, err := json.Marshal(env.Payload)
 		if err != nil {
 			return fmt.Errorf("record %d: %w", i, err)
 		}
-		body, err := json.Marshal(env.Payload)
+
+		// Without ExtraMetadata there is no ingestion_id to print, because
+		// the load will not write one. Printing a computed id here would
+		// show a column that never lands.
+		if !p.Target.ExtraMetadata {
+			_, _ = fmt.Fprintf(os.Stdout, "%s\n", body)
+			continue
+		}
+
+		id, err := env.IngestionID()
 		if err != nil {
 			return fmt.Errorf("record %d: %w", i, err)
 		}
