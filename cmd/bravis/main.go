@@ -638,7 +638,9 @@ func cmdScheduler() *cobra.Command {
 				}
 				return app.Runner{
 					// Os params do RUN, nao do workflow: e o snapshot da
-					// entrada daquela execucao.
+					// entrada daquela execucao. Entram no comando por template
+					// e no ambiente do passo, para que um fetcher que use o SDK
+					// os enxergue sem receber nada por argumento.
 					Params:   r.Params,
 					Processo: processo,
 					Pods:     pods,
@@ -655,6 +657,17 @@ func cmdScheduler() *cobra.Command {
 					// pode estar preso em Pending para sempre.
 					TentativaDoRun: r.Attempt,
 					Vagas:          vagas,
+
+					// O que o passo nao tem como saber e o engine tem. Vai
+					// para o ambiente dele como BRAVIS_RUN_*, e o SDK usa para
+					// decidir, entre outras coisas, se cria a tabela de
+					// destino na primeira execucao.
+					//
+					// Sem Historico a resposta e sempre "nao e a primeira":
+					// criar tabela sem certeza e pior que nao criar.
+					Historico:   runs,
+					Trigger:     r.TriggerType,
+					LogicalDate: r.LogicalDate,
 				}.Run(ctx, w)
 			}
 

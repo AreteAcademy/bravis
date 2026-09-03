@@ -6,13 +6,22 @@
 > cada um. A prova do que o consumidor enxerga vive em `examples/consumer/`,
 > fora do módulo do SDK, e roda no CI.
 >
-> **Uma parte do §7 não pôde ser provada de ponta a ponta:** nada no repositório
-> instancia o `Runner` — a ligação dispatcher → `Runner` é fase não construída,
-> e `Executar` é uma função injetada que ninguém liga ao runner ainda. O lado do
-> runner está implementado e testado isoladamente (o ambiente que ele monta, a
-> pergunta por passo, a precedência em colisão), e o `RunRepo` implementa
-> `Historico` com asserção em tempo de compilação. O que falta é o fio entre os
-> dois, que pertence à fase do dispatcher.
+> **Correção de 2026-09-03:** o §7 está completo, e a ressalva anterior estava
+> errada. Eu havia registrado que "nada instancia o `Runner`" — na verdade o
+> `executar` do `cmdScheduler` sempre fez isso; ele tinha sumido junto com o
+> entrypoint do engine, que um CLI escrevera por cima. Com o `cmd/bravis`
+> recuperado, a ligação dispatcher → `Runner` reapareceu inteira, e só faltava
+> passar os três campos novos (`Historico`, `Trigger`, `LogicalDate`).
+>
+> Duas coisas apareceram ao provar de ponta a ponta com `bravis run`:
+>
+> - O `RunID` zero era injetado como `BRAVIS_RUN_ID`, e o SDK decide estar sob
+>   o engine pela **presença** do id — então um fetcher rodado à mão logaria
+>   "running under Bravis" com um id inventado. Agora as três variáveis de
+>   identidade só saem quando há run de verdade; os params continuam indo,
+>   porque `--param` é como se passa entrada nesse caminho.
+> - A tentativa é **0-based** no engine, como a coluna `task_runs.attempt`. A
+>   documentação do SDK dizia que contava de 1.
 
 Prompt de execução. O objetivo é o engine conseguir dizer ao SDK coisas que o
 fetcher não sabe — é a primeira execução? quais os parâmetros deste disparo? —

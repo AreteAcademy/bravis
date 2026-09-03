@@ -170,3 +170,75 @@ func TestSemParamsNaoInjetaVariavelVazia(t *testing.T) {
 		t.Error("sem trigger, idem")
 	}
 }
+
+func TestSemRunIDNaoInventaExecucaoGerenciada(t *testing.T) {
+	// `bravis run` executa um YAML na hora e nao pertence a historico nenhum.
+	// O SDK decide que esta sob o engine pela PRESENCA do id, entao injetar o
+	// UUID zero faria um fetcher rodado a mao logar "running under Bravis" com
+	// um id inventado.
+	tarefa := rodar(t, app.Runner{
+		Params:    map[string]string{"create_table": "true"},
+		Historico: &historico{jaTeve: false},
+	})
+
+	for _, v := range []string{"BRAVIS_RUN_ID", "BRAVIS_RUN_FIRST", "BRAVIS_RUN_ATTEMPT"} {
+		if _, existe := tarefa.Env[v]; existe {
+			t.Errorf("%s nao devia existir sem um run de verdade: %q", v, tarefa.Env[v])
+		}
+	}
+
+	// Os params continuam indo: `--param` e como se passa entrada nesse caminho.
+	if tarefa.Env["BRAVIS_RUN_PARAMS"] == "" {
+		t.Error("os params tem de chegar ao passo mesmo sem run gerenciado")
+	}
+}
+
+func TestTentativaComecaEmZeroComoNoBanco(t *testing.T) {
+	// A coluna task_runs.attempt tem DEFAULT 0, e o nome do pod deriva dela.
+	// Divergir aqui faria o passo reportar uma tentativa que nao existe.
+	tarefa := rodar(t, app.Runner{RunID: uuid.New(), Historico: &historico{}})
+
+	if tarefa.Env["BRAVIS_RUN_ATTEMPT"] != "0" {
+		t.Errorf("primeira tentativa = %q, esperado \"0\"", tarefa.Env["BRAVIS_RUN_ATTEMPT"])
+	}
+}
+
+// TestCaminhoDoDispatcher reproduz o que cmd/bravis monta no `executar` do
+// dispatcher: um run de verdade, com id, params, trigger e historico.
+//
+// E o unico teste que cobre a forma como o Runner e realmente construido em
+// producao — o resto do arquivo testa campos isolados.
+func TestCaminhoDoDispatcher(t *testing.T) {
+	id := uuid.New()
+	quando := time.Date(2026, 9, 3, 4, 0, 0, 0, time.UTC)
+
+	tarefa := rodar(t, app.Runner{
+		RunID:          id,
+		TentativaDoRun: 0,
+		Params:         map[string]string{"load_full": "true"},
+		Trigger:        "schedule",
+		LogicalDate:    &quando,
+		Historico:      &historico{jaTeve: false},
+		Env:            map[string]string{"PATH": "/usr/bin", "HOME": "/root"},
+	})
+
+	// O ambiente das tasks sobrevive.
+	if tarefa.Env["PATH"] == "" || tarefa.Env["HOME"] == "" {
+		t.Error("o ambiente configurado das tasks tem de continuar chegando")
+	}
+
+	// E o contexto do run chega junto.
+	esperado := map[string]string{
+		"BRAVIS_RUN_ID":           id.String(),
+		"BRAVIS_RUN_FIRST":        "true",
+		"BRAVIS_RUN_ATTEMPT":      "0",
+		"BRAVIS_RUN_TRIGGER":      "schedule",
+		"BRAVIS_RUN_LOGICAL_DATE": "2026-09-03T04:00:00Z",
+		"BRAVIS_RUN_PARAMS":       `{"load_full":"true"}`,
+	}
+	for k, v := range esperado {
+		if tarefa.Env[k] != v {
+			t.Errorf("%s = %q, esperado %q", k, tarefa.Env[k], v)
+		}
+	}
+}

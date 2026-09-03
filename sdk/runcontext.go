@@ -50,8 +50,9 @@ type RunContext struct {
 	// someone dropped by mistake.
 	First bool
 
-	// Attempt counts from 1. A retry of the same run does not make First true
-	// again.
+	// Attempt of this step, counting from zero, matching the engine's
+	// task_runs.attempt column. A retry of the same run does not make First
+	// true again.
 	Attempt int
 
 	// Trigger is schedule, manual or backfill.

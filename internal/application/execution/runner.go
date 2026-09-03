@@ -416,10 +416,21 @@ const (
 // primeira e resolvida antes, pelo chamador, porque exige ida ao banco e
 // montar a task nao deve fazer I/O.
 func (r Runner) contextoDoRun(nodeID string, primeira bool, tentativa int) map[string]string {
-	env := map[string]string{
-		envRunID:      r.RunID.String(),
-		envRunFirst:   strconv.FormatBool(primeira),
-		envRunAttempt: strconv.Itoa(tentativa),
+	env := map[string]string{}
+
+	// Sem RunID nao ha run gerenciado: e o caminho de `bravis run`, que executa
+	// um YAML na hora e nao pertence a historico nenhum.
+	//
+	// Injetar o UUID zero aqui seria pior que nao injetar nada: o SDK decide
+	// que esta sob o engine pela PRESENCA do id, entao um fetcher rodado a mao
+	// passaria a logar "running under Bravis" com um id inventado. Os params
+	// continuam indo, porque `--param` e justamente como se passa entrada
+	// nesse caminho.
+	if r.RunID != uuid.Nil {
+		env[envRunID] = r.RunID.String()
+		env[envRunFirst] = strconv.FormatBool(primeira)
+		// Comeca em zero, como a coluna task_runs.attempt.
+		env[envRunAttempt] = strconv.Itoa(tentativa)
 	}
 
 	if r.Trigger != "" {
