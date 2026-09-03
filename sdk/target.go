@@ -218,10 +218,11 @@ func (d Target) resolveCreate(run RunContext) (bool, origin) {
 //	log.Info("pronto", res.Args()...)
 type Result struct {
 	// Extract
-	Records     int64 // records that came out of extract, after expansion
-	Pages       int   // pages fetched
-	Attempts    int   // HTTP attempts spent, retries included
-	ExtractTime time.Duration
+	Records      int64 // records that came out of extract, after expansion
+	Pages        int   // pages fetched
+	Attempts     int   // HTTP attempts spent, retries included
+	ExtractBytes int64 // bytes read off the wire, before Transform
+	ExtractTime  time.Duration
 
 	// Load
 	Rows         int64      // rows written
@@ -248,6 +249,7 @@ func (r *Result) Args() []any {
 		"ignored", r.Ignored,
 		"paginas", r.Pages,
 		"attempts", r.Attempts,
+		"extract_bytes", r.ExtractBytes,
 		"bytes", r.Bytes,
 		"table", r.Table,
 		"estrategia", r.Strategy,

@@ -152,3 +152,45 @@ func TestConstantesDoEngineEstaoExportadas(t *testing.T) {
 		}
 	}
 }
+
+// O preview é feito para o consumidor ver o dado. Se ele não alcança os
+// campos, ou se o writer não é dele, o recurso não existe para quem importa.
+func TestConsumidorLigaOPreviewEEscolheOnde(t *testing.T) {
+	srv := fonte(t)
+
+	var out strings.Builder
+	data, err := sdk.Extract(context.Background(), sdk.Source{
+		URL:           srv.URL,
+		Preview:       2,
+		PreviewBytes:  2048,
+		PreviewWriter: &out,
+	})
+	if err != nil {
+		t.Fatalf("Extract: %v", err)
+	}
+	for range data.Records {
+	}
+
+	if out.Len() == 0 {
+		t.Fatal("o consumidor pediu preview e nada foi escrito no writer dele")
+	}
+	if !strings.Contains(out.String(), "1 row · 2 columns") {
+		t.Errorf("o rodapé não veio junto:\n%s", out.String())
+	}
+}
+
+// Um número que o consumidor não consegue ler é um número que não existe.
+func TestConsumidorLeOTamanhoDoQueFoiExtraido(t *testing.T) {
+	srv := fonte(t)
+
+	data, err := sdk.Extract(context.Background(), sdk.Source{URL: srv.URL})
+	if err != nil {
+		t.Fatalf("Extract: %v", err)
+	}
+	for range data.Records {
+	}
+
+	if data.Stats().Bytes <= 0 {
+		t.Errorf("Data.Stats().Bytes = %d depois de drenar o fluxo", data.Stats().Bytes)
+	}
+}

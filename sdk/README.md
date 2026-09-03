@@ -320,7 +320,62 @@ It is consulted before every attempt, retries included.
 - **Pagination** — Link headers, body cursor, or offset (see below)
 - **Rate limiting** — any `Wait(ctx) error`, including `*rate.Limiter`
 - **Observability** — structured logs with redacted URLs
+- **Preview** — print the first records as a table (see below)
 - **Stream decoding** — no materializing entire response
+
+### Seeing what you pulled
+
+`Preview` prints the first N records once the extract finishes, the way a
+dataframe's `head()` shows the top of a frame. Off by default.
+
+```go
+sdk.Source{
+	URL:     "https://api.open-meteo.com/v1/forecast?...",
+	Preview: 4,
+}
+```
+
+```
+   relative_humidity_2m  station           temperature_2m  time              weather_code  wind_speed_10m
+0                    78  Berlin-Tempelhof             3.4  2026-01-01T00:00             3            11.2
+1                    81  Berlin-Tempelhof           -1.15  2026-01-01T01:00            61             9.7
+2                    78  Berlin-Tempelhof             6.4  2026-01-02T00:00             3            11.2
+3                    81  Berlin-Tempelhof           -2.15  2026-01-02T01:00            61             9.7
+
+[4 of 6 rows · 6 columns · 960 B · 3 pages in 262µs · 87µs/page]
+```
+
+It answers "what did I actually just pull?" without a debugger and without
+draining the stream into a variable to look at it. The sample is taken as the
+records stream past, so it costs N records of memory and never changes what
+the consumer receives. It still prints when the source dies halfway or you
+break out of the loop — which is exactly when you want to see what did arrive.
+
+A pipeline gets it from the command line too, so you can look without
+recompiling:
+
+```bash
+./my-fetcher -preview 5
+```
+
+| field | default | what it does |
+|---|---|---|
+| `Preview` | `0` (off) | how many records to print |
+| `PreviewBytes` | `4096` | caps the block; rows are dropped from the bottom and the footer says how many |
+| `PreviewWriter` | `os.Stderr` | where the table goes |
+
+The table goes to a writer rather than through `slog` because slog's
+`TextHandler` escapes newlines, so a table logged as an attribute arrives as
+one unreadable line of `\n`. The counters do go through slog, where a
+structured number belongs:
+
+```
+INFO extract complete format=json pages=3 rows=6 bytes=960 duration=262µs per_page=87µs
+```
+
+`bytes` is what came off the wire, before `Transform` — the number that
+explains a slow extract. It is also on `Data.Stats().Bytes` and
+`Result.ExtractBytes`.
 
 ## Load Strategy
 
@@ -566,6 +621,7 @@ fonte := sdk.Source{
 	Timeout:      30 * time.Second, // per attempt
 	TotalTimeout: 5 * time.Minute,  // total
 	NoHeader:     false,            // CSV only; false = first row is the header
+	Preview:      5,                // print the first 5 records as a table; 0 is off
 	RetryConfig: &sdk.RetryConfig{
 		MaxAttempts:    3,
 		InitialBackoff: 1 * time.Second,

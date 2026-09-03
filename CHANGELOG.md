@@ -8,6 +8,42 @@ A tag de um módulo aninhado leva o prefixo do diretório: `sdk/v0.2.1`.
 
 ---
 
+## [0.13.0] — 2026-09-03
+
+### Adicionado
+- **`Source.Preview`** — imprime os primeiros N registros como tabela quando o
+  extract termina, no espírito do `head()` de um dataframe. Desligado por
+  padrão. Responde "o que eu puxei, afinal?" sem depurador e sem drenar o fluxo
+  para uma variável só para olhar. A amostra é colhida enquanto os registros
+  passam, então custa N registros de memória e não altera nada do que o
+  consumidor recebe — e sai também quando a fonte morre no meio ou o consumidor
+  sai do laço, que é justamente quando se quer ver o que chegou.
+- `PreviewBytes` (padrão 4096) corta o bloco: linhas caem de baixo para cima e
+  o rodapé diz quantas ficaram de fora. Colunas largas demais para a linha são
+  elididas com a contagem. Um preview que mostrasse menos do que amostrou sem
+  dizer estaria mentindo sobre a amostra.
+- `PreviewWriter` (padrão `os.Stderr`). A tabela não passa por `slog` porque o
+  `TextHandler` escapa quebras de linha, e o bloco chegaria como uma única
+  linha ilegível de `\n`. Os contadores passam, que é onde número estruturado
+  pertence.
+- Flag `-preview N` no `Execute`, para ligar sem recompilar. Ela só liga: uma
+  pipeline que pediu preview em código continua com o dela.
+- **`Stats.Bytes`**, `Data.Stats().Bytes` e `Result.ExtractBytes` — o tamanho do
+  que veio pelo fio, antes do `Transform`. É o número que explica um extract
+  lento; uma página pode ser quase toda envelope e ainda demorar um minuto.
+- O log `extract complete` ganhou `bytes` e `per_page`.
+
+### Corrigido
+- Durações abaixo de um milissegundo eram arredondadas para `0s`, que se lê
+  como "não medido" em vez de "rápido". Agora o arredondamento acompanha a
+  escala.
+
+### Removido
+- `core.ExtractOption`, declarado e usado por nada: nenhuma opção, nenhum
+  consumidor, nem reexportado. Era inalcançável de fora do módulo.
+
+---
+
 ## [0.12.1] — 2026-09-03
 
 ### Corrigido
@@ -312,6 +348,7 @@ Primeira versão que compila.
 > versão de `proxy.golang.org`, então ela permanece publicada e quebrada para
 > sempre. Comece pela `v0.1.1`.
 
+[0.13.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.13.0
 [0.12.1]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.12.1
 [0.12.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.12.0
 [0.11.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.11.0

@@ -15,8 +15,10 @@ import (
 	"math/rand"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	core "github.com/AreteAcademy/bravis/sdk/internal/core"
@@ -91,10 +93,14 @@ func fetch(ctx context.Context, source core.Source) (iter.Seq2[core.Envelope, er
 
 	ctxTotal, cancelTotal := context.WithTimeout(ctx, source.TotalTimeout)
 
+	// Counted from the first byte of the first page, which is fetched before
+	// the closure exists -- so the counter has to outlive both.
+	var bytesRead int64
+
 	// The first page is fetched eagerly so that an unreachable host, a 404 or
 	// a guard rejection surfaces as an error from CSV/JSON/NDJSON/XML rather
 	// than as the first item of a sequence the caller has to drain to notice.
-	first, err := fetchPage(ctxTotal, source, source.URL)
+	first, err := fetchPage(ctxTotal, source, source.URL, &bytesRead)
 	if err != nil {
 		cancelTotal()
 		return nil, err
@@ -107,6 +113,53 @@ func fetch(ctx context.Context, source core.Source) (iter.Seq2[core.Envelope, er
 		page := first
 		rows := 0
 		pages := 0
+
+		// The sample is taken as records go past, so a preview costs N
+		// records of memory and never touches what the consumer receives.
+		var sample []any
+		emit := yield
+		if source.Preview > 0 {
+			emit = func(env core.Envelope, err error) bool {
+				if err == nil && len(sample) < source.Preview {
+					sample = append(sample, env.Payload)
+				}
+				return yield(env, err)
+			}
+		}
+
+		// Deferred so the report still comes out when the source dies
+		// halfway or the consumer breaks out of the loop -- which is exactly
+		// when someone wants to see what did arrive.
+		defer func() {
+			read := atomic.LoadInt64(&bytesRead)
+			if source.Stats != nil {
+				source.Stats.Bytes = read
+			}
+			elapsed := time.Since(startTime)
+
+			args := []any{
+				"format", source.Format,
+				"url", redactURL(source.URL),
+				"pages", pages,
+				"rows", rows,
+				"bytes", read,
+				"duration", elapsed,
+			}
+			if pages > 0 {
+				args = append(args, "per_page", roundDuration(elapsed/time.Duration(pages)))
+			}
+			slog.InfoContext(ctxTotal, "extract complete", args...)
+
+			if source.Preview > 0 {
+				w := source.PreviewWriter
+				if w == nil {
+					w = os.Stderr
+				}
+				_, _ = io.WriteString(w, renderPreview(sample, source.PreviewBytes, previewStats{
+					Rows: rows, Pages: pages, Bytes: read, Duration: elapsed,
+				}))
+			}
+		}()
 		// A cursor that stops advancing is an infinite loop, and government
 		// APIs do return the same token forever at the end of a collection.
 		// MaxPages would eventually stop it, but only after MaxPages wasted
@@ -118,7 +171,7 @@ func fetch(ctx context.Context, source core.Source) (iter.Seq2[core.Envelope, er
 			if source.Stats != nil {
 				source.Stats.Pages = pages
 			}
-			emitted, next, err := drainPage(ctxTotal, source, page, yield)
+			emitted, next, err := drainPage(ctxTotal, source, page, emit)
 			rows += emitted
 			page.close()
 
@@ -140,19 +193,12 @@ func fetch(ctx context.Context, source core.Source) (iter.Seq2[core.Envelope, er
 			}
 			seen[next] = true
 
-			page, err = fetchPage(ctxTotal, source, next)
+			page, err = fetchPage(ctxTotal, source, next, &bytesRead)
 			if err != nil {
 				yield(core.Envelope{}, fmt.Errorf("page %d: %w", pages+1, err))
 				return
 			}
 		}
-
-		slog.InfoContext(ctxTotal, "extract complete",
-			"format", source.Format,
-			"url", redactURL(source.URL),
-			"pages", pages,
-			"rows", rows,
-			"duration", time.Since(startTime))
 	}, nil
 }
 
@@ -161,6 +207,22 @@ const defaultMaxPages = 1000
 // errStopped signals that the consumer broke out of the range loop. It is
 // never handed to the caller -- there is nobody left to hand it to.
 var errStopped = errors.New("consumer stopped iterating")
+
+// countingBody tallies what actually came off the wire.
+//
+// It wraps the response body rather than measuring the decoded records,
+// because the number that explains a slow extract is the one the source
+// sent -- a page can be mostly envelope and still take a minute to arrive.
+type countingBody struct {
+	io.ReadCloser
+	n *int64
+}
+
+func (c countingBody) Read(b []byte) (int, error) {
+	n, err := c.ReadCloser.Read(b)
+	atomic.AddInt64(c.n, int64(n))
+	return n, err
+}
 
 // page is one fetched HTTP response, plus whatever had to be buffered to
 // work out where the next page lives.
@@ -260,7 +322,7 @@ func withQuery(rawURL, key, value string) (string, error) {
 // fetchPage performs one request, with retry, and prepares the response for
 // decoding. Everything that needs the whole body -- the guard, cursor paging
 // -- buffers it here so the streaming path below stays streaming.
-func fetchPage(ctxTotal context.Context, source core.Source, pageURL string) (*page, error) {
+func fetchPage(ctxTotal context.Context, source core.Source, pageURL string, bytesRead *int64) (*page, error) {
 	var resp *http.Response
 	// release cancels the context of the attempt that produced resp. The body
 	// is still streaming under that context, so it must stay alive until the
@@ -331,7 +393,8 @@ func fetchPage(ctxTotal context.Context, source core.Source, pageURL string) (*p
 		return nil, fmt.Errorf("http %d: %s", resp.StatusCode, string(body))
 	}
 
-	p := &page{body: resp.Body, release: release}
+	body := countingBody{ReadCloser: resp.Body, n: bytesRead}
+	p := &page{body: body, release: release}
 
 	if source.FollowLinks {
 		p.linkNext = parseLinkNext(resp.Header.Get("Link"))
@@ -343,7 +406,7 @@ func fetchPage(ctxTotal context.Context, source core.Source, pageURL string) (*p
 	// Anything that must see the whole body reads it here and hands the
 	// decoder an equivalent reader.
 	if source.Guard != nil || source.CursorKey != "" || source.DataKey != "" {
-		body, err := io.ReadAll(resp.Body)
+		buffered, err := io.ReadAll(body)
 		if err != nil {
 			p.close()
 			return nil, fmt.Errorf("read body: %w", err)
@@ -351,7 +414,7 @@ func fetchPage(ctxTotal context.Context, source core.Source, pageURL string) (*p
 		_ = resp.Body.Close()
 
 		if source.Guard != nil {
-			if err := source.Guard(resp.StatusCode, body); err != nil {
+			if err := source.Guard(resp.StatusCode, buffered); err != nil {
 				p.body = nil
 				p.close()
 				return nil, fmt.Errorf("guard rejected response: %w", err)
@@ -359,17 +422,17 @@ func fetchPage(ctxTotal context.Context, source core.Source, pageURL string) (*p
 		}
 
 		if source.CursorKey != "" || source.DataKey != "" {
-			cursor, rows, err := unwrapPage(body, source.CursorKey, source.DataKey)
+			cursor, rows, err := unwrapPage(buffered, source.CursorKey, source.DataKey)
 			if err != nil {
 				p.body = nil
 				p.close()
 				return nil, err
 			}
 			p.cursor = cursor
-			body = rows
+			buffered = rows
 		}
 
-		p.body = io.NopCloser(bytes.NewReader(body))
+		p.body = io.NopCloser(bytes.NewReader(buffered))
 	}
 
 	return p, nil

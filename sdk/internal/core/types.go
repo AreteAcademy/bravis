@@ -201,6 +201,11 @@ type Stats struct {
 	// Attempts is every HTTP request made, retries included, across all
 	// pages. Attempts above Pages means the source was flaky.
 	Attempts int
+
+	// Bytes read off the wire, across every page. This is the size of what
+	// the source sent, not of what survived Transform -- the two differ, and
+	// the one that explains a slow extract is this one.
+	Bytes int64
 }
 
 // Format names the wire format of a response.
@@ -212,9 +217,6 @@ const (
 	FormatCSV    Format = "csv"
 	FormatXML    Format = "xml"
 )
-
-// ExtractOption is a functional option for a Source.
-type ExtractOption func(*Source)
 
 // Limiter throttles outbound requests. It is satisfied by
 // *golang.org/x/time/rate.Limiter, so callers can pass one directly without
@@ -251,6 +253,31 @@ type Source struct {
 
 	// Stats, when not nil, is filled in as the extract runs. See Stats.
 	Stats *Stats
+
+	// Preview prints the first N records once the extract finishes, the way
+	// a dataframe's head() shows the top of a frame. Zero, the default,
+	// prints nothing.
+	//
+	// It answers "what did I actually just pull?" without a debugger and
+	// without draining the stream into a variable to look at it. The sample
+	// is taken as the records stream past, so it costs N records of memory
+	// and nothing else -- and it never changes what the consumer receives.
+	Preview int
+
+	// PreviewBytes caps the printed block. Zero uses 4096.
+	//
+	// Rows are dropped from the bottom until the block fits, and the footer
+	// says how many were held back: a preview that quietly showed less than
+	// it sampled would be lying about the sample.
+	PreviewBytes int
+
+	// PreviewWriter is where the table goes. Nil means os.Stderr.
+	//
+	// It is not routed through slog because slog's TextHandler escapes
+	// newlines, so a table logged as an attribute arrives as one unreadable
+	// line of \n. The counters do go through slog, where a structured number
+	// belongs.
+	PreviewWriter io.Writer
 
 	// Expand turns one decoded document into the records it holds, for the
 	// common case of an API that wraps its readings. Nil means each decoded

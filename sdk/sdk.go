@@ -188,6 +188,7 @@ func loadWith(ctx context.Context, data *Data, target Target, run RunContext) (*
 	if data.stats != nil {
 		res.Pages = data.stats.Pages
 		res.Attempts = data.stats.Attempts
+		res.ExtractBytes = data.stats.Bytes
 	}
 
 	if len(envelopes) == 0 {

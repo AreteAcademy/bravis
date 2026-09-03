@@ -97,6 +97,7 @@ func Execute(ctx context.Context, p *Pipeline, args []string) error {
 		dataset = fs.String("dataset", "", "BigQuery dataset (default: "+EnvDataset+", or landing)")
 		table   = fs.String("table", "", "destination table (default: vendors_<provider>_<entity>s)")
 		verbose = fs.Bool("v", false, "log at debug level")
+		preview = fs.Int("preview", 0, "print the first N records as a table once the extract finishes")
 	)
 	if p.Flags != nil {
 		p.Flags(fs)
@@ -123,6 +124,12 @@ func Execute(ctx context.Context, p *Pipeline, args []string) error {
 	}
 	if *table != "" {
 		p.Target.Table = *table
+	}
+	// The flag only turns the preview on; a pipeline that asked for one in
+	// code keeps it, so running without the flag does not silently disable
+	// what the fetcher configured.
+	if *preview > 0 {
+		p.Source.Preview = *preview
 	}
 
 	if p.Before != nil {
