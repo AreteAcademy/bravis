@@ -17,6 +17,87 @@ Requires Go 1.23 or newer (the SDK streams rows as `iter.Seq2`).
 > not exist, so it fails to build for everyone. The Go module proxy is
 > immutable and cannot be corrected after the fact. Start at `v0.1.1`.
 
+## Duas chamadas
+
+```go
+dados, err := sdk.Extract(ctx, sdk.Fonte{
+	URL:      "https://api.open-meteo.com/v1/forecast?...",
+	Guarda:   sdk.RecusarSe("error"),
+	Expandir: sdk.ArraysParalelos("hourly", "time", "temperature_2m"),
+})
+
+res, err := sdk.Load(ctx, dados, sdk.Destino{
+	Provider: "open_meteo",
+	Entity:   "hourly_temperature",
+	Chave:    sdk.Chave("latitude", "longitude", "time"),
+	Quando:   sdk.Campo("time"),
+})
+```
+
+Everything between those two calls that is not specific to the vendor lives in
+the SDK: config, retry, pagination, expansion, provenance, table creation,
+deduplication and the result you log.
+
+Or the whole fetcher as a value, which gets flags, `-dry-run`, logging and the
+exit code for free:
+
+```go
+func main() {
+	sdk.Rodar(sdk.Pipeline{
+		Fonte:   sdk.Fonte{URL: "...", Expandir: sdk.ArrayEm("results")},
+		Destino: sdk.Destino{
+			Provider: "example", Entity: "events",
+			Chave:  sdk.Chave("id"),
+			Quando: sdk.Campo("created_at"),
+		},
+	})
+}
+```
+
+The first real consumer went from **156 lines to 44** on this API.
+
+`sdk/extract` and `sdk/load` stay available and unchanged: reach for them
+directly when you need a shape these two calls do not cover. The hard case has
+to stay possible.
+
+### Configuration and where it came from
+
+Resolved in this order: what you set explicitly, then the environment, then the
+SDK default, then an error when there is no sensible default.
+
+| variável | default |
+|---|---|
+| `GOOGLE_PROJECT_ID` | — (erro) |
+| `BRAVIS_SDK_DATASET` | `landing` |
+| `BRAVIS_SDK_STAGING_BUCKET` | `<projeto>-bravis-staging` |
+| `BRAVIS_SDK_LOG_LEVEL` | `info` |
+
+Every run logs where each value came from — `projeto=x (de GOOGLE_PROJECT_ID)`.
+Reading the environment silently is how a job works on your machine and writes
+to the wrong dataset in the pod.
+
+### Deduplication
+
+`Destino.Dedup` defaults to appending, which costs nothing. `sdk.DedupMerge`
+stages into a temporary table and MERGEs on `ingestion_id`, so re-running the
+same window is a no-op — at the cost of one scan of the destination per load,
+which is why it is never enabled on your behalf.
+
+### The table
+
+By default the SDK creates the landing table with the six-column contract,
+partitioned by `ingestion_loaded_at` and clustered by `provider, entity`. An
+unpartitioned landing table costs a full scan on every MERGE the bronze layer
+runs.
+
+It never alters an existing table: one that does not match the contract is an
+error naming the differing column. A loader that can ALTER is a loader that can
+erase history.
+
+> **`Chave` is frozen.** The field order you give it and the `|` separator both
+> feed `source_key`, which feeds `ingestion_id`. Change either and the same
+> reading lands twice and stops matching the row a Python fetcher writes for it.
+
 ## Quick Start
 
 ### Extract CSV

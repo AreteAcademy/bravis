@@ -10,14 +10,14 @@ import (
 
 	"cloud.google.com/go/bigquery"
 	"cloud.google.com/go/storage"
-	"github.com/AreteAcademy/bravis/sdk"
+	core "github.com/AreteAcademy/bravis/sdk/internal/core"
 )
 
 // Loader writes Envelopes to BigQuery as generic JSON.
 // The SDK does NOT impose a table schema — you define it.
 // Metadata can be optionally added to the payload itself.
 type Loader struct {
-	cfg *sdk.LoadConfig
+	cfg *core.LoadConfig
 	bq  *bigquery.Client
 	gcs *storage.Client
 }
@@ -29,11 +29,11 @@ type Loader struct {
 // the caller can reuse the same LoadConfig for several Loaders.
 //
 //	l, err := load.New(ctx, nil,
-//		sdk.WithProjectID("my-project"),
-//		sdk.WithDataset("landing"),
-//		sdk.WithTable("raw_data"),
+//		core.WithProjectID("my-project"),
+//		core.WithDataset("landing"),
+//		core.WithTable("raw_data"),
 //	)
-func New(ctx context.Context, cfg *sdk.LoadConfig, opts ...sdk.LoadOption) (*Loader, error) {
+func New(ctx context.Context, cfg *core.LoadConfig, opts ...core.LoadOption) (*Loader, error) {
 	cfg, err := resolveConfig(cfg, opts...)
 	if err != nil {
 		return nil, err
@@ -61,8 +61,8 @@ func New(ctx context.Context, cfg *sdk.LoadConfig, opts ...sdk.LoadOption) (*Loa
 // credentials -- New itself cannot run without them.
 //
 // The caller's cfg is never modified.
-func resolveConfig(cfg *sdk.LoadConfig, opts ...sdk.LoadOption) (*sdk.LoadConfig, error) {
-	var c sdk.LoadConfig
+func resolveConfig(cfg *core.LoadConfig, opts ...core.LoadOption) (*core.LoadConfig, error) {
+	var c core.LoadConfig
 	if cfg != nil {
 		c = *cfg
 	}
@@ -96,6 +96,11 @@ func resolveConfig(cfg *sdk.LoadConfig, opts ...sdk.LoadOption) (*sdk.LoadConfig
 	}
 	if _, err := sourceFormat(c.Format); err != nil {
 		return nil, err
+	}
+
+	if c.Dedup == core.DedupMerge && !c.WriteEnvelopeColumns {
+		return nil, fmt.Errorf("DedupMerge exige WriteEnvelopeColumns: o merge casa por ingestion_id, " +
+			"que só existe como coluna no contrato de landing")
 	}
 
 	if c.AddMetadata && c.WriteEnvelopeColumns {
@@ -147,17 +152,23 @@ func strategyFor(n, threshold int) string {
 // Load writes envelopes to BigQuery.
 // The table must already exist with the schema you define.
 // Metadata can be optionally added to each payload.
-func (l *Loader) Load(ctx context.Context, envelopes ...sdk.Envelope) (*sdk.LoadResult, error) {
+func (l *Loader) Load(ctx context.Context, envelopes ...core.Envelope) (*core.LoadResult, error) {
 	start := time.Now()
 
 	// Every return carries a result, including the failures: the documented
 	// way to read per-row diagnostics is result.ErrorRows after a non-nil
 	// error, and returning nil there turns a failed load into a panic.
-	result := &sdk.LoadResult{
+	dedup := l.cfg.Dedup
+	if dedup == "" {
+		dedup = core.DedupNenhum
+	}
+
+	result := &core.LoadResult{
 		Format:   l.cfg.Format,
 		Strategy: strategyFor(len(envelopes), l.cfg.ThresholdForGCS),
+		Dedup:    dedup,
 	}
-	fail := func(err error) (*sdk.LoadResult, error) {
+	fail := func(err error) (*core.LoadResult, error) {
 		result.Duration = time.Since(start)
 		return result, err
 	}
@@ -176,40 +187,53 @@ func (l *Loader) Load(ctx context.Context, envelopes ...sdk.Envelope) (*sdk.Load
 
 	table := l.bq.Dataset(l.cfg.Dataset).Table(l.cfg.Table)
 
-	// The table must already exist: the SDK does not own your schema.
-	if _, err := table.Metadata(ctx); err != nil {
-		return fail(fmt.Errorf("table %s.%s not found: %w. Create it manually with your desired schema",
-			l.cfg.Dataset, l.cfg.Table, err))
+	criada, err := l.garantirTabela(ctx, table)
+	if err != nil {
+		return fail(err)
 	}
+	result.TableCreated = criada
 
 	data, err := l.encodeRows(envelopes)
 	if err != nil {
 		return fail(err)
 	}
 
-	var bytesStaged int64
 	var rowErrs []string
 
-	if result.Strategy == "gcs" {
-		bytesStaged, rowErrs, err = l.loadViaGCS(ctx, table, data)
+	if dedup == core.DedupMerge {
+		inseridas, ignoradas, errs, err := l.carregarComMerge(ctx, table, data, int64(len(envelopes)))
+		result.BytesStaged = int64(len(data))
+		result.ErrorRows = errs
+		if err != nil {
+			return fail(err)
+		}
+		result.RowsLoaded = inseridas
+		result.RowsIgnored = ignoradas
 	} else {
-		bytesStaged, rowErrs, err = l.loadInline(ctx, table, data)
-	}
+		var bytesStaged int64
+		if result.Strategy == "gcs" {
+			bytesStaged, rowErrs, err = l.loadViaGCS(ctx, table, data)
+		} else {
+			bytesStaged, rowErrs, err = l.loadInline(ctx, table, data)
+		}
 
-	result.BytesStaged = bytesStaged
-	result.ErrorRows = rowErrs
-	if err != nil {
-		return fail(err)
+		result.BytesStaged = bytesStaged
+		result.ErrorRows = rowErrs
+		if err != nil {
+			return fail(err)
+		}
+		result.RowsLoaded = int64(len(envelopes))
 	}
-
-	result.RowsLoaded = int64(len(envelopes))
 	result.Duration = time.Since(start)
 
 	slog.InfoContext(ctx, "load complete",
 		"table", fmt.Sprintf("%s.%s", l.cfg.Dataset, l.cfg.Table),
 		"rows", result.RowsLoaded,
+		"ignored", result.RowsIgnored,
 		"bytes", result.BytesStaged,
 		"strategy", result.Strategy,
+		"dedup", result.Dedup,
+		"created", result.TableCreated,
 		"duration", result.Duration)
 
 	return result, nil
@@ -227,7 +251,7 @@ func (l *Loader) Load(ctx context.Context, envelopes ...sdk.Envelope) (*sdk.Load
 //	entity              STRING    NOT NULL
 //	source_key          STRING
 //	payload             JSON      NOT NULL
-func (l *Loader) envelopeColumns(env sdk.Envelope) (map[string]any, error) {
+func (l *Loader) envelopeColumns(env core.Envelope) (map[string]any, error) {
 	id, err := env.IngestionID()
 	if err != nil {
 		return nil, err
@@ -244,7 +268,7 @@ func (l *Loader) envelopeColumns(env sdk.Envelope) (map[string]any, error) {
 }
 
 // addMetadataToEnvelope adds metadata fields to the envelope's payload.
-func (l *Loader) addMetadataToEnvelope(env *sdk.Envelope) error {
+func (l *Loader) addMetadataToEnvelope(env *core.Envelope) error {
 	// Calculate ingestion ID
 	id, err := env.IngestionID()
 	if err != nil {
@@ -291,7 +315,7 @@ func (l *Loader) addMetadataToEnvelope(env *sdk.Envelope) error {
 // Every line must be a JSON object: BigQuery maps its keys onto the columns of
 // the destination table, so a bare scalar or an array has nothing to map and
 // must fail here rather than halfway through a load job.
-func (l *Loader) encodeRows(envelopes []sdk.Envelope) ([]byte, error) {
+func (l *Loader) encodeRows(envelopes []core.Envelope) ([]byte, error) {
 	var buf bytes.Buffer
 
 	for i, env := range envelopes {

@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"cloud.google.com/go/bigquery"
-	"github.com/AreteAcademy/bravis/sdk"
+	core "github.com/AreteAcademy/bravis/sdk/internal/core"
 )
 
 // --- resolveConfig --------------------------------------------------------
@@ -16,12 +16,12 @@ import (
 func TestResolveConfigRequiresIdentity(t *testing.T) {
 	cases := []struct {
 		name string
-		cfg  sdk.LoadConfig
+		cfg  core.LoadConfig
 		want string
 	}{
-		{"no project", sdk.LoadConfig{Dataset: "d", Table: "t"}, "projectID"},
-		{"no dataset", sdk.LoadConfig{ProjectID: "p", Table: "t"}, "dataset"},
-		{"no table", sdk.LoadConfig{ProjectID: "p", Dataset: "d"}, "table"},
+		{"no project", core.LoadConfig{Dataset: "d", Table: "t"}, "projectID"},
+		{"no dataset", core.LoadConfig{ProjectID: "p", Table: "t"}, "dataset"},
+		{"no table", core.LoadConfig{ProjectID: "p", Dataset: "d"}, "table"},
 	}
 
 	for _, c := range cases {
@@ -38,7 +38,7 @@ func TestResolveConfigRequiresIdentity(t *testing.T) {
 }
 
 func TestResolveConfigDefaults(t *testing.T) {
-	got, err := resolveConfig(&sdk.LoadConfig{ProjectID: "proj", Dataset: "d", Table: "t"})
+	got, err := resolveConfig(&core.LoadConfig{ProjectID: "proj", Dataset: "d", Table: "t"})
 	if err != nil {
 		t.Fatalf("resolveConfig: %v", err)
 	}
@@ -62,11 +62,11 @@ func TestResolveConfigDefaults(t *testing.T) {
 
 func TestResolveConfigFromOptionsAlone(t *testing.T) {
 	got, err := resolveConfig(nil,
-		sdk.WithProjectID("p"),
-		sdk.WithDataset("d"),
-		sdk.WithTable("t"),
-		sdk.WithThresholdForGCS(10),
-		sdk.WithMetadata(true),
+		core.WithProjectID("p"),
+		core.WithDataset("d"),
+		core.WithTable("t"),
+		core.WithThresholdForGCS(10),
+		core.WithMetadata(true),
 	)
 	if err != nil {
 		t.Fatalf("resolveConfig: %v", err)
@@ -82,10 +82,10 @@ func TestResolveConfigFromOptionsAlone(t *testing.T) {
 func TestResolveConfigDoesNotMutateCaller(t *testing.T) {
 	// A caller reusing one LoadConfig for several Loaders must not see it
 	// change underneath them.
-	original := sdk.LoadConfig{ProjectID: "p", Dataset: "d", Table: "t"}
+	original := core.LoadConfig{ProjectID: "p", Dataset: "d", Table: "t"}
 	snapshot := original
 
-	if _, err := resolveConfig(&original, sdk.WithTable("other")); err != nil {
+	if _, err := resolveConfig(&original, core.WithTable("other")); err != nil {
 		t.Fatalf("resolveConfig: %v", err)
 	}
 
@@ -140,7 +140,7 @@ func TestSourceFormatAcceptsOnlyWhatWeWrite(t *testing.T) {
 }
 
 func TestResolveConfigRejectsUnwrittenFormat(t *testing.T) {
-	_, err := resolveConfig(&sdk.LoadConfig{
+	_, err := resolveConfig(&core.LoadConfig{
 		ProjectID: "p", Dataset: "d", Table: "t", Format: "parquet",
 	})
 	if err == nil {
@@ -150,8 +150,8 @@ func TestResolveConfigRejectsUnwrittenFormat(t *testing.T) {
 
 func TestResolveConfigRejectsBothMetadataModes(t *testing.T) {
 	_, err := resolveConfig(nil,
-		sdk.WithProjectID("p"), sdk.WithDataset("d"), sdk.WithTable("t"),
-		sdk.WithMetadata(true), sdk.WithEnvelopeColumns(true),
+		core.WithProjectID("p"), core.WithDataset("d"), core.WithTable("t"),
+		core.WithMetadata(true), core.WithEnvelopeColumns(true),
 	)
 	if err == nil {
 		t.Fatal("AddMetadata and WriteEnvelopeColumns contradict each other and must not both apply")
@@ -177,9 +177,9 @@ func decodeNDJSON(t *testing.T, data []byte) []map[string]any {
 }
 
 func TestEncodeRowsWritesOneObjectPerLine(t *testing.T) {
-	l := &Loader{cfg: &sdk.LoadConfig{Format: "ndjson"}}
+	l := &Loader{cfg: &core.LoadConfig{Format: "ndjson"}}
 
-	data, err := l.encodeRows([]sdk.Envelope{
+	data, err := l.encodeRows([]core.Envelope{
 		{Payload: map[string]any{"amount": 1}},
 		{Payload: map[string]any{"amount": 2}},
 	})
@@ -197,25 +197,25 @@ func TestEncodeRowsWritesOneObjectPerLine(t *testing.T) {
 }
 
 func TestEncodeRowsRejectsNonObject(t *testing.T) {
-	l := &Loader{cfg: &sdk.LoadConfig{Format: "ndjson"}}
+	l := &Loader{cfg: &core.LoadConfig{Format: "ndjson"}}
 
 	// BigQuery maps an NDJSON object's keys onto columns. A scalar or array
 	// has nothing to map, and must fail here rather than inside a load job.
 	for _, payload := range []any{42, "text", []int{1, 2}} {
-		if _, err := l.encodeRows([]sdk.Envelope{{Payload: payload}}); err == nil {
+		if _, err := l.encodeRows([]core.Envelope{{Payload: payload}}); err == nil {
 			t.Errorf("Expected %v (%T) to be rejected", payload, payload)
 		}
 	}
 }
 
 func TestEncodeRowsStructPayloadUsesJSONTags(t *testing.T) {
-	l := &Loader{cfg: &sdk.LoadConfig{Format: "ndjson"}}
+	l := &Loader{cfg: &core.LoadConfig{Format: "ndjson"}}
 	type tx struct {
 		ID     string `json:"id"`
 		Amount int    `json:"amount"`
 	}
 
-	data, err := l.encodeRows([]sdk.Envelope{{Payload: tx{ID: "a", Amount: 7}}})
+	data, err := l.encodeRows([]core.Envelope{{Payload: tx{ID: "a", Amount: 7}}})
 	if err != nil {
 		t.Fatalf("encodeRows: %v", err)
 	}
@@ -229,12 +229,12 @@ func TestEncodeRowsStructPayloadUsesJSONTags(t *testing.T) {
 // --- envelope columns (SDK_LOAD.md 5) -----------------------------------
 
 func TestEncodeRowsEnvelopeMode(t *testing.T) {
-	l := &Loader{cfg: &sdk.LoadConfig{
+	l := &Loader{cfg: &core.LoadConfig{
 		Format: "ndjson", WriteEnvelopeColumns: true,
 		MetadataNamespace: defaultMetadataNamespace,
 	}}
 
-	data, err := l.encodeRows([]sdk.Envelope{{
+	data, err := l.encodeRows([]core.Envelope{{
 		Provider: "gov", Entity: "tx", SourceKey: "k1",
 		RecordTS: "2026-01-01T00:00:00Z",
 		Payload:  map[string]any{"amount": 10},
@@ -273,7 +273,7 @@ func TestEnvelopeIngestionIDMatchesEnvelope(t *testing.T) {
 	// The contract is that one place produces this id. If envelope mode
 	// computed it differently from Envelope.IngestionID, a row written here
 	// would not match the equivalent row written anywhere else.
-	env := sdk.Envelope{
+	env := core.Envelope{
 		Provider: "gov", Entity: "tx", SourceKey: "k1",
 		RecordTS: "2026-01-01T00:00:00Z",
 		Payload:  map[string]any{"amount": 10},
@@ -284,8 +284,8 @@ func TestEnvelopeIngestionIDMatchesEnvelope(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	l := &Loader{cfg: &sdk.LoadConfig{Format: "ndjson", WriteEnvelopeColumns: true}}
-	data, err := l.encodeRows([]sdk.Envelope{env})
+	l := &Loader{cfg: &core.LoadConfig{Format: "ndjson", WriteEnvelopeColumns: true}}
+	data, err := l.encodeRows([]core.Envelope{env})
 	if err != nil {
 		t.Fatalf("encodeRows: %v", err)
 	}
@@ -296,8 +296,8 @@ func TestEnvelopeIngestionIDMatchesEnvelope(t *testing.T) {
 }
 
 func TestEnvelopeModeRequiresSourceKey(t *testing.T) {
-	l := &Loader{cfg: &sdk.LoadConfig{Format: "ndjson", WriteEnvelopeColumns: true}}
-	_, err := l.encodeRows([]sdk.Envelope{{Provider: "gov", Entity: "tx", Payload: map[string]any{}}})
+	l := &Loader{cfg: &core.LoadConfig{Format: "ndjson", WriteEnvelopeColumns: true}}
+	_, err := l.encodeRows([]core.Envelope{{Provider: "gov", Entity: "tx", Payload: map[string]any{}}})
 	if err == nil {
 		t.Fatal("Expected an error: without a source key there is no stable ingestion_id")
 	}
@@ -306,7 +306,7 @@ func TestEnvelopeModeRequiresSourceKey(t *testing.T) {
 // --- metadata -------------------------------------------------------------
 
 func metaLoader(ns string) *Loader {
-	return &Loader{cfg: &sdk.LoadConfig{
+	return &Loader{cfg: &core.LoadConfig{
 		ProjectID: "p", Dataset: "d", Table: "t",
 		AddMetadata: true, MetadataNamespace: ns, Format: "ndjson",
 	}}
@@ -314,7 +314,7 @@ func metaLoader(ns string) *Loader {
 
 func TestAddMetadataInjectsFields(t *testing.T) {
 	l := metaLoader(defaultMetadataNamespace)
-	env := sdk.Envelope{
+	env := core.Envelope{
 		Provider:  "gov",
 		Entity:    "tx",
 		SourceKey: "k1",
@@ -346,7 +346,7 @@ func TestAddMetadataInjectsFields(t *testing.T) {
 func TestAddMetadataIngestionIDIsDeterministic(t *testing.T) {
 	// This id is the whole idempotency story: the same record seen twice must
 	// produce the same id, and a different record must not collide.
-	base := sdk.Envelope{
+	base := core.Envelope{
 		Provider: "gov", Entity: "tx", SourceKey: "k1",
 		RecordTS: "2026-01-01T00:00:00Z",
 		Payload:  map[string]any{"amount": 10},
@@ -379,7 +379,7 @@ func TestAddMetadataIngestionIDIsDeterministic(t *testing.T) {
 
 func TestAddMetadataRequiresSourceKey(t *testing.T) {
 	l := metaLoader(defaultMetadataNamespace)
-	env := sdk.Envelope{Provider: "gov", Entity: "tx", Payload: map[string]any{}}
+	env := core.Envelope{Provider: "gov", Entity: "tx", Payload: map[string]any{}}
 	if err := l.addMetadataToEnvelope(&env); err == nil {
 		t.Fatal("Expected an error: without a source key there is no stable id")
 	}
@@ -390,7 +390,7 @@ func TestAddMetadataConvertsStructPayload(t *testing.T) {
 	type tx struct {
 		Amount int `json:"amount"`
 	}
-	env := sdk.Envelope{
+	env := core.Envelope{
 		Provider: "gov", Entity: "tx", SourceKey: "k1",
 		RecordTS: "2026-01-01T00:00:00Z",
 		Payload:  tx{Amount: 10},
@@ -417,7 +417,7 @@ func TestAddMetadataConvertsStructPayload(t *testing.T) {
 func TestLoadEmptyBatchTouchesNothing(t *testing.T) {
 	// Must return before reaching BigQuery -- this Loader has nil clients, so
 	// any call would panic.
-	l := &Loader{cfg: &sdk.LoadConfig{ProjectID: "p", Dataset: "d", Table: "t", Format: "ndjson"}}
+	l := &Loader{cfg: &core.LoadConfig{ProjectID: "p", Dataset: "d", Table: "t", Format: "ndjson"}}
 
 	result, err := l.Load(context.Background())
 	if err != nil {
@@ -450,13 +450,13 @@ func TestLoadReturnsResultOnFailure(t *testing.T) {
 	// The documented way to read per-row diagnostics is result.ErrorRows
 	// after a non-nil error. Load used to return nil on every error path, so
 	// following the documentation panicked.
-	l := &Loader{cfg: &sdk.LoadConfig{
+	l := &Loader{cfg: &core.LoadConfig{
 		ProjectID: "p", Dataset: "d", Table: "t", Format: "ndjson",
 		AddMetadata: true, MetadataNamespace: defaultMetadataNamespace,
 	}}
 
 	// A missing SourceKey fails in metadata, before any client is touched.
-	result, err := l.Load(context.Background(), sdk.Envelope{
+	result, err := l.Load(context.Background(), core.Envelope{
 		Provider: "gov", Entity: "tx", Payload: map[string]any{},
 	})
 

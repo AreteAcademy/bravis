@@ -2,6 +2,18 @@
 
 **Aberto em** 2026-09-02 · **Base** `sdk/v0.2.1` · **Alvo** `sdk/v0.3.0`
 
+> **CONCLUÍDA em 2026-09-02.** Métricas do §6: o `exemplo_go` caiu de **156 para
+> 44 linhas**, e um fetcher novo sem expansão cabe em **21**.
+>
+> Uma decisão foi tomada contra o texto: o §3.5 recomenda `insertID` por padrão,
+> mas `insertID` só existe na API de streaming, que o `SDK_LOAD.md` §4 mandou
+> remover — e removemos na v0.2.1. Manter os dois seria colocar dois modelos de
+> consistência no mesmo SDK. Ficou **`DedupMerge` opt-in, lote como padrão**;
+> `Resultado.Dedup` diz qual rodou.
+>
+> Os §3.4 (paginação) e §3.5 (formatos honestos) já estavam feitos nas v0.2.0 e
+> v0.2.1; desta vez entrou só a detecção de cursor repetido.
+
 Prompt de execução. O objetivo é uma API em que escrever um fetcher seja
 **declarar o que se quer**, não orquestrar chamadas:
 
@@ -255,6 +267,8 @@ Cada uma custou uma investigação. Estão aqui para não voltarem.
 | **Telemetria que mente** | `LoadResult.Format` reportava o configurado, não o escrito. Número errado é pior que número ausente, porque ninguém desconfia |
 | **`ErrorRows` nunca preenchido** | declarado, sempre `nil`, e o README mandava lê-lo depois da falha — o trecho documentado causava panic |
 | **Publicar sem compilar** | a v0.1.0 foi ao proxy sem nunca ter sido buildada. `go build ./...` e `go vet ./...` no CI, antes da tag |
+| **`insertID` não existe em lote** | ele é da API de streaming. Pedir dedup grátis num SDK de lote é pedir para voltar ao `Inserter` que o `SDK_LOAD.md` §4 removeu |
+| **Copiar todo campo de topo** | `ArraysParalelos` copia os escalares fora do bloco para cada leitura, e o `generationtime_ms` do Open-Meteo muda a cada chamada. Use `Somente` para projetar |
 
 ---
 

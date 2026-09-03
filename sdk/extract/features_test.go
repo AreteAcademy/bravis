@@ -9,12 +9,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/AreteAcademy/bravis/sdk"
+	core "github.com/AreteAcademy/bravis/sdk/internal/core"
 )
 
-func collect(t *testing.T, lines func(func(sdk.Envelope, error) bool)) []sdk.Envelope {
+func collect(t *testing.T, lines func(func(core.Envelope, error) bool)) []core.Envelope {
 	t.Helper()
-	var out []sdk.Envelope
+	var out []core.Envelope
 	for env, err := range lines {
 		if err != nil {
 			t.Fatalf("row %d: %v", len(out), err)
@@ -36,7 +36,7 @@ func TestXMLDecodesRepeatedChildren(t *testing.T) {
 	}))
 	defer server.Close()
 
-	lines, err := XML(context.Background(), sdk.Fonte{URL: server.URL})
+	lines, err := XML(context.Background(), core.Fonte{URL: server.URL})
 	if err != nil {
 		t.Fatalf("XML() error: %v", err)
 	}
@@ -61,7 +61,7 @@ func TestXMLDecodesRepeatedChildren(t *testing.T) {
 func TestXMLIsNoLongerUnsupported(t *testing.T) {
 	// XML() used to return a sequence that immediately failed with
 	// "unsupported format: xml" because NewDecoder had no xml case.
-	if d := NewDecoder(nil, sdk.Fonte{Format: "xml"}); d == nil {
+	if d := NewDecoder(nil, core.Fonte{Format: "xml"}); d == nil {
 		t.Fatal("NewDecoder returned nil for xml")
 	}
 }
@@ -92,7 +92,7 @@ func TestRateLimiterIsConsulted(t *testing.T) {
 	lim := &countingLimiter{delay: 150 * time.Millisecond}
 	start := time.Now()
 
-	lines, err := NDJSON(context.Background(), sdk.Fonte{URL: server.URL, RateLimiter: lim})
+	lines, err := NDJSON(context.Background(), core.Fonte{URL: server.URL, RateLimiter: lim})
 	if err != nil {
 		t.Fatalf("NDJSON() error: %v", err)
 	}
@@ -115,7 +115,7 @@ func TestRateLimiterErrorAborts(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // limiter will see a dead context
 
-	_, err := NDJSON(ctx, sdk.Fonte{URL: server.URL, RateLimiter: &countingLimiter{}})
+	_, err := NDJSON(ctx, core.Fonte{URL: server.URL, RateLimiter: &countingLimiter{}})
 	if err == nil {
 		t.Fatal("Expected the limiter's error to abort the fetch")
 	}
@@ -142,7 +142,7 @@ func TestPaginationFollowsLinkHeader(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	lines, err := NDJSON(context.Background(), sdk.Fonte{URL: srv.URL, FollowLinks: true})
+	lines, err := NDJSON(context.Background(), core.Fonte{URL: srv.URL, FollowLinks: true})
 	if err != nil {
 		t.Fatalf("NDJSON() error: %v", err)
 	}
@@ -186,7 +186,7 @@ func TestPaginationFollowsCursor(t *testing.T) {
 	}))
 	defer server.Close()
 
-	lines, err := JSON(context.Background(), sdk.Fonte{
+	lines, err := JSON(context.Background(), core.Fonte{
 		URL:       server.URL,
 		CursorKey: "next_page",
 		DataKey:   "results",
@@ -209,7 +209,7 @@ func TestCursorStopsWhenAbsent(t *testing.T) {
 	}))
 	defer server.Close()
 
-	lines, err := JSON(context.Background(), sdk.Fonte{
+	lines, err := JSON(context.Background(), core.Fonte{
 		URL: server.URL, CursorKey: "next_page", DataKey: "results",
 	})
 	if err != nil {
@@ -239,7 +239,7 @@ func TestPaginationAdvancesOffset(t *testing.T) {
 	}))
 	defer server.Close()
 
-	lines, err := NDJSON(context.Background(), sdk.Fonte{
+	lines, err := NDJSON(context.Background(), core.Fonte{
 		URL: server.URL, OffsetKey: "offset", PageSize: 2,
 	})
 	if err != nil {
@@ -262,13 +262,15 @@ func TestMaxPagesStopsRunawayPagination(t *testing.T) {
 	var srv *httptest.Server
 	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		hits++
-		// A server that always claims there is a next page.
-		w.Header().Set("Link", fmt.Sprintf(`<%s/>; rel="next"`, srv.URL))
+		// A server that always offers a next page, each with a distinct URL
+		// so the repeated-cursor guard does not fire first -- MaxPages is
+		// what has to stop this one.
+		w.Header().Set("Link", fmt.Sprintf(`<%s/?page=%d>; rel="next"`, srv.URL, hits+1))
 		_, _ = fmt.Fprint(w, `{"id": 1}`)
 	}))
 	defer srv.Close()
 
-	lines, err := NDJSON(context.Background(), sdk.Fonte{
+	lines, err := NDJSON(context.Background(), core.Fonte{
 		URL: srv.URL, FollowLinks: true, MaxPages: 5,
 	})
 	if err != nil {
@@ -287,16 +289,16 @@ func TestMaxPagesStopsRunawayPagination(t *testing.T) {
 // --- LoadOption -----------------------------------------------------------
 
 func TestLoadOptionsApply(t *testing.T) {
-	var cfg sdk.LoadConfig
-	for _, opt := range []sdk.LoadOption{
-		sdk.WithProjectID("proj"),
-		sdk.WithDataset("ds"),
-		sdk.WithTable("tbl"),
-		sdk.WithStagingBucket("bucket"),
-		sdk.WithFormat("ndjson"),
-		sdk.WithThresholdForGCS(42),
-		sdk.WithMetadata(true),
-		sdk.WithMetadataNamespace("ns"),
+	var cfg core.LoadConfig
+	for _, opt := range []core.LoadOption{
+		core.WithProjectID("proj"),
+		core.WithDataset("ds"),
+		core.WithTable("tbl"),
+		core.WithStagingBucket("bucket"),
+		core.WithFormat("ndjson"),
+		core.WithThresholdForGCS(42),
+		core.WithMetadata(true),
+		core.WithMetadataNamespace("ns"),
 	} {
 		opt(&cfg)
 	}
@@ -309,5 +311,57 @@ func TestLoadOptionsApply(t *testing.T) {
 	}
 	if cfg.ThresholdForGCS != 42 || !cfg.AddMetadata || cfg.MetadataNamespace != "ns" {
 		t.Errorf("behaviour options did not apply: %+v", cfg)
+	}
+}
+
+// TestPaginationStopsOnRepeatedCursor is the guard against the classic
+// runaway: an API that keeps handing back the same next-page token. MaxPages
+// would stop it eventually, but only after burning that many requests.
+func TestPaginationStopsOnRepeatedCursor(t *testing.T) {
+	hits := 0
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		// Always the same next link, no matter which page was asked for.
+		w.Header().Set("Link", fmt.Sprintf(`<%s/?page=2>; rel="next"`, srv.URL))
+		_, _ = fmt.Fprint(w, `{"id": 1}`)
+	}))
+	defer srv.Close()
+
+	lines, err := NDJSON(context.Background(), core.Fonte{
+		URL: srv.URL, FollowLinks: true, MaxPages: 500,
+	})
+	if err != nil {
+		t.Fatalf("NDJSON() error: %v", err)
+	}
+	collect(t, lines)
+
+	// First page, then the repeat is detected on the second.
+	if hits != 2 {
+		t.Errorf("Expected the walk to stop after the repeat, made %d requests", hits)
+	}
+}
+
+func TestPaginationDistinctCursorsKeepGoing(t *testing.T) {
+	// The repeat guard must not stop a genuine walk.
+	hits := 0
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		if hits < 4 {
+			w.Header().Set("Link", fmt.Sprintf(`<%s/?page=%d>; rel="next"`, srv.URL, hits+1))
+		}
+		_, _ = fmt.Fprint(w, `{"id": 1}`)
+	}))
+	defer srv.Close()
+
+	lines, err := NDJSON(context.Background(), core.Fonte{URL: srv.URL, FollowLinks: true})
+	if err != nil {
+		t.Fatalf("NDJSON() error: %v", err)
+	}
+	rows := collect(t, lines)
+
+	if len(rows) != 4 {
+		t.Errorf("Expected 4 pages of distinct cursors, got %d", len(rows))
 	}
 }

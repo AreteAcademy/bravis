@@ -4,11 +4,12 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
 	"cloud.google.com/go/bigquery"
-	"github.com/AreteAcademy/bravis/sdk"
+	core "github.com/AreteAcademy/bravis/sdk/internal/core"
 )
 
 // These are the only tests that prove a row actually lands. The in-memory
@@ -96,10 +97,10 @@ func countRows(ctx context.Context, t *testing.T, client *bigquery.Client, env i
 	return row.N
 }
 
-func envelopes(n int) []sdk.Envelope {
-	out := make([]sdk.Envelope, n)
+func envelopes(n int) []core.Envelope {
+	out := make([]core.Envelope, n)
 	for i := range out {
-		out[i] = sdk.Envelope{
+		out[i] = core.Envelope{
 			Provider:  "integration",
 			Entity:    "rows",
 			SourceKey: fmt.Sprintf("k-%d", i),
@@ -121,9 +122,9 @@ func TestIntegrationInlineStrategy(t *testing.T) {
 	})
 
 	loader, err := New(ctx, nil,
-		sdk.WithProjectID(env.project),
-		sdk.WithDataset(env.dataset),
-		sdk.WithTable(table),
+		core.WithProjectID(env.project),
+		core.WithDataset(env.dataset),
+		core.WithTable(table),
 	)
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -162,11 +163,11 @@ func TestIntegrationGCSStrategy(t *testing.T) {
 	})
 
 	loader, err := New(ctx, nil,
-		sdk.WithProjectID(env.project),
-		sdk.WithDataset(env.dataset),
-		sdk.WithTable(table),
-		sdk.WithStagingBucket(env.bucket),
-		sdk.WithThresholdForGCS(1), // anything above 1 row stages
+		core.WithProjectID(env.project),
+		core.WithDataset(env.dataset),
+		core.WithTable(table),
+		core.WithStagingBucket(env.bucket),
+		core.WithThresholdForGCS(1), // anything above 1 row stages
 	)
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -202,10 +203,10 @@ func TestIntegrationEnvelopeColumns(t *testing.T) {
 	})
 
 	loader, err := New(ctx, nil,
-		sdk.WithProjectID(env.project),
-		sdk.WithDataset(env.dataset),
-		sdk.WithTable(table),
-		sdk.WithEnvelopeColumns(true),
+		core.WithProjectID(env.project),
+		core.WithDataset(env.dataset),
+		core.WithTable(table),
+		core.WithEnvelopeColumns(true),
 	)
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -241,5 +242,150 @@ func TestIntegrationEnvelopeColumns(t *testing.T) {
 	}
 	if row.N != 1 {
 		t.Errorf("expected exactly one row with ingestion_id %s, found %d", want, row.N)
+	}
+}
+
+// TestIntegrationCriaTabelaDeLanding proves the SDK creates the six-column
+// table, partitioned and clustered, rather than asking the caller to.
+func TestIntegrationCriaTabelaDeLanding(t *testing.T) {
+	env := requireIntegration(t)
+	ctx := context.Background()
+
+	client, err := bigquery.NewClient(ctx, env.project)
+	if err != nil {
+		t.Fatalf("bigquery client: %v", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	nome := fmt.Sprintf("it_criada_%d", time.Now().UnixNano())
+	table := client.Dataset(env.dataset).Table(nome)
+	t.Cleanup(func() { _ = table.Delete(context.Background()) })
+
+	loader, err := New(ctx, nil,
+		core.WithProjectID(env.project),
+		core.WithDataset(env.dataset),
+		core.WithTable(nome),
+		core.WithEnvelopeColumns(true),
+		core.WithCriarTabela(true),
+	)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	res, err := loader.Load(ctx, envelopes(3)...)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if !res.TableCreated {
+		t.Error("o resultado tem de dizer que criou a tabela")
+	}
+
+	md, err := table.Metadata(ctx)
+	if err != nil {
+		t.Fatalf("metadata: %v", err)
+	}
+
+	// Partitioning is not decoration: an unpartitioned landing table costs a
+	// full scan on every MERGE the bronze layer runs.
+	if md.TimePartitioning == nil || md.TimePartitioning.Field != "ingestion_loaded_at" {
+		t.Errorf("tabela criada sem partição por ingestion_loaded_at: %+v", md.TimePartitioning)
+	}
+	if md.Clustering == nil || len(md.Clustering.Fields) != 2 {
+		t.Errorf("tabela criada sem clustering por provider/entity: %+v", md.Clustering)
+	}
+	if len(md.Schema) != 6 {
+		t.Errorf("esperado 6 colunas, veio %d", len(md.Schema))
+	}
+}
+
+// TestIntegrationRecusaTabelaDivergente proves the SDK refuses to write into
+// a table that does not match the contract, instead of altering it. A loader
+// that can ALTER is a loader that can erase history.
+func TestIntegrationRecusaTabelaDivergente(t *testing.T) {
+	env := requireIntegration(t)
+	ctx := context.Background()
+
+	client, table := createTable(ctx, t, env, bigquery.Schema{
+		{Name: "ingestion_id", Type: bigquery.StringFieldType},
+		{Name: "outra_coisa", Type: bigquery.StringFieldType},
+	})
+	_ = client
+
+	loader, err := New(ctx, nil,
+		core.WithProjectID(env.project),
+		core.WithDataset(env.dataset),
+		core.WithTable(table),
+		core.WithEnvelopeColumns(true),
+		core.WithCriarTabela(true),
+	)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	_, err = loader.Load(ctx, envelopes(1)...)
+	if err == nil {
+		t.Fatal("carregar numa tabela que não bate com o contrato tem de falhar")
+	}
+	// O erro precisa dizer qual coluna está errada, senão custa investigação.
+	if !strings.Contains(err.Error(), "provider") {
+		t.Errorf("o erro deveria nomear as colunas faltando: %v", err)
+	}
+}
+
+// TestIntegrationMergeNaoDobra is the criterion from SDK_V2 6.9: load the
+// same batch twice and the count must not double.
+func TestIntegrationMergeNaoDobra(t *testing.T) {
+	env := requireIntegration(t)
+	ctx := context.Background()
+
+	client, err := bigquery.NewClient(ctx, env.project)
+	if err != nil {
+		t.Fatalf("bigquery client: %v", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	nome := fmt.Sprintf("it_merge_%d", time.Now().UnixNano())
+	table := client.Dataset(env.dataset).Table(nome)
+	t.Cleanup(func() { _ = table.Delete(context.Background()) })
+
+	loader, err := New(ctx, nil,
+		core.WithProjectID(env.project),
+		core.WithDataset(env.dataset),
+		core.WithTable(nome),
+		core.WithEnvelopeColumns(true),
+		core.WithCriarTabela(true),
+		core.WithDedup(core.DedupMerge),
+	)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	lote := envelopes(24)
+
+	primeira, err := loader.Load(ctx, lote...)
+	if err != nil {
+		t.Fatalf("primeira carga: %v", err)
+	}
+	if primeira.RowsLoaded != 24 {
+		t.Errorf("primeira carga escreveu %d linhas, esperado 24", primeira.RowsLoaded)
+	}
+
+	segunda, err := loader.Load(ctx, lote...)
+	if err != nil {
+		t.Fatalf("segunda carga: %v", err)
+	}
+	if segunda.RowsLoaded != 0 {
+		t.Errorf("a segunda carga escreveu %d linhas; o merge deveria ignorar todas", segunda.RowsLoaded)
+	}
+	if segunda.RowsIgnored != 24 {
+		t.Errorf("RowsIgnored = %d, esperado 24", segunda.RowsIgnored)
+	}
+	if segunda.Dedup != core.DedupMerge {
+		t.Errorf("o resultado tem de dizer qual dedup rodou: %q", segunda.Dedup)
+	}
+
+	// A prova que importa: sem dedup seriam 48.
+	if got := countRows(ctx, t, client, env, nome); got != 24 {
+		t.Errorf("após duas cargas do mesmo lote a tabela tem %d linhas, esperado 24", got)
 	}
 }

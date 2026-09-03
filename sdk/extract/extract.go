@@ -19,12 +19,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/AreteAcademy/bravis/sdk"
+	core "github.com/AreteAcademy/bravis/sdk/internal/core"
 )
 
 // CSV fetches and decodes CSV data from the given source.
 // It returns an iterator of Envelopes, one per CSV row.
-func CSV(ctx context.Context, fonte sdk.Fonte) (iter.Seq2[sdk.Envelope, error], error) {
+func CSV(ctx context.Context, fonte core.Fonte) (iter.Seq2[core.Envelope, error], error) {
 	if fonte.Format == "" {
 		fonte.Format = "csv"
 	}
@@ -32,7 +32,7 @@ func CSV(ctx context.Context, fonte sdk.Fonte) (iter.Seq2[sdk.Envelope, error], 
 }
 
 // NDJSON fetches and decodes newline-delimited JSON.
-func NDJSON(ctx context.Context, fonte sdk.Fonte) (iter.Seq2[sdk.Envelope, error], error) {
+func NDJSON(ctx context.Context, fonte core.Fonte) (iter.Seq2[core.Envelope, error], error) {
 	if fonte.Format == "" {
 		fonte.Format = "ndjson"
 	}
@@ -40,7 +40,7 @@ func NDJSON(ctx context.Context, fonte sdk.Fonte) (iter.Seq2[sdk.Envelope, error
 }
 
 // JSON fetches and decodes a JSON array or object stream.
-func JSON(ctx context.Context, fonte sdk.Fonte) (iter.Seq2[sdk.Envelope, error], error) {
+func JSON(ctx context.Context, fonte core.Fonte) (iter.Seq2[core.Envelope, error], error) {
 	if fonte.Format == "" {
 		fonte.Format = "json"
 	}
@@ -48,14 +48,14 @@ func JSON(ctx context.Context, fonte sdk.Fonte) (iter.Seq2[sdk.Envelope, error],
 }
 
 // XML fetches and decodes XML data.
-func XML(ctx context.Context, fonte sdk.Fonte) (iter.Seq2[sdk.Envelope, error], error) {
+func XML(ctx context.Context, fonte core.Fonte) (iter.Seq2[core.Envelope, error], error) {
 	if fonte.Format == "" {
 		fonte.Format = "xml"
 	}
 	return fetch(ctx, fonte)
 }
 
-func fetch(ctx context.Context, fonte sdk.Fonte) (iter.Seq2[sdk.Envelope, error], error) {
+func fetch(ctx context.Context, fonte core.Fonte) (iter.Seq2[core.Envelope, error], error) {
 	if fonte.URL == "" {
 		return nil, fmt.Errorf("URL is required")
 	}
@@ -73,7 +73,7 @@ func fetch(ctx context.Context, fonte sdk.Fonte) (iter.Seq2[sdk.Envelope, error]
 	}
 
 	if fonte.RetryConfig == nil {
-		fonte.RetryConfig = &sdk.RetryConfig{
+		fonte.RetryConfig = &core.RetryConfig{
 			MaxAttempts:    3,
 			InitialBackoff: 1 * time.Second,
 			MaxBackoff:     60 * time.Second,
@@ -100,13 +100,18 @@ func fetch(ctx context.Context, fonte sdk.Fonte) (iter.Seq2[sdk.Envelope, error]
 		return nil, err
 	}
 
-	return func(yield func(sdk.Envelope, error) bool) {
+	return func(yield func(core.Envelope, error) bool) {
 		startTime := time.Now()
 		defer cancelTotal()
 
 		page := first
 		rows := 0
 		pages := 0
+		// A cursor that stops advancing is an infinite loop, and government
+		// APIs do return the same token forever at the end of a collection.
+		// MaxPages would eventually stop it, but only after MaxPages wasted
+		// requests; catching the repeat ends it on the next one.
+		vistos := map[string]bool{}
 
 		for {
 			pages++
@@ -116,7 +121,7 @@ func fetch(ctx context.Context, fonte sdk.Fonte) (iter.Seq2[sdk.Envelope, error]
 
 			if err != nil {
 				if !errors.Is(err, errStopped) {
-					yield(sdk.Envelope{}, err)
+					yield(core.Envelope{}, err)
 				}
 				return
 			}
@@ -125,9 +130,16 @@ func fetch(ctx context.Context, fonte sdk.Fonte) (iter.Seq2[sdk.Envelope, error]
 				break
 			}
 
+			if vistos[next] {
+				slog.WarnContext(ctxTotal, "paginação parou: a fonte repetiu a página",
+					"pagina", pages, "url", redactURL(next))
+				break
+			}
+			vistos[next] = true
+
 			page, err = fetchPage(ctxTotal, fonte, next)
 			if err != nil {
-				yield(sdk.Envelope{}, fmt.Errorf("page %d: %w", pages+1, err))
+				yield(core.Envelope{}, fmt.Errorf("page %d: %w", pages+1, err))
 				return
 			}
 		}
@@ -168,7 +180,7 @@ func (p *page) close() {
 
 // drainPage decodes one page, yielding every row. It reports how many rows it
 // emitted and the URL of the next page, if any.
-func drainPage(ctx context.Context, fonte sdk.Fonte, p *page, yield func(sdk.Envelope, error) bool) (int, string, error) {
+func drainPage(ctx context.Context, fonte core.Fonte, p *page, yield func(core.Envelope, error) bool) (int, string, error) {
 	decoder := NewDecoder(p.body, fonte)
 	if decoder == nil {
 		return 0, "", fmt.Errorf("unsupported format: %s", fonte.Format)
@@ -204,7 +216,7 @@ func drainPage(ctx context.Context, fonte sdk.Fonte, p *page, yield func(sdk.Env
 
 // nextPageURL resolves where the following page lives, or "" when the current
 // page was the last one.
-func nextPageURL(fonte sdk.Fonte, p *page, emitted int) (string, error) {
+func nextPageURL(fonte core.Fonte, p *page, emitted int) (string, error) {
 	switch {
 	case fonte.FollowLinks:
 		return p.linkNext, nil
@@ -245,7 +257,7 @@ func withQuery(rawURL, key, value string) (string, error) {
 // fetchPage performs one request, with retry, and prepares the response for
 // decoding. Everything that needs the whole body -- the guard, cursor paging
 // -- buffers it here so the streaming path below stays streaming.
-func fetchPage(ctxTotal context.Context, fonte sdk.Fonte, pageURL string) (*page, error) {
+func fetchPage(ctxTotal context.Context, fonte core.Fonte, pageURL string) (*page, error) {
 	var resp *http.Response
 	// release cancels the context of the attempt that produced resp. The body
 	// is still streaming under that context, so it must stay alive until the
@@ -422,7 +434,7 @@ func currentOffset(req *http.Request, key string) int {
 	return n
 }
 
-func retryAfter(resp *http.Response, attempt int, cfg *sdk.RetryConfig) time.Duration {
+func retryAfter(resp *http.Response, attempt int, cfg *core.RetryConfig) time.Duration {
 	if v := resp.Header.Get("Retry-After"); v != "" {
 		if secs, err := strconv.Atoi(strings.TrimSpace(v)); err == nil && secs >= 0 {
 			return time.Duration(secs) * time.Second
@@ -451,7 +463,7 @@ func shouldRetryStatus(status int) bool {
 	return status == http.StatusTooManyRequests || status >= http.StatusInternalServerError
 }
 
-func calculateBackoff(attempt int, cfg *sdk.RetryConfig) time.Duration {
+func calculateBackoff(attempt int, cfg *core.RetryConfig) time.Duration {
 	backoff := time.Duration(math.Pow(2, float64(attempt))) * cfg.InitialBackoff
 	if backoff > cfg.MaxBackoff {
 		backoff = cfg.MaxBackoff
@@ -482,12 +494,12 @@ func redactURL(urlStr string) string {
 
 // Decoder abstraction
 type Decoder interface {
-	Next(ctx context.Context) (sdk.Envelope, error)
+	Next(ctx context.Context) (core.Envelope, error)
 }
 
 // NewDecoder builds a Decoder for fonte.Format reading from r.
 // It returns nil if the format is not supported.
-func NewDecoder(r io.Reader, fonte sdk.Fonte) Decoder {
+func NewDecoder(r io.Reader, fonte core.Fonte) Decoder {
 	switch fonte.Format {
 	case "csv":
 		return &csvDecoder{r: csv.NewReader(r), noHeader: fonte.NoHeader}
@@ -515,18 +527,18 @@ type csvDecoder struct {
 	noHeader bool
 }
 
-func (d *csvDecoder) Next(ctx context.Context) (sdk.Envelope, error) {
+func (d *csvDecoder) Next(ctx context.Context) (core.Envelope, error) {
 	if !d.noHeader && d.headers == nil {
 		header, err := d.r.Read()
 		if err != nil {
-			return sdk.Envelope{}, err
+			return core.Envelope{}, err
 		}
 		d.headers = header
 	}
 
 	record, err := d.r.Read()
 	if err != nil {
-		return sdk.Envelope{}, err
+		return core.Envelope{}, err
 	}
 
 	obj := make(map[string]string, len(record))
@@ -540,7 +552,7 @@ func (d *csvDecoder) Next(ctx context.Context) (sdk.Envelope, error) {
 		}
 	}
 
-	return sdk.Envelope{
+	return core.Envelope{
 		Payload: obj,
 	}, nil
 }
@@ -549,12 +561,12 @@ type ndjsonDecoder struct {
 	dec *json.Decoder
 }
 
-func (d *ndjsonDecoder) Next(ctx context.Context) (sdk.Envelope, error) {
+func (d *ndjsonDecoder) Next(ctx context.Context) (core.Envelope, error) {
 	var obj any
 	if err := d.dec.Decode(&obj); err != nil {
-		return sdk.Envelope{}, err
+		return core.Envelope{}, err
 	}
-	return sdk.Envelope{
+	return core.Envelope{
 		Payload: obj,
 	}, nil
 }
@@ -566,11 +578,11 @@ type jsonDecoder struct {
 	index  int
 }
 
-func (d *jsonDecoder) Next(ctx context.Context) (sdk.Envelope, error) {
+func (d *jsonDecoder) Next(ctx context.Context) (core.Envelope, error) {
 	if !d.inited {
 		var obj any
 		if err := d.dec.Decode(&obj); err != nil {
-			return sdk.Envelope{}, err
+			return core.Envelope{}, err
 		}
 
 		if arr, ok := obj.([]any); ok {
@@ -582,10 +594,10 @@ func (d *jsonDecoder) Next(ctx context.Context) (sdk.Envelope, error) {
 	}
 
 	if d.index >= len(d.arrays) {
-		return sdk.Envelope{}, io.EOF
+		return core.Envelope{}, io.EOF
 	}
 
-	env := sdk.Envelope{
+	env := core.Envelope{
 		Payload: d.arrays[d.index],
 	}
 	d.index++
@@ -607,11 +619,11 @@ type xmlDecoder struct {
 	entered bool
 }
 
-func (d *xmlDecoder) Next(ctx context.Context) (sdk.Envelope, error) {
+func (d *xmlDecoder) Next(ctx context.Context) (core.Envelope, error) {
 	for {
 		tok, err := d.dec.Token()
 		if err != nil {
-			return sdk.Envelope{}, err
+			return core.Envelope{}, err
 		}
 
 		start, ok := tok.(xml.StartElement)
@@ -627,10 +639,10 @@ func (d *xmlDecoder) Next(ctx context.Context) (sdk.Envelope, error) {
 
 		var node xmlNode
 		if err := d.dec.DecodeElement(&node, &start); err != nil {
-			return sdk.Envelope{}, err
+			return core.Envelope{}, err
 		}
 
-		return sdk.Envelope{Payload: node.value()}, nil
+		return core.Envelope{Payload: node.value()}, nil
 	}
 }
 

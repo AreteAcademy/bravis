@@ -6,9 +6,9 @@
 // # Basic usage
 //
 //	loader, err := load.New(ctx, nil,
-//		sdk.WithProjectID("my-project"),
-//		sdk.WithDataset("landing"),
-//		sdk.WithTable("raw_data"),
+//		core.WithProjectID("my-project"),
+//		core.WithDataset("landing"),
+//		core.WithTable("raw_data"),
 //	)
 //	if err != nil {
 //		log.Fatal(err)
