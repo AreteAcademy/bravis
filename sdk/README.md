@@ -151,14 +151,8 @@ which is why it is never enabled on your behalf.
 
 ### The table
 
-By default the SDK creates the landing table with the six-column contract,
-partitioned by `ingestion_loaded_at` and clustered by `provider, entity`. An
-unpartitioned landing table costs a full scan on every MERGE the bronze layer
-runs.
-
-It never alters an existing table: one that does not match the contract is an
-error naming the differing column. A loader that can ALTER is a loader that can
-erase history.
+`CreateTable` lets the load job create it on the first run. Off by default, and
+it never alters a table that already exists. See **Creating the table** below.
 
 > **`Key` is frozen.** The field order you give it and the `|` separator both
 > feed `source_key`, which feeds `ingestion_id`. Change either and the same
@@ -362,57 +356,83 @@ stats := data.Stats()   // read after the stream is drained
 > byte-for-byte against Python's `uuid.uuid5`. A configurable contract is not a
 > contract, so the option is gone rather than wired up.
 
-## Three ways to shape a row
+## What gets written
 
-| mode | writes | use when |
-|---|---|---|
-| default | the payload, as-is | you own the schema and want nothing imposed |
-| `WithMetadata(true)` | payload with the provenance fields folded in flat | you want the source's own fields as real columns |
-| `WithEnvelopeColumns(true)` | the six-column landing contract, payload nested | you need rows to match a bronze layer keyed on `ingestion_id` |
+**Your payload, as Transform left it.** The SDK imposes no columns: what a row
+looks like is your decision.
 
-The last two are mutually exclusive and `New` refuses both at once — they are
-two different answers to the same question.
-
-Envelope mode writes exactly this:
-
-```sql
-CREATE TABLE <dataset>.<table> (
-  ingestion_id        STRING    NOT NULL,
-  ingestion_loaded_at TIMESTAMP NOT NULL,
-  provider            STRING    NOT NULL,
-  entity              STRING    NOT NULL,
-  source_key          STRING,
-  payload             JSON      NOT NULL
-)
-PARTITION BY DATE(ingestion_loaded_at)
-CLUSTER BY provider, entity;
+```go
+sdk.Target{Provider: "open_meteo", Entity: "hourly", Key: sdk.Key("id")}
+// writes exactly the payload
 ```
 
-It exists so `ingestion_id` keeps a single owner. Rebuild those columns in each
-consumer and the ids drift apart, which is the duplication the contract exists
-to prevent.
+`ExtraMetadata` adds two fields, and nothing else:
 
-Both modes use the same field names, so a flat row and a wrapped row describe a
-record identically and downstream SQL reads one spelling. The flat mode carries
-no prefix, so a payload that already owns one of those names is an error naming
-the field rather than a silent overwrite.
+| field | |
+|---|---|
+| `ingestion_id` | deterministic UUID v5 over `provider\|entity\|source_key\|record_ts` |
+| `ingestion_loaded_at` | when the row was written, RFC 3339 |
 
-### Writing to a table that already exists
+`Provider`, `Entity` and `SourceKey` stay provenance — they build the id, they
+do not become columns. A payload that already owns one of the two names is an
+error naming the field, never a silent overwrite.
 
-`Dataset` and `Table` address the destination directly:
+Required by `DedupMerge`, which matches on `ingestion_id`, and by the partition
+options, which partition on `ingestion_loaded_at`.
+
+### A row shape of your own
+
+When the warehouse has a contract, you build it — in one Transformer:
+
+```go
+Transform: []sdk.Transformer{
+	func(payload any) (any, error) {
+		return map[string]any{
+			"provider":   "open_meteo",
+			"entity":     "hourly_temperature",
+			"source_key": payload.(map[string]any)["time"],
+			"payload":    payload,
+		}, nil
+	},
+},
+Target: sdk.Target{..., ExtraMetadata: true},
+```
+
+See [`examples/07-own-shape`](../examples/07-own-shape/).
+
+## Creating the table
+
+Off by default: nothing runs DDL against your warehouse without being asked.
 
 ```go
 sdk.Target{
-	Driver:  sdk.DriverBigQuery,
-	Dataset: "landing",
-	Table:   "vendors_open_meteo_hourly_temperatures", // already there
-	// ...
+	CreateTable: true,          // the load job creates it on the first run
+	ClusterBy:   []string{"provider"},
 }
 ```
 
-Leave `Table` empty and it defaults to `vendors_<provider>_<entity>s`. Set
-`NoCreateTable` to stop the SDK creating anything; it never alters a table that
-already exists either way.
+The schema is inferred from the data, because nothing else knows it — the
+payload is yours. Two knobs the SDK can still set:
+
+- **Partitioning** by day on `ingestion_loaded_at`, whenever `ExtraMetadata`
+  gives it that column. Not optional: an unpartitioned landing table costs a
+  full scan on every MERGE the bronze layer runs.
+- **Clustering**, on the columns you name. The SDK cannot guess them.
+
+With `PartitionExpiration` old partitions are dropped; zero keeps them, which
+is the default, because deleting data is not something a library starts doing
+on its own. `RequirePartitionFilter` blocks queries that would scan
+everything — and is refused alongside `DedupMerge`, because the merge matches
+on `ingestion_id` across every partition and cannot be scoped.
+
+To keep the schema under your control, pass the DDL:
+
+```go
+sdk.Target{CreateTable: true, CreateSQL: "CREATE TABLE landing.x (...)"}
+```
+
+The SDK runs it once, then checks it produced the table being written to. It
+never alters a table that already exists, in either mode.
 
 ## BigQuery Schema
 
@@ -434,13 +454,9 @@ Or with metadata:
 CREATE TABLE {dataset}.{table} (
   payload JSON NOT NULL
 )
--- Metadata fields (if AddMetadata=true) sit alongside your payload fields:
+-- With ExtraMetadata these two sit alongside your payload's own fields:
 -- - ingestion_id (deterministic UUID v5)
 -- - ingestion_loaded_at (load timestamp)
--- - provider (data source)
--- - entity (entity type)
--- - source_key (unique key from source)
--- - record_ts (record timestamp at source)
 ```
 
 Or structured:

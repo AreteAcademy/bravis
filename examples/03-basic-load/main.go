@@ -32,7 +32,7 @@ func main() {
 		sdk.WithProjectID(*project),
 		sdk.WithDataset(*dataset),
 		sdk.WithTable(*table),
-		sdk.WithMetadata(true), // adds _bravis_* fields into each payload
+		sdk.WithExtraMetadata(true), // adds ingestion_id and ingestion_loaded_at
 	)
 	if err != nil {
 		log.Fatalf("loader: %v", err)

@@ -107,15 +107,23 @@ func resolveConfig(cfg *core.LoadConfig, opts ...core.LoadOption) (*core.LoadCon
 			c.Driver, core.DriverBigQuery)
 	}
 
-	if c.Dedup == core.DedupMerge && !c.WriteEnvelopeColumns {
-		return nil, fmt.Errorf("DedupMerge requires WriteEnvelopeColumns: the merge matches on " +
-			"ingestion_id, which only exists as a column in the landing contract")
+	if c.RequirePartitionFilter && c.Dedup == core.DedupMerge {
+		return nil, fmt.Errorf("RequirePartitionFilter and DedupMerge cannot both apply: " +
+			"the merge matches on ingestion_id across every partition, and it cannot be " +
+			"scoped -- ingestion_loaded_at is the load time, so a re-run of the same record " +
+			"lands in a different partition than the original. A partition filter would make " +
+			"the merge miss the match and write the duplicate it exists to prevent")
 	}
 
-	if c.AddMetadata && c.WriteEnvelopeColumns {
-		return nil, fmt.Errorf("AddMetadata and WriteEnvelopeColumns are two different answers " +
-			"to the same question: the first folds provenance flat into your payload, the " +
-			"second wraps it in the six envelope columns. Pick one")
+	if c.Dedup == core.DedupMerge && !c.ExtraMetadata {
+		return nil, fmt.Errorf("DedupMerge requires ExtraMetadata: the merge matches rows on " +
+			"ingestion_id, and that column only exists when ExtraMetadata adds it")
+	}
+
+	if (c.PartitionExpiration > 0 || c.RequirePartitionFilter) && !c.ExtraMetadata {
+		return nil, fmt.Errorf("partition options require ExtraMetadata: the table is " +
+			"partitioned on ingestion_loaded_at, and that column only exists when " +
+			"ExtraMetadata adds it")
 	}
 	return &c, nil
 }
@@ -181,7 +189,7 @@ func (l *Loader) Load(ctx context.Context, envelopes ...core.Envelope) (*core.Lo
 		return fail(nil)
 	}
 
-	if l.cfg.AddMetadata {
+	if l.cfg.ExtraMetadata {
 		for i := range envelopes {
 			if err := l.addMetadataToEnvelope(&envelopes[i]); err != nil {
 				return fail(fmt.Errorf("add metadata: %w", err))
@@ -191,11 +199,10 @@ func (l *Loader) Load(ctx context.Context, envelopes ...core.Envelope) (*core.Lo
 
 	table := l.bq.Dataset(l.cfg.Dataset).Table(l.cfg.Table)
 
-	created, err := l.ensureTable(ctx, table)
+	existed, err := l.prepareTable(ctx, table)
 	if err != nil {
 		return fail(err)
 	}
-	result.TableCreated = created
 
 	data, err := l.encodeRows(envelopes)
 	if err != nil {
@@ -228,6 +235,14 @@ func (l *Loader) Load(ctx context.Context, envelopes ...core.Envelope) (*core.Lo
 		}
 		result.RowsLoaded = int64(len(envelopes))
 	}
+
+	// Only now: with autodetect it is the load job that creates the table, so
+	// there is nothing to describe until it has run.
+	if l.cfg.CreateTable && !existed {
+		result.TableCreated = true
+		l.describeTable(ctx, table)
+	}
+
 	result.Duration = time.Since(start)
 
 	slog.InfoContext(ctx, "load complete",
@@ -243,54 +258,21 @@ func (l *Loader) Load(ctx context.Context, envelopes ...core.Envelope) (*core.Lo
 	return result, nil
 }
 
-// envelopeColumns is the six-column landing contract: one place produces the
-// ingestion_id, so a row written by this SDK matches the row a Python fetcher
-// writes for the same record. That single owner is the whole point -- rebuild
-// these columns per consumer and the ids drift apart, which is exactly the
-// duplication the contract exists to prevent.
-//
-//	ingestion_id        STRING    NOT NULL
-//	ingestion_loaded_at TIMESTAMP NOT NULL
-//	provider            STRING    NOT NULL
-//	entity              STRING    NOT NULL
-//	source_key          STRING
-//	payload             JSON      NOT NULL
-func (l *Loader) envelopeColumns(env core.Envelope) (map[string]any, error) {
-	id, err := env.IngestionID()
-	if err != nil {
-		return nil, err
-	}
+// The two fields ExtraMetadata adds. Only two: provider, entity and
+// source_key are provenance the SDK uses to build the id, not columns it
+// imposes. What a row looks like is the caller's decision, made in Transform.
+const (
+	metadataID       = "ingestion_id"
+	metadataLoadedAt = "ingestion_loaded_at"
+)
 
-	return map[string]any{
-		"ingestion_id":        id,
-		"ingestion_loaded_at": time.Now().UTC().Format(time.RFC3339),
-		"provider":            env.Provider,
-		"entity":              env.Entity,
-		"source_key":          env.SourceKey,
-		"payload":             env.Payload,
-	}, nil
-}
+var metadataFields = []string{metadataID, metadataLoadedAt}
 
-// metadataFields are the provenance keys AddMetadata merges into a payload.
+// addMetadataToEnvelope merges the two metadata fields into the payload.
 //
-// They carry no prefix: these are the same names the envelope contract uses
-// as columns, so a flat row and a wrapped row describe a record identically
-// and downstream SQL reads one spelling, not two.
-//
-// The prefix used to be "_bravis_", which made collisions impossible. Without
-// it a source that has its own "provider" field would be silently overwritten
-// -- so a collision is an error now, naming the field. Silently replacing a
-// vendor's data with our provenance is the worse failure: it is invisible.
-var metadataFields = []string{
-	"ingestion_id",
-	"ingestion_loaded_at",
-	"provider",
-	"entity",
-	"source_key",
-	"record_ts",
-}
-
-// addMetadataToEnvelope merges provenance into the envelope's payload.
+// They carry no prefix, so a payload that already owns one of those names is
+// an error naming the field. Silently replacing a vendor's value with ours is
+// the worse failure: it is invisible.
 func (l *Loader) addMetadataToEnvelope(env *core.Envelope) error {
 	id, err := env.IngestionID()
 	if err != nil {
@@ -323,42 +305,23 @@ func (l *Loader) addMetadataToEnvelope(env *core.Envelope) error {
 		}
 	}
 	if len(clashes) > 0 {
-		return fmt.Errorf("payload already has the field(s) %s, which AddMetadata would overwrite. "+
-			"Rename them in your payload, or use WriteEnvelopeColumns, which nests the payload "+
-			"under a payload column and cannot collide", strings.Join(clashes, ", "))
+		return fmt.Errorf("payload already has the field(s) %s, which ExtraMetadata would "+
+			"overwrite. Rename them in Transform, or leave ExtraMetadata off",
+			strings.Join(clashes, ", "))
 	}
 
-	payload["ingestion_id"] = id
-	payload["ingestion_loaded_at"] = time.Now().UTC().Format(time.RFC3339)
-	payload["provider"] = env.Provider
-	payload["entity"] = env.Entity
-	payload["source_key"] = env.SourceKey
-	payload["record_ts"] = env.RecordTS
+	payload[metadataID] = id
+	payload[metadataLoadedAt] = time.Now().UTC().Format(time.RFC3339)
 
 	env.Payload = payload
 	return nil
 }
 
-// encodeRows renders the batch as NDJSON, which is what both strategies load.
-//
-// Every line must be a JSON object: BigQuery maps its keys onto the columns of
-// the destination table, so a bare scalar or an array has nothing to map and
-// must fail here rather than halfway through a load job.
 func (l *Loader) encodeRows(envelopes []core.Envelope) ([]byte, error) {
 	var buf bytes.Buffer
 
 	for i, env := range envelopes {
-		row := env.Payload
-
-		if l.cfg.WriteEnvelopeColumns {
-			cols, err := l.envelopeColumns(env)
-			if err != nil {
-				return nil, fmt.Errorf("row %d: %w", i, err)
-			}
-			row = cols
-		}
-
-		data, err := json.Marshal(row)
+		data, err := json.Marshal(env.Payload)
 		if err != nil {
 			return nil, fmt.Errorf("marshal row %d: %w", i, err)
 		}
@@ -452,7 +415,10 @@ func (l *Loader) loadInline(ctx context.Context, table *bigquery.Table, data []b
 	source := bigquery.NewReaderSource(bytes.NewReader(data))
 	source.SourceFormat = format
 
-	if rows, err := runLoadJob(ctx, table.LoaderFrom(source)); err != nil {
+	loader := table.LoaderFrom(source)
+	l.applyLayout(loader, &source.FileConfig)
+
+	if rows, err := runLoadJob(ctx, loader); err != nil {
 		return 0, rows, err
 	}
 
@@ -487,7 +453,10 @@ func (l *Loader) loadViaGCS(ctx context.Context, table *bigquery.Table, data []b
 	// load was parsed wrong -- and the job still succeeded.
 	gcsRef.SourceFormat = format
 
-	rows, err := runLoadJob(ctx, table.LoaderFrom(gcsRef))
+	loader := table.LoaderFrom(gcsRef)
+	l.applyLayout(loader, &gcsRef.FileConfig)
+
+	rows, err := runLoadJob(ctx, loader)
 	if err != nil {
 		_ = obj.Delete(ctx)
 		return 0, rows, err

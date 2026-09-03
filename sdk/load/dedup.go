@@ -29,10 +29,11 @@ func (l *Loader) loadWithMerge(ctx context.Context, table *bigquery.Table, data 
 	// The temporary table carries an expiration so an interrupted run cannot
 	// leave a table behind forever.
 	temp := l.bq.Dataset(l.cfg.Dataset).Table(fmt.Sprintf("_bravis_merge_%d", time.Now().UnixNano()))
-	md := landingMetadata()
-	md.ExpirationTime = time.Now().Add(6 * time.Hour)
-
-	if err := temp.Create(ctx, md); err != nil {
+	// It takes its shape from the data, like the destination does, and
+	// expires on its own so an interrupted run cannot leave it behind.
+	if err := temp.Create(ctx, &bigquery.TableMetadata{
+		ExpirationTime: time.Now().Add(6 * time.Hour),
+	}); err != nil {
 		return 0, 0, nil, fmt.Errorf("creating temporary table: %w", err)
 	}
 	defer func() {
@@ -44,23 +45,31 @@ func (l *Loader) loadWithMerge(ctx context.Context, table *bigquery.Table, data 
 
 	source := bigquery.NewReaderSource(bytes.NewReader(data))
 	source.SourceFormat = format
+	source.AutoDetect = true
 
-	if rows, err := runLoadJob(ctx, temp.LoaderFrom(source)); err != nil {
+	stage := temp.LoaderFrom(source)
+	stage.CreateDisposition = bigquery.CreateIfNeeded
+
+	if rows, err := runLoadJob(ctx, stage); err != nil {
 		return 0, 0, rows, fmt.Errorf("loading the temporary table: %w", err)
 	}
 
 	// WHEN NOT MATCHED only. The landing layer is append-only by contract, so
 	// a row already there is left exactly as it was -- a re-run must never
 	// rewrite history, only skip it.
+	// INSERT ROW rather than a column list: the SDK does not know your
+	// payload, and BigQuery matches the columns by name.
+	//
+	// WHEN NOT MATCHED only. A row already there is left exactly as it was --
+	// a re-run must skip history, never rewrite it.
 	sql := fmt.Sprintf(`
-MERGE `+"`%s.%s.%s`"+` AS alvo
-USING `+"`%s.%s.%s`"+` AS novo
-ON alvo.ingestion_id = novo.ingestion_id
-WHEN NOT MATCHED THEN
-  INSERT (ingestion_id, ingestion_loaded_at, provider, entity, source_key, payload)
-  VALUES (novo.ingestion_id, novo.ingestion_loaded_at, novo.provider, novo.entity, novo.source_key, novo.payload)`,
+MERGE `+"`%s.%s.%s`"+` AS target
+USING `+"`%s.%s.%s`"+` AS incoming
+ON target.%s = incoming.%s
+WHEN NOT MATCHED THEN INSERT ROW`,
 		table.ProjectID, table.DatasetID, table.TableID,
-		temp.ProjectID, temp.DatasetID, temp.TableID)
+		temp.ProjectID, temp.DatasetID, temp.TableID,
+		metadataID, metadataID)
 
 	job, err := l.bq.Query(sql).Run(ctx)
 	if err != nil {

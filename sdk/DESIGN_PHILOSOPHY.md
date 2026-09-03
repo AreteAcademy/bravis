@@ -59,7 +59,7 @@ You decide:
 
 ## Metadata: Optional, Not Opinionated
 
-When `AddMetadata: true`, the SDK adds fields to the `Payload`:
+When `ExtraMetadata: true`, the SDK adds fields to the `Payload`:
 
 ```json
 {
@@ -71,7 +71,7 @@ When `AddMetadata: true`, the SDK adds fields to the `Payload`:
   // bravis metadata (injected into payload)
   "ingestion_id": "550e8400-e29b-41d4-a716-446655440000",
   "ingestion_loaded_at": "2026-01-02T15:30:45Z",
-  "provider": "example_api",
+  "# provider/entity/source_key stay provenance; you add them if you want them"
   "entity": "transactions",
   "source_key": "tx-123",
   "record_ts": "2026-01-02T10:00:00Z"
@@ -102,7 +102,7 @@ CREATE TABLE landing.raw_data (
 
 Load:
 ```go
-loader.Load(ctx, envelopes...)  // AddMetadata: false (default)
+loader.Load(ctx, envelopes...)  // ExtraMetadata: false (default)
 ```
 
 Query:
@@ -125,7 +125,7 @@ CREATE TABLE landing.raw_data (
 Load:
 ```go
 loader.Load(ctx, &sdk.LoadConfig{
-  AddMetadata: true,
+  ExtraMetadata: true,
   // ...
 })
 ```
@@ -160,7 +160,7 @@ CLUSTER BY ingestion_id;
 Load:
 ```go
 loader.Load(ctx, &sdk.LoadConfig{
-  AddMetadata: true,
+  ExtraMetadata: true,
   // ...
 })
 ```
@@ -225,7 +225,7 @@ WHEN NOT MATCHED THEN INSERT (...) VALUES (...);
 
 1. **Create your BigQuery table** with whatever schema makes sense
 2. **Use `Envelope`** to move data through your pipeline
-3. **Add metadata only if you need it** (`AddMetadata: true`)
+3. **Add metadata only if you need it** (`ExtraMetadata: true`)
 4. **Handle deduplication** in your bronze/silver layer
 
 ## FAQ

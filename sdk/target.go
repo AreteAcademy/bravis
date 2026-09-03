@@ -61,16 +61,44 @@ type Target struct {
 	// enabled on your behalf.
 	Dedup core.Dedup
 
-	// NoCreateTable stops the SDK from creating the landing table. By
-	// default it creates one with the six-column contract, partitioned by
-	// ingestion_loaded_at and clustered by provider and entity. It never
-	// alters an existing table.
-	NoCreateTable bool
+	// CreateTable lets the SDK create the destination table when it is
+	// absent, with the six-column contract: partitioned by day on
+	// ingestion_loaded_at, clustered by provider and entity, and described
+	// and labelled so it is obvious later what writes there.
+	//
+	// Off by default. Nothing runs DDL against your warehouse without being
+	// asked, and it never alters a table that already exists.
+	CreateTable bool
 
-	// RawPayload writes the payload flat instead of wrapping it in the six
-	// landing columns. Turning this on also turns off table creation, since
-	// the SDK then does not know the schema.
-	RawPayload bool
+	// CreateSQL is your DDL, run instead of the built-in schema. The SDK
+	// still checks afterwards that the table it produced can take the rows
+	// being written.
+	CreateSQL string
+
+	// PartitionExpiration drops partitions older than this. Zero keeps them
+	// forever, which is the default.
+	PartitionExpiration time.Duration
+
+	// RequirePartitionFilter makes BigQuery reject a query that does not
+	// filter on the partition column, which stops an accidental full scan.
+	// Incompatible with DedupMerge -- see the field on LoadConfig for why.
+	RequirePartitionFilter bool
+
+	// ExtraMetadata adds two fields to every payload:
+	//
+	//	ingestion_id         deterministic UUID v5 over the provenance
+	//	ingestion_loaded_at  when the row was written, RFC 3339
+	//
+	// Off by default. The SDK writes your payload as Transform left it and
+	// adds nothing: what a row looks like is your decision, not the library's.
+	//
+	// Required by DedupMerge, which matches on ingestion_id, and by the
+	// partition options, which partition on ingestion_loaded_at.
+	ExtraMetadata bool
+
+	// ClusterBy names the columns a created table is clustered on. The SDK
+	// cannot guess: it does not know your payload.
+	ClusterBy []string
 }
 
 // defaultTable is the landing naming convention: vendors_<provider>_<entity>s.
@@ -115,17 +143,23 @@ func (d Target) resolve() (*core.LoadConfig, map[string]origin, error) {
 	}
 
 	cfg := &core.LoadConfig{
-		Driver:               d.Driver,
-		ProjectID:            projeto.value,
-		Dataset:              dataset.value,
-		Table:                table.value,
-		StagingBucket:        bucket.value,
-		ThresholdForGCS:      limite,
-		Format:               "ndjson",
-		DeleteAfterLoad:      true,
-		Dedup:                d.Dedup,
-		WriteEnvelopeColumns: !d.RawPayload,
-		CreateTable:          !d.NoCreateTable && !d.RawPayload,
+		Driver:                 d.Driver,
+		ProjectID:              projeto.value,
+		Dataset:                dataset.value,
+		Table:                  table.value,
+		StagingBucket:          bucket.value,
+		ThresholdForGCS:        limite,
+		Format:                 "ndjson",
+		DeleteAfterLoad:        true,
+		Dedup:                  d.Dedup,
+		ExtraMetadata:          d.ExtraMetadata,
+		ClusterBy:              d.ClusterBy,
+		CreateTable:            d.CreateTable,
+		CreateSQL:              d.CreateSQL,
+		PartitionExpiration:    d.PartitionExpiration,
+		RequirePartitionFilter: d.RequirePartitionFilter,
+		Provider:               d.Provider,
+		Entity:                 d.Entity,
 	}
 
 	return cfg, map[string]origin{

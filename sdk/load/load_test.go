@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"cloud.google.com/go/bigquery"
 	core "github.com/AreteAcademy/bravis/sdk/internal/core"
@@ -63,7 +65,7 @@ func TestResolveConfigFromOptionsAlone(t *testing.T) {
 		core.WithDataset("d"),
 		core.WithTable("t"),
 		core.WithThresholdForGCS(10),
-		core.WithMetadata(true),
+		core.WithExtraMetadata(true),
 	)
 	if err != nil {
 		t.Fatalf("resolveConfig: %v", err)
@@ -71,7 +73,7 @@ func TestResolveConfigFromOptionsAlone(t *testing.T) {
 	if got.ProjectID != "p" || got.Dataset != "d" || got.Table != "t" {
 		t.Errorf("options did not build the config: %+v", got)
 	}
-	if got.ThresholdForGCS != 10 || !got.AddMetadata {
+	if got.ThresholdForGCS != 10 || !got.ExtraMetadata {
 		t.Errorf("behaviour options did not apply: %+v", got)
 	}
 }
@@ -86,7 +88,8 @@ func TestResolveConfigDoesNotMutateCaller(t *testing.T) {
 		t.Fatalf("resolveConfig: %v", err)
 	}
 
-	if original != snapshot {
+	// reflect.DeepEqual, not !=: LoadConfig has a slice field now.
+	if !reflect.DeepEqual(original, snapshot) {
 		t.Errorf("caller's config was mutated: %+v became %+v", snapshot, original)
 	}
 }
@@ -142,16 +145,6 @@ func TestResolveConfigRejectsUnwrittenFormat(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("New must refuse a format it does not write")
-	}
-}
-
-func TestResolveConfigRejectsBothMetadataModes(t *testing.T) {
-	_, err := resolveConfig(nil,
-		core.WithProjectID("p"), core.WithDataset("d"), core.WithTable("t"),
-		core.WithMetadata(true), core.WithEnvelopeColumns(true),
-	)
-	if err == nil {
-		t.Fatal("AddMetadata and WriteEnvelopeColumns contradict each other and must not both apply")
 	}
 }
 
@@ -225,86 +218,12 @@ func TestEncodeRowsStructPayloadUsesJSONTags(t *testing.T) {
 
 // --- envelope columns (SDK_LOAD.md 5) -----------------------------------
 
-func TestEncodeRowsEnvelopeMode(t *testing.T) {
-	l := &Loader{cfg: &core.LoadConfig{
-		Format: "ndjson", WriteEnvelopeColumns: true,
-	}}
-
-	data, err := l.encodeRows([]core.Envelope{{
-		Provider: "gov", Entity: "tx", SourceKey: "k1",
-		RecordTS: "2026-01-01T00:00:00Z",
-		Payload:  map[string]any{"amount": 10},
-	}})
-	if err != nil {
-		t.Fatalf("encodeRows: %v", err)
-	}
-
-	row := decodeNDJSON(t, data)[0]
-
-	for _, col := range []string{
-		"ingestion_id", "ingestion_loaded_at", "provider", "entity", "source_key", "payload",
-	} {
-		if _, ok := row[col]; !ok {
-			t.Errorf("missing envelope column %s", col)
-		}
-	}
-	if len(row) != 6 {
-		t.Errorf("Expected exactly the 6 contract columns, got %d: %v", len(row), row)
-	}
-	if row["provider"] != "gov" || row["entity"] != "tx" || row["source_key"] != "k1" {
-		t.Errorf("identity columns wrong: %v", row)
-	}
-
-	// The payload must stay nested, not be flattened into the row.
-	payload, ok := row["payload"].(map[string]any)
-	if !ok {
-		t.Fatalf("payload should be a nested object, got %T", row["payload"])
-	}
-	if payload["amount"] != float64(10) {
-		t.Errorf("payload = %v", payload)
-	}
-}
-
-func TestEnvelopeIngestionIDMatchesEnvelope(t *testing.T) {
-	// The contract is that one place produces this id. If envelope mode
-	// computed it differently from Envelope.IngestionID, a row written here
-	// would not match the equivalent row written anywhere else.
-	env := core.Envelope{
-		Provider: "gov", Entity: "tx", SourceKey: "k1",
-		RecordTS: "2026-01-01T00:00:00Z",
-		Payload:  map[string]any{"amount": 10},
-	}
-
-	want, err := env.IngestionID()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	l := &Loader{cfg: &core.LoadConfig{Format: "ndjson", WriteEnvelopeColumns: true}}
-	data, err := l.encodeRows([]core.Envelope{env})
-	if err != nil {
-		t.Fatalf("encodeRows: %v", err)
-	}
-
-	if got := decodeNDJSON(t, data)[0]["ingestion_id"]; got != want {
-		t.Errorf("envelope mode ingestion_id = %v, Envelope.IngestionID() = %v", got, want)
-	}
-}
-
-func TestEnvelopeModeRequiresSourceKey(t *testing.T) {
-	l := &Loader{cfg: &core.LoadConfig{Format: "ndjson", WriteEnvelopeColumns: true}}
-	_, err := l.encodeRows([]core.Envelope{{Provider: "gov", Entity: "tx", Payload: map[string]any{}}})
-	if err == nil {
-		t.Fatal("Expected an error: without a source key there is no stable ingestion_id")
-	}
-}
-
 // --- metadata -------------------------------------------------------------
 
 func metaLoader() *Loader {
 	return &Loader{cfg: &core.LoadConfig{
 		ProjectID: "p", Dataset: "d", Table: "t",
-		AddMetadata: true, Format: "ndjson",
+		ExtraMetadata: true, Format: "ndjson",
 	}}
 }
 
@@ -331,8 +250,10 @@ func TestAddMetadataInjectsFields(t *testing.T) {
 			t.Errorf("missing metadata field %s", k)
 		}
 	}
-	if got["provider"] != "gov" || got["source_key"] != "k1" {
-		t.Errorf("metadata values wrong: %v", got)
+	// Only two. provider, entity and source_key are provenance the SDK uses
+	// to build the id, not columns it imposes on your rows.
+	if len(got) != 3 {
+		t.Errorf("expected the payload plus exactly 2 metadata fields, got %v", got)
 	}
 }
 
@@ -445,7 +366,7 @@ func TestLoadReturnsResultOnFailure(t *testing.T) {
 	// following the documentation panicked.
 	l := &Loader{cfg: &core.LoadConfig{
 		ProjectID: "p", Dataset: "d", Table: "t", Format: "ndjson",
-		AddMetadata: true}}
+		ExtraMetadata: true}}
 
 	// A missing SourceKey fails in metadata, before any client is touched.
 	result, err := l.Load(context.Background(), core.Envelope{
@@ -505,24 +426,24 @@ func TestRowErrorsNilStatus(t *testing.T) {
 }
 
 func TestAddMetadataRefusesToOverwritePayloadFields(t *testing.T) {
-	// The "_bravis_" prefix used to make this impossible. Without it a source
-	// that already has "provider" would have its value silently replaced by
-	// ours -- an invisible failure, and the worse one.
+	// The two fields carry no prefix, so a payload that already owns one of
+	// those names would have its value silently replaced by ours -- an
+	// invisible failure, and the worse one.
 	l := metaLoader()
 	env := core.Envelope{
 		Provider: "gov", Entity: "tx", SourceKey: "k1", RecordTS: "2026-01-01T00:00:00Z",
-		Payload: map[string]any{"provider": "the vendor's own value", "amount": 10},
+		Payload: map[string]any{"ingestion_id": "the vendor's own value", "amount": 10},
 	}
 
 	err := l.addMetadataToEnvelope(&env)
 	if err == nil {
 		t.Fatal("a colliding payload field must be an error, not a silent overwrite")
 	}
-	if !strings.Contains(err.Error(), "provider") {
+	if !strings.Contains(err.Error(), "ingestion_id") {
 		t.Errorf("the error must name the colliding field: %v", err)
 	}
-	if !strings.Contains(err.Error(), "WriteEnvelopeColumns") {
-		t.Errorf("the error should point at the mode that cannot collide: %v", err)
+	if !strings.Contains(err.Error(), "Transform") {
+		t.Errorf("the error should say where to fix it: %v", err)
 	}
 }
 
@@ -543,35 +464,262 @@ func TestAddMetadataDoesNotMutateCallerPayload(t *testing.T) {
 	}
 }
 
-func TestFlatAndEnvelopeUseTheSameNames(t *testing.T) {
-	// One spelling downstream: a flat row and a wrapped row must describe a
-	// record with the same field names, or SQL has to know which mode wrote it.
-	l := metaLoader()
-	env := core.Envelope{
-		Provider: "gov", Entity: "tx", SourceKey: "k1", RecordTS: "2026-01-01T00:00:00Z",
-		Payload: map[string]any{"amount": 10},
-	}
+// --- table creation --------------------------------------------------------
 
-	cols, err := l.envelopeColumns(env)
+func TestSanitiseLabel(t *testing.T) {
+	// BigQuery takes lowercase letters, digits, dashes and underscores, up to
+	// 63 characters, starting with a letter. Anything else is dropped rather
+	// than failing the create.
+	cases := map[string]string{
+		"open_meteo":            "open_meteo",
+		"Open Meteo":            "open_meteo",
+		"acme-corp":             "acme-corp",
+		"123":                   "", // must start with a letter
+		"":                      "",
+		"...":                   "",
+		strings.Repeat("a", 80): strings.Repeat("a", 63),
+	}
+	for in, want := range cases {
+		if got := sanitiseLabel(in); got != want {
+			t.Errorf("sanitiseLabel(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestRequirePartitionFilterRefusesMerge(t *testing.T) {
+	// The merge matches on ingestion_id across every partition and cannot be
+	// scoped: ingestion_loaded_at is the load time, so a re-run of the same
+	// record lands in a different partition than the original. A partition
+	// filter would make the merge miss and write the duplicate.
+	_, err := resolveConfig(nil,
+		core.WithProjectID("p"), core.WithDataset("d"), core.WithTable("t"),
+		core.WithExtraMetadata(true),
+		core.WithRequirePartitionFilter(true),
+		core.WithDedup(core.DedupMerge),
+	)
+	if err == nil {
+		t.Fatal("the pair must be refused")
+	}
+	if !strings.Contains(err.Error(), "partition") || !strings.Contains(err.Error(), "duplicate") {
+		t.Errorf("the error must explain why: %v", err)
+	}
+}
+
+func TestCreateTableAloneIsEnough(t *testing.T) {
+	// The load job creates the table, inferring the schema from the data, so
+	// the SDK no longer needs to know the shape to create one.
+	cfg, err := resolveConfig(nil,
+		core.WithProjectID("p"), core.WithDataset("d"), core.WithTable("t"),
+		core.WithCreateTable(true),
+	)
+	if err != nil {
+		t.Fatalf("CreateTable alone should be valid: %v", err)
+	}
+	if !cfg.CreateTable || cfg.CreateSQL != "" {
+		t.Errorf("cfg = %+v", cfg)
+	}
+}
+
+func TestPartitionOptionsNeedExtraMetadata(t *testing.T) {
+	// The table is partitioned on ingestion_loaded_at, and that column only
+	// exists when ExtraMetadata adds it. Asking for one without the other is
+	// a contradiction, caught before anything touches the warehouse.
+	for _, opt := range []core.LoadOption{
+		core.WithPartitionExpiration(24 * time.Hour),
+		core.WithRequirePartitionFilter(true),
+	} {
+		_, err := resolveConfig(nil,
+			core.WithProjectID("p"), core.WithDataset("d"), core.WithTable("t"), opt,
+		)
+		if err == nil {
+			t.Error("a partition option without ExtraMetadata must be refused")
+		} else if !strings.Contains(err.Error(), "ExtraMetadata") {
+			t.Errorf("the error must name what is missing: %v", err)
+		}
+	}
+}
+
+func TestDedupMergeNeedsExtraMetadata(t *testing.T) {
+	// The merge matches rows on ingestion_id; without ExtraMetadata there is
+	// no such column to match on.
+	_, err := resolveConfig(nil,
+		core.WithProjectID("p"), core.WithDataset("d"), core.WithTable("t"),
+		core.WithDedup(core.DedupMerge),
+	)
+	if err == nil {
+		t.Fatal("DedupMerge without ExtraMetadata must be refused")
+	}
+	if !strings.Contains(err.Error(), "ingestion_id") {
+		t.Errorf("the error must say what is missing: %v", err)
+	}
+}
+
+// --- what the SDK writes ---------------------------------------------------
+
+func TestDefaultWritesThePayloadUntouched(t *testing.T) {
+	// The whole point: what a row looks like is the caller's decision, made
+	// in Transform. With ExtraMetadata off the SDK adds nothing at all.
+	l := &Loader{cfg: &core.LoadConfig{Format: "ndjson"}}
+
+	data, err := l.encodeRows([]core.Envelope{{
+		Provider: "open_meteo", Entity: "hourly", SourceKey: "k1",
+		RecordTS: "2026-01-01T00:00:00Z",
+		Payload:  map[string]any{"temperature_c": 20, "observed_at": "2026-01-01T00:00"},
+	}})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	flat := env
-	if err := l.addMetadataToEnvelope(&flat); err != nil {
+	row := decodeNDJSON(t, data)[0]
+	if len(row) != 2 {
+		t.Fatalf("the SDK added something: %v", row)
+	}
+	// Provenance stays provenance: it builds the id, it is not a column.
+	for _, imposed := range []string{"provider", "entity", "source_key", "payload", "ingestion_id"} {
+		if _, present := row[imposed]; present {
+			t.Errorf("the SDK imposed %q on the row: %v", imposed, row)
+		}
+	}
+}
+
+func TestExtraMetadataAddsExactlyTwoFields(t *testing.T) {
+	l := metaLoader()
+	env := core.Envelope{
+		Provider: "open_meteo", Entity: "hourly", SourceKey: "k1",
+		RecordTS: "2026-01-01T00:00:00Z",
+		Payload:  map[string]any{"temperature_c": 20},
+	}
+
+	if err := l.addMetadataToEnvelope(&env); err != nil {
 		t.Fatal(err)
 	}
-	flatMap := flat.Payload.(map[string]any)
 
-	for _, f := range []string{"ingestion_id", "ingestion_loaded_at", "provider", "entity", "source_key"} {
-		if _, ok := cols[f]; !ok {
-			t.Errorf("envelope mode is missing %s", f)
-		}
-		if _, ok := flatMap[f]; !ok {
-			t.Errorf("flat mode is missing %s", f)
-		}
+	got := env.Payload.(map[string]any)
+	if len(got) != 3 {
+		t.Fatalf("expected the payload plus 2 fields, got %v", got)
 	}
-	if cols["ingestion_id"] != flatMap["ingestion_id"] {
-		t.Error("the two modes computed different ingestion_ids for the same record")
+	if got["ingestion_id"] == nil || got["ingestion_loaded_at"] == nil {
+		t.Errorf("row = %v", got)
+	}
+
+	// The id is the one Envelope.IngestionID produces: one owner, so a row
+	// written here matches the row any other producer writes for the record.
+	want, err := env.IngestionID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got["ingestion_id"] != want {
+		t.Errorf("ingestion_id = %v, Envelope.IngestionID() = %v", got["ingestion_id"], want)
+	}
+}
+
+func TestClusterByIsCarriedNotGuessed(t *testing.T) {
+	// The SDK does not know the payload, so it cannot pick cluster columns.
+	cfg, err := resolveConfig(nil,
+		core.WithProjectID("p"), core.WithDataset("d"), core.WithTable("t"),
+		core.WithCreateTable(true), core.WithClusterBy("provider", "observed_at"),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(cfg.ClusterBy, ",") != "provider,observed_at" {
+		t.Errorf("ClusterBy = %v", cfg.ClusterBy)
+	}
+
+	none, err := resolveConfig(nil,
+		core.WithProjectID("p"), core.WithDataset("d"), core.WithTable("t"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(none.ClusterBy) != 0 {
+		t.Errorf("nothing should be clustered unless named: %v", none.ClusterBy)
+	}
+}
+
+func TestTableDescriptionNamesTheSource(t *testing.T) {
+	cfg := &core.LoadConfig{Provider: "open_meteo", Entity: "hourly_temperature"}
+	if d := tableDescription(cfg); !strings.Contains(d, "open_meteo/hourly_temperature") {
+		t.Errorf("description should say what writes here: %q", d)
+	}
+
+	cfg.ExtraMetadata = true
+	if d := tableDescription(cfg); !strings.Contains(d, "ingestion_id") {
+		t.Errorf("with metadata on it should say how to deduplicate: %q", d)
+	}
+}
+
+// --- the load job carries the layout ---------------------------------------
+
+// These lock applyLayout to the job. It was written and then not called from
+// either path, which would have made CreateTable a flag that does nothing --
+// the defect this project keeps finding.
+
+func layoutFor(cfg *core.LoadConfig) (*bigquery.Loader, *bigquery.FileConfig) {
+	l := &Loader{cfg: cfg}
+	source := bigquery.NewReaderSource(strings.NewReader(""))
+	loader := &bigquery.Loader{}
+	l.applyLayout(loader, &source.FileConfig)
+	return loader, &source.FileConfig
+}
+
+func TestLayoutRefusesToCreateWhenNotAsked(t *testing.T) {
+	loader, file := layoutFor(&core.LoadConfig{Format: "ndjson"})
+
+	if loader.CreateDisposition != bigquery.CreateNever {
+		t.Errorf("without CreateTable the job must not create: %v", loader.CreateDisposition)
+	}
+	if file.AutoDetect {
+		t.Error("nothing should be inferred when no table is being created")
+	}
+}
+
+func TestLayoutCreatesWithAutodetect(t *testing.T) {
+	loader, file := layoutFor(&core.LoadConfig{Format: "ndjson", CreateTable: true})
+
+	if loader.CreateDisposition != bigquery.CreateIfNeeded {
+		t.Errorf("CreateDisposition = %v", loader.CreateDisposition)
+	}
+	if !file.AutoDetect {
+		t.Error("the schema has to come from the data: nothing else knows it")
+	}
+	// No metadata, so no timestamp column to partition on.
+	if loader.TimePartitioning != nil {
+		t.Errorf("nothing to partition on without ExtraMetadata: %+v", loader.TimePartitioning)
+	}
+}
+
+func TestLayoutDoesNotInferOverCreateSQL(t *testing.T) {
+	// The caller already said what the columns are; inferring over that would
+	// be second-guessing them.
+	_, file := layoutFor(&core.LoadConfig{
+		Format: "ndjson", CreateTable: true, CreateSQL: "CREATE TABLE d.t (a INT64)",
+	})
+	if file.AutoDetect {
+		t.Error("CreateSQL means the schema is the caller's, not inferred")
+	}
+}
+
+func TestLayoutPartitionsOnMetadataTimestamp(t *testing.T) {
+	loader, _ := layoutFor(&core.LoadConfig{
+		Format: "ndjson", CreateTable: true, ExtraMetadata: true,
+		PartitionExpiration:    30 * 24 * time.Hour,
+		RequirePartitionFilter: true,
+		ClusterBy:              []string{"provider"},
+	})
+
+	if loader.TimePartitioning == nil {
+		t.Fatal("ExtraMetadata gives a timestamp column, so the table gets partitioned")
+	}
+	if loader.TimePartitioning.Field != "ingestion_loaded_at" {
+		t.Errorf("partition field = %q", loader.TimePartitioning.Field)
+	}
+	if loader.TimePartitioning.Expiration != 30*24*time.Hour {
+		t.Errorf("expiration = %v", loader.TimePartitioning.Expiration)
+	}
+	if !loader.TimePartitioning.RequirePartitionFilter {
+		t.Error("RequirePartitionFilter did not reach the job")
+	}
+	if loader.Clustering == nil || loader.Clustering.Fields[0] != "provider" {
+		t.Errorf("clustering = %+v", loader.Clustering)
 	}
 }

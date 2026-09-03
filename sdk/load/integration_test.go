@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strings"
 	"testing"
 	"time"
 
@@ -187,154 +186,9 @@ func TestIntegrationGCSStrategy(t *testing.T) {
 	}
 }
 
-// TestIntegrationEnvelopeColumns proves the six-column contract lands in a
-// table shaped the way SDK.md documents it.
-func TestIntegrationEnvelopeColumns(t *testing.T) {
-	env := requireIntegration(t)
-	ctx := context.Background()
-
-	client, table := createTable(ctx, t, env, bigquery.Schema{
-		{Name: "ingestion_id", Type: bigquery.StringFieldType, Required: true},
-		{Name: "ingestion_loaded_at", Type: bigquery.TimestampFieldType, Required: true},
-		{Name: "provider", Type: bigquery.StringFieldType, Required: true},
-		{Name: "entity", Type: bigquery.StringFieldType, Required: true},
-		{Name: "source_key", Type: bigquery.StringFieldType},
-		{Name: "payload", Type: bigquery.JSONFieldType, Required: true},
-	})
-
-	loader, err := New(ctx, nil,
-		core.WithProjectID(env.project),
-		core.WithDataset(env.dataset),
-		core.WithTable(table),
-		core.WithEnvelopeColumns(true),
-	)
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
-
-	batch := envelopes(3)
-	if _, err := loader.Load(ctx, batch...); err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-
-	if got := countRows(ctx, t, client, env, table); got != int64(len(batch)) {
-		t.Errorf("Loaded %d rows, table has %d", len(batch), got)
-	}
-
-	// The ingestion_id written must be the one Envelope.IngestionID produces,
-	// or rows from this SDK will not match rows from any other producer.
-	want, err := batch[0].IngestionID()
-	if err != nil {
-		t.Fatal(err)
-	}
-	q := client.Query(fmt.Sprintf(
-		"SELECT COUNT(*) AS n FROM `%s.%s.%s` WHERE ingestion_id = @id",
-		env.project, env.dataset, table))
-	q.Parameters = []bigquery.QueryParameter{{Name: "id", Value: want}}
-
-	it, err := q.Read(ctx)
-	if err != nil {
-		t.Fatalf("lookup query: %v", err)
-	}
-	var row struct{ N int64 }
-	if err := it.Next(&row); err != nil {
-		t.Fatalf("read lookup: %v", err)
-	}
-	if row.N != 1 {
-		t.Errorf("expected exactly one row with ingestion_id %s, found %d", want, row.N)
-	}
-}
-
-// TestIntegrationCriaTabelaDeLanding proves the SDK creates the six-column
-// table, partitioned and clustered, rather than asking the caller to.
-func TestIntegrationCriaTabelaDeLanding(t *testing.T) {
-	env := requireIntegration(t)
-	ctx := context.Background()
-
-	client, err := bigquery.NewClient(ctx, env.project)
-	if err != nil {
-		t.Fatalf("bigquery client: %v", err)
-	}
-	defer func() { _ = client.Close() }()
-
-	name := fmt.Sprintf("it_criada_%d", time.Now().UnixNano())
-	table := client.Dataset(env.dataset).Table(name)
-	t.Cleanup(func() { _ = table.Delete(context.Background()) })
-
-	loader, err := New(ctx, nil,
-		core.WithProjectID(env.project),
-		core.WithDataset(env.dataset),
-		core.WithTable(name),
-		core.WithEnvelopeColumns(true),
-		core.WithCreateTable(true),
-	)
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
-
-	res, err := loader.Load(ctx, envelopes(3)...)
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if !res.TableCreated {
-		t.Error("the result must say it created the table")
-	}
-
-	md, err := table.Metadata(ctx)
-	if err != nil {
-		t.Fatalf("metadata: %v", err)
-	}
-
-	// Partitioning is not decoration: an unpartitioned landing table costs a
-	// full scan on every MERGE the bronze layer runs.
-	if md.TimePartitioning == nil || md.TimePartitioning.Field != "ingestion_loaded_at" {
-		t.Errorf("table created without partitioning on ingestion_loaded_at: %+v", md.TimePartitioning)
-	}
-	if md.Clustering == nil || len(md.Clustering.Fields) != 2 {
-		t.Errorf("table created without clustering on provider/entity: %+v", md.Clustering)
-	}
-	if len(md.Schema) != 6 {
-		t.Errorf("expected 6 columns, got %d", len(md.Schema))
-	}
-}
-
-// TestIntegrationRecusaTabelaDivergente proves the SDK refuses to write into
-// a table that does not match the contract, instead of altering it. A loader
-// that can ALTER is a loader that can erase history.
-func TestIntegrationRecusaTabelaDivergente(t *testing.T) {
-	env := requireIntegration(t)
-	ctx := context.Background()
-
-	client, table := createTable(ctx, t, env, bigquery.Schema{
-		{Name: "ingestion_id", Type: bigquery.StringFieldType},
-		{Name: "outra_coisa", Type: bigquery.StringFieldType},
-	})
-	_ = client
-
-	loader, err := New(ctx, nil,
-		core.WithProjectID(env.project),
-		core.WithDataset(env.dataset),
-		core.WithTable(table),
-		core.WithEnvelopeColumns(true),
-		core.WithCreateTable(true),
-	)
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
-
-	_, err = loader.Load(ctx, envelopes(1)...)
-	if err == nil {
-		t.Fatal("loading into a table that does not match the contract must fail")
-	}
-	// The error must say which column is wrong, or it costs an investigation.
-	if !strings.Contains(err.Error(), "provider") {
-		t.Errorf("the error should name the missing columns: %v", err)
-	}
-}
-
 // TestIntegrationMergeNaoDobra is the criterion from SDK_V2 6.9: load the
 // same batch twice and the count must not double.
-func TestIntegrationMergeNaoDobra(t *testing.T) {
+func TestIntegrationMergeDoesNotDouble(t *testing.T) {
 	env := requireIntegration(t)
 	ctx := context.Background()
 
@@ -352,7 +206,7 @@ func TestIntegrationMergeNaoDobra(t *testing.T) {
 		core.WithProjectID(env.project),
 		core.WithDataset(env.dataset),
 		core.WithTable(name),
-		core.WithEnvelopeColumns(true),
+		core.WithExtraMetadata(true),
 		core.WithCreateTable(true),
 		core.WithDedup(core.DedupMerge),
 	)
@@ -387,5 +241,98 @@ func TestIntegrationMergeNaoDobra(t *testing.T) {
 	// The proof that matters: without dedup this would be 48.
 	if got := countRows(ctx, t, client, env, name); got != 24 {
 		t.Errorf("after loading the same batch twice the table has %d rows, expected 24", got)
+	}
+}
+
+// TestIntegrationCreatesTableFromData proves the load job creates the table
+// on a first run, inferring the schema from the payload -- the only thing
+// that can, since the SDK does not know your columns.
+func TestIntegrationCreatesTableFromData(t *testing.T) {
+	env := requireIntegration(t)
+	ctx := context.Background()
+
+	client, err := bigquery.NewClient(ctx, env.project)
+	if err != nil {
+		t.Fatalf("bigquery client: %v", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	name := fmt.Sprintf("it_created_%d", time.Now().UnixNano())
+	table := client.Dataset(env.dataset).Table(name)
+	t.Cleanup(func() { _ = table.Delete(context.Background()) })
+
+	loader, err := New(ctx, nil,
+		core.WithProjectID(env.project),
+		core.WithDataset(env.dataset),
+		core.WithTable(name),
+		core.WithCreateTable(true),
+		core.WithExtraMetadata(true),
+		core.WithClusterBy("provider"),
+	)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	res, err := loader.Load(ctx, envelopes(3)...)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if !res.TableCreated {
+		t.Error("the result must say it created the table")
+	}
+
+	md, err := table.Metadata(ctx)
+	if err != nil {
+		t.Fatalf("metadata: %v", err)
+	}
+
+	// Partitioning is not decoration: an unpartitioned landing table costs a
+	// full scan on every MERGE the bronze layer runs.
+	if md.TimePartitioning == nil || md.TimePartitioning.Field != "ingestion_loaded_at" {
+		t.Errorf("created without partitioning on ingestion_loaded_at: %+v", md.TimePartitioning)
+	}
+	if md.Clustering == nil || md.Clustering.Fields[0] != "provider" {
+		t.Errorf("created without the clustering asked for: %+v", md.Clustering)
+	}
+
+	// The payload's own fields became columns, inferred from the data.
+	names := map[string]bool{}
+	for _, f := range md.Schema {
+		names[f.Name] = true
+	}
+	for _, want := range []string{"amount", "label", "ingestion_id", "ingestion_loaded_at"} {
+		if !names[want] {
+			t.Errorf("column %s missing from the inferred schema: %v", want, names)
+		}
+	}
+	// And nothing was imposed.
+	for _, imposed := range []string{"payload", "entity", "source_key"} {
+		if names[imposed] {
+			t.Errorf("the SDK imposed column %q: %v", imposed, names)
+		}
+	}
+
+	if got := countRows(ctx, t, client, env, name); got != 3 {
+		t.Errorf("loaded 3 rows, table has %d", got)
+	}
+}
+
+// TestIntegrationRefusesMissingTableUnasked proves the SDK does not run DDL
+// on its own.
+func TestIntegrationRefusesMissingTableUnasked(t *testing.T) {
+	env := requireIntegration(t)
+	ctx := context.Background()
+
+	loader, err := New(ctx, nil,
+		core.WithProjectID(env.project),
+		core.WithDataset(env.dataset),
+		core.WithTable(fmt.Sprintf("it_absent_%d", time.Now().UnixNano())),
+	)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	if _, err := loader.Load(ctx, envelopes(1)...); err == nil {
+		t.Fatal("loading into a missing table without CreateTable must fail")
 	}
 }

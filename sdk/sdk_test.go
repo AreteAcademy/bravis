@@ -396,23 +396,56 @@ func TestDestinoSemProjetoErra(t *testing.T) {
 	}
 }
 
-func TestDestinoCriaTabelaPorPadrao(t *testing.T) {
+func TestTargetDoesNotCreateTablesUnasked(t *testing.T) {
 	t.Setenv(EnvProject, "p")
+
+	// Nothing runs DDL against a warehouse without being asked. The zero
+	// value creates nothing; CreateTable is the whole opt-in.
 	cfg, _, err := Target{Provider: "a", Entity: "b", Key: Key("id")}.resolve()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !cfg.CreateTable || !cfg.WriteEnvelopeColumns {
-		t.Errorf("the default is the landing contract, created by the SDK: %+v", cfg)
+	if cfg.CreateTable {
+		t.Errorf("the zero value must not create a table: %+v", cfg)
 	}
 
-	// RawPayload turns both off: without the contract the SDK has no schema.
-	raw, _, err := Target{Provider: "a", Entity: "b", Key: Key("id"), RawPayload: true}.resolve()
+	asked, _, err := Target{
+		Provider: "a", Entity: "b", Key: Key("id"), CreateTable: true,
+	}.resolve()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if raw.CreateTable || raw.WriteEnvelopeColumns {
-		t.Errorf("RawPayload must not create a table: %+v", raw)
+	if !asked.CreateTable {
+		t.Errorf("CreateTable did not reach the loader: %+v", asked)
+	}
+}
+
+func TestTargetCarriesTableOptions(t *testing.T) {
+	t.Setenv(EnvProject, "p")
+
+	cfg, _, err := Target{
+		Provider: "open_meteo", Entity: "hourly", Key: Key("id"),
+		CreateTable:            true,
+		PartitionExpiration:    90 * 24 * time.Hour,
+		RequirePartitionFilter: true,
+		CreateSQL:              "CREATE TABLE x (a INT64)",
+	}.resolve()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if cfg.PartitionExpiration != 90*24*time.Hour {
+		t.Errorf("PartitionExpiration = %v", cfg.PartitionExpiration)
+	}
+	if !cfg.RequirePartitionFilter {
+		t.Error("RequirePartitionFilter did not reach the loader")
+	}
+	if cfg.CreateSQL == "" {
+		t.Error("CreateSQL did not reach the loader")
+	}
+	// Provider and Entity travel so the created table can be labelled.
+	if cfg.Provider != "open_meteo" || cfg.Entity != "hourly" {
+		t.Errorf("provider/entity did not reach the loader: %+v", cfg)
 	}
 }
 

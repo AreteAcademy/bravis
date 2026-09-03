@@ -94,7 +94,6 @@ type LoadConfig struct {
 	ThresholdForGCS int    // row count above which to use GCS; default: 5000
 	Format          string // "ndjson", "csv", or "parquet"; default: "ndjson"
 	DeleteAfterLoad bool   // delete staged file after successful load; default: true
-	AddMetadata     bool   // fold provenance fields flat into the payload; default: false
 
 	// Driver selects the destination. Empty means DriverBigQuery, the only
 	// one implemented today.
@@ -105,24 +104,62 @@ type LoadConfig struct {
 	Dedup Dedup
 
 	// CreateTable lets the loader create the destination table when it does
-	// not exist. Only possible alongside WriteEnvelopeColumns, since that is
-	// the only case where the SDK knows the schema.
+	// not exist. Off by default: nothing runs DDL against your warehouse
+	// without being asked.
 	//
 	// It never alters an existing table: a table whose schema differs is an
 	// error naming the difference. A loader that can ALTER or DROP is a
 	// loader that can erase history.
 	CreateTable bool
 
-	// WriteEnvelopeColumns wraps each payload in the six-column landing
-	// contract instead of writing it flat:
+	// CreateSQL is the DDL to run instead of the built-in landing schema.
+	// Only consulted when CreateTable is set and the table is absent.
 	//
-	//	ingestion_id, ingestion_loaded_at, provider, entity, source_key, payload
+	// The SDK still checks afterwards that what your statement produced can
+	// take the rows it writes -- a DDL that creates the wrong shape fails
+	// here rather than on the first load.
+	CreateSQL string
+
+	// PartitionExpiration drops partitions older than this. Zero keeps them
+	// forever, which is the default: deleting data is never something a
+	// library should start doing on its own.
+	PartitionExpiration time.Duration
+
+	// RequirePartitionFilter makes BigQuery reject any query that does not
+	// filter on the partition column, which stops an accidental full scan of
+	// a landing table.
 	//
-	// Off by default -- the SDK stays schema-agnostic, and callers who want
-	// the contract ask for it. Turning it on is what keeps a single owner for
-	// ingestion_id, so a row written here matches the row a Python fetcher
-	// writes for the same record. Mutually exclusive with AddMetadata.
-	WriteEnvelopeColumns bool
+	// Incompatible with DedupMerge, and New refuses the pair. The merge
+	// matches on ingestion_id across every partition, and it cannot be scoped:
+	// ingestion_loaded_at is the load time, so a re-run of the same record
+	// lands in a different partition than the original. A partition filter
+	// would make the merge miss the match and write the duplicate it exists
+	// to prevent.
+	RequirePartitionFilter bool
+
+	// ExtraMetadata adds two fields to every payload:
+	//
+	//	ingestion_id         deterministic UUID v5 over
+	//	                     provider|entity|source_key|record_ts
+	//	ingestion_loaded_at  when the row was written, RFC 3339
+	//
+	// Off by default. The SDK writes your payload as you built it and adds
+	// nothing: what the rows look like is yours to decide, in Transform.
+	//
+	// A payload that already has one of those names is an error rather than a
+	// silent overwrite.
+	ExtraMetadata bool
+
+	// ClusterBy names the columns the created table is clustered on. The SDK
+	// cannot guess: it does not know your payload. Ignored when the table
+	// already exists.
+	ClusterBy []string
+
+	// Provider and Entity label the created table, for cost attribution and
+	// for answering "what writes here?" six months later. Taken from the
+	// batch; not part of addressing.
+	Provider string
+	Entity   string
 }
 
 // Driver selects which implementation carries out an extract or a load.
@@ -302,17 +339,38 @@ func WithCreateTable(enabled bool) LoadOption {
 	}
 }
 
-// WithEnvelopeColumns writes the six-column landing contract instead of a
-// flat payload. See LoadConfig.WriteEnvelopeColumns.
-func WithEnvelopeColumns(enabled bool) LoadOption {
+// WithCreateSQL supplies the DDL to run instead of the built-in schema.
+func WithCreateSQL(ddl string) LoadOption {
 	return func(cfg *LoadConfig) {
-		cfg.WriteEnvelopeColumns = enabled
+		cfg.CreateSQL = ddl
 	}
 }
 
-// WithMetadata enables adding metadata fields to payloads.
-func WithMetadata(enabled bool) LoadOption {
+// WithPartitionExpiration drops partitions older than d. Zero keeps them.
+func WithPartitionExpiration(d time.Duration) LoadOption {
 	return func(cfg *LoadConfig) {
-		cfg.AddMetadata = enabled
+		cfg.PartitionExpiration = d
+	}
+}
+
+// WithRequirePartitionFilter rejects queries that do not filter on the
+// partition column. Incompatible with DedupMerge; see the field.
+func WithRequirePartitionFilter(enabled bool) LoadOption {
+	return func(cfg *LoadConfig) {
+		cfg.RequirePartitionFilter = enabled
+	}
+}
+
+// WithExtraMetadata adds ingestion_id and ingestion_loaded_at to each payload.
+func WithExtraMetadata(enabled bool) LoadOption {
+	return func(cfg *LoadConfig) {
+		cfg.ExtraMetadata = enabled
+	}
+}
+
+// WithClusterBy names the columns a created table is clustered on.
+func WithClusterBy(fields ...string) LoadOption {
+	return func(cfg *LoadConfig) {
+		cfg.ClusterBy = fields
 	}
 }

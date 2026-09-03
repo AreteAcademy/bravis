@@ -4,9 +4,8 @@
 // destination table must already exist. You decide what the columns are.
 //
 // Dataset and Table address the destination directly, so an existing table is
-// written to as it stands. Only CreateTable, alongside WriteEnvelopeColumns,
-// makes the SDK create one -- and it never alters a table that is already
-// there.
+// written to as it stands. Only CreateTable makes the SDK create one -- and it
+// never alters a table that is already there.
 //
 // # Basic usage
 //
@@ -36,48 +35,37 @@
 // New takes a *LoadConfig, a list of options, or both, and never mutates the
 // config you hand it.
 //
-// # Three ways to shape a row
+// # What gets written
 //
-// Default: the payload, exactly as given.
+// Your payload, as Transform left it. The SDK imposes no columns: what a row
+// looks like is your decision.
 //
-//	CREATE TABLE dataset.raw_data (payload JSON NOT NULL);
+// ExtraMetadata adds two fields and nothing else:
 //
-// WithMetadata(true): provenance folded into the payload as a flat object,
-// under these keys:
+//   - ingestion_id          deterministic UUID v5 over
+//     provider|entity|source_key|record_ts
+//   - ingestion_loaded_at   when the row was written, RFC 3339
 //
-//   - ingestion_id          deterministic UUID v5
-//   - ingestion_loaded_at   load timestamp
-//   - provider              data source
-//   - entity                entity type
-//   - source_key            unique key at the source
-//   - record_ts             record timestamp at the source
+// Provider, Entity and SourceKey stay provenance: they build the id, they do
+// not become columns. A payload that already owns one of those two names is
+// an error naming the field, never a silent overwrite.
 //
-// These are the same names the envelope contract uses as columns, so a flat
-// row and a wrapped row describe a record identically and downstream SQL
-// reads one spelling. They carry no prefix, so a payload that already has one
-// of them is an error naming the field rather than a silent overwrite. When
-// your source genuinely owns those names, use WriteEnvelopeColumns: it nests
-// the payload and cannot collide.
+// ExtraMetadata is required by DedupMerge, which matches on ingestion_id, and
+// by the partition options, which partition on ingestion_loaded_at.
 //
-// WithEnvelopeColumns(true): the six-column landing contract, with your
-// payload nested rather than merged.
+// # Creating the table
 //
-//	CREATE TABLE dataset.raw_data (
-//	  ingestion_id        STRING    NOT NULL,
-//	  ingestion_loaded_at TIMESTAMP NOT NULL,
-//	  provider            STRING    NOT NULL,
-//	  entity              STRING    NOT NULL,
-//	  source_key          STRING,
-//	  payload             JSON      NOT NULL
-//	)
-//	PARTITION BY DATE(ingestion_loaded_at)
-//	CLUSTER BY provider, entity;
+// Off by default. With CreateTable the load job creates it on the first run,
+// inferring the schema from the data -- nothing else knows it, since the
+// payload is yours. The SDK still sets what it can: day partitioning on
+// ingestion_loaded_at when ExtraMetadata provides it, and clustering on the
+// columns you name in ClusterBy.
 //
-// Envelope mode exists so ingestion_id keeps a single owner: a row written
-// here matches the row any other producer writes for the same record. Rebuild
-// those columns per consumer and the ids drift apart.
+// CreateSQL runs your DDL instead, once, and the SDK then checks it produced
+// the table being written to.
 //
-// The last two modes are mutually exclusive; New refuses both at once.
+// It never alters a table that already exists, in either mode: a loader that
+// can ALTER or DROP is a loader that can erase history.
 //
 // # Strategy selection
 //

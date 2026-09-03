@@ -36,7 +36,7 @@ func main() {
 		sdk.WithProjectID(*project),
 		sdk.WithDataset(*dataset),
 		sdk.WithTable(*table),
-		sdk.WithMetadata(true),
+		sdk.WithExtraMetadata(true),
 	)
 	if err != nil {
 		log.Fatalf("loader: %v", err)
