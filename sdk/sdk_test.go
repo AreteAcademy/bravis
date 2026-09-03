@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -719,5 +722,36 @@ func TestDataStatsIsReadableWithoutLoad(t *testing.T) {
 	var none *Data
 	if none.Stats() != (Stats{}) {
 		t.Error("Stats() on a nil Data should be the zero value")
+	}
+}
+
+func TestEveryCoreOptionIsReachable(t *testing.T) {
+	// The low-level options live in an internal package: without a re-export
+	// here they exist and no consumer can call them. Three had shipped that
+	// way -- WithCreateSQL, WithPartitionExpiration and
+	// WithRequirePartitionFilter -- which is the same defect as a field that
+	// does nothing, only harder to notice because the compiler is happy.
+	//
+	// Reading types.go is the only way to check: a compile-time reference
+	// would be the very thing being tested.
+	src, err := os.ReadFile("types.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	core, err := os.ReadFile(filepath.Join("internal", "core", "types.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	declared := regexp.MustCompile(`(?m)^func (With[A-Za-z]+)\(`).FindAllStringSubmatch(string(core), -1)
+	if len(declared) == 0 {
+		t.Fatal("found no With* options in core; has the file moved?")
+	}
+
+	for _, m := range declared {
+		name := m[1]
+		if !regexp.MustCompile(`\b` + name + `\s*=\s*core\.` + name + `\b`).Match(src) {
+			t.Errorf("core.%s is not re-exported in types.go, so no consumer can call it", name)
+		}
 	}
 }

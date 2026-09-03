@@ -76,15 +76,18 @@ const (
 
 // Low-level load options, re-exported. Target covers the common cases.
 var (
-	WithProjectID       = core.WithProjectID
-	WithDataset         = core.WithDataset
-	WithTable           = core.WithTable
-	WithStagingBucket   = core.WithStagingBucket
-	WithFormat          = core.WithFormat
-	WithThresholdForGCS = core.WithThresholdForGCS
-	WithExtraMetadata   = core.WithExtraMetadata
-	WithClusterBy       = core.WithClusterBy
-	WithDriver          = core.WithDriver
-	WithCreateTable     = core.WithCreateTable
-	WithDedup           = core.WithDedup
+	WithProjectID              = core.WithProjectID
+	WithDataset                = core.WithDataset
+	WithTable                  = core.WithTable
+	WithStagingBucket          = core.WithStagingBucket
+	WithFormat                 = core.WithFormat
+	WithThresholdForGCS        = core.WithThresholdForGCS
+	WithExtraMetadata          = core.WithExtraMetadata
+	WithClusterBy              = core.WithClusterBy
+	WithDriver                 = core.WithDriver
+	WithCreateTable            = core.WithCreateTable
+	WithCreateSQL              = core.WithCreateSQL
+	WithPartitionExpiration    = core.WithPartitionExpiration
+	WithRequirePartitionFilter = core.WithRequirePartitionFilter
+	WithDedup                  = core.WithDedup
 )
