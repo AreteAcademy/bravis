@@ -2,7 +2,7 @@ module github.com/AreteAcademy/bravis/examples
 
 go 1.23
 
-require github.com/AreteAcademy/bravis/sdk v0.8.0
+require github.com/AreteAcademy/bravis/sdk v0.9.1
 
 require (
 	cloud.google.com/go v0.110.0 // indirect
