@@ -54,22 +54,29 @@ func (l *Loader) loadWithMerge(ctx context.Context, table *bigquery.Table, data 
 		return 0, 0, rows, fmt.Errorf("loading the temporary table: %w", err)
 	}
 
-	// WHEN NOT MATCHED only. The landing layer is append-only by contract, so
-	// a row already there is left exactly as it was -- a re-run must never
-	// rewrite history, only skip it.
-	// INSERT ROW rather than a column list: the SDK does not know your
-	// payload, and BigQuery matches the columns by name.
+	// The columns are named explicitly, and that is the whole point of this
+	// block. INSERT ROW matches the two tables by POSITION, not by name: if
+	// the staging table's autodetected column order differs from the
+	// destination's, BigQuery either fails with a type error naming a column
+	// that is perfectly fine, or -- when the types happen to line up -- writes
+	// each value into the wrong column and says nothing at all.
 	//
-	// WHEN NOT MATCHED only. A row already there is left exactly as it was --
-	// a re-run must skip history, never rewrite it.
-	sql := fmt.Sprintf(`
-MERGE `+"`%s.%s.%s`"+` AS target
-USING `+"`%s.%s.%s`"+` AS incoming
-ON target.%s = incoming.%s
-WHEN NOT MATCHED THEN INSERT ROW`,
-		table.ProjectID, table.DatasetID, table.TableID,
-		temp.ProjectID, temp.DatasetID, temp.TableID,
-		metadataID, metadataID)
+	// So: read both schemas, agree on a column list, and name it.
+	destMeta, err := table.Metadata(ctx)
+	if err != nil {
+		return 0, 0, nil, fmt.Errorf("reading the destination schema: %w", err)
+	}
+	tempMeta, err := temp.Metadata(ctx)
+	if err != nil {
+		return 0, 0, nil, fmt.Errorf("reading the staged schema: %w", err)
+	}
+
+	cols, err := reconcile(destMeta.Schema, tempMeta.Schema)
+	if err != nil {
+		return 0, 0, nil, fmt.Errorf("the rows do not fit %s: %w", nameOf(table), err)
+	}
+
+	sql := mergeSQL(table, temp, cols, metadataID)
 
 	job, err := l.bq.Query(sql).Run(ctx)
 	if err != nil {

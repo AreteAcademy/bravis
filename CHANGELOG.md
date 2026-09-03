@@ -8,6 +8,204 @@ A tag de um módulo aninhado leva o prefixo do diretório: `sdk/v0.2.1`.
 
 ---
 
+## [0.12.0] — 2026-09-03
+
+Conserto do MERGE, a partir do relatório em
+[`docs/plan/2026-09-03-sdk-conserto-do-merge.md`](docs/plan/2026-09-03-sdk-conserto-do-merge.md),
+escrito por quem consome o SDK.
+
+### Corrigido
+- **O MERGE casava colunas por posição, não por nome.** A 0.9.0 trocou a lista
+  de colunas por `INSERT ROW` afirmando, no código e na mensagem de commit, que
+  o BigQuery casa por nome. Ele casa por posição. Como o schema da tabela
+  temporária vem de autodetect sobre o payload, a ordem não está sob controle
+  de ninguém: num destino de schema fixo o `latitude` do consumidor caiu em
+  `ingestion_id` e a carga morreu com `Value has type FLOAT64 which cannot be
+  inserted into column ingestion_id`. Os testes existentes não pegavam porque
+  deixavam o próprio SDK criar o destino a partir do mesmo lote, e as duas
+  ordens coincidiam por acidente. O `INSERT` agora nomeia as colunas, na ordem
+  do destino, com crase em todo identificador — `full`, `range` e `comment` são
+  reservadas e aparecem em payload de verdade.
+
+### Adicionado
+- `reconcile` compara os dois schemas antes de montar o SQL, e é assimétrica de
+  propósito: coluna que as linhas trazem e o destino não tem é **erro** nomeando
+  a coluna, porque descartar dado em silêncio é o pior modo de falhar; coluna do
+  destino que as linhas não trazem fica NULL, que é legítimo; tipo incompatível
+  no mesmo nome é erro nomeando a coluna e os dois tipos.
+- `mergeSQL` e `reconcile` são funções puras, testadas sob `-short`. O SQL era
+  montado dentro de um método que precisa de cliente BigQuery, e é por isso que
+  nenhum teste unitário jamais tinha visto a string gerada.
+- Teste de integração que carrega num destino cuja ordem de colunas difere da
+  que o autodetect produz. Ele falha na 0.11.0 com o erro exato que o consumidor
+  reportou, e verifica os valores de volta — o modo posicional também sabe
+  passar sem erro e gravar tudo na coluna errada.
+
+---
+
+## [0.11.0] — 2026-09-03
+
+Quatro defeitos que só o BigQuery real revelou: os testes de integração
+existiam desde a 0.2.1 e rodaram pela primeira vez.
+
+### Corrigido
+- **`CreateTable` e `DedupMerge` não compunham.** Com merge a carga vai para uma
+  temporária, e era o job de carga que criava o destino — que portanto nunca
+  passava a existir, e o MERGE falhava com `table not found`. Numa primeira
+  carga não há contra o que deduplicar, então o merge cede o lugar ao caminho
+  comum e o resultado reporta honestamente que a dedup não rodou.
+- **`Load` mutava a fatia do chamador.** Variádico compartilha o array de fundo,
+  então carimbar o metadado escrevia no lote que o chamador ainda segura, e a
+  segunda carga do mesmo lote falhava com `payload already has ingestion_id` —
+  exatamente o que um retry faz.
+- **`ClusterBy` só falhava depois do job submetido.** Com autodetect o schema sai
+  das linhas, então a validação agora acontece antes e diz qual campo falta.
+
+### Alterado
+- **`DeleteAfterLoad` virou `KeepStagedFile`.** Documentado como *default: true*,
+  que um `bool` não consegue ser: quem usa `load.New` direto recebia o zero
+  value, `false`, e nada era limpo. O zero value do novo nome apaga.
+
+---
+
+## [0.10.1] — 2026-09-03
+
+### Adicionado
+- O dispatcher liga no Runner: a engine passa `BRAVIS_RUN_*` ao processo do
+  passo, com o histórico decidindo se é a primeira execução bem-sucedida.
+
+### Corrigido
+- `RunContext.Attempt` era documentado contando de 1; a engine conta de 0
+  (`task_runs.attempt DEFAULT 0`).
+- `BRAVIS_RUN_ID` era injetado como UUID zero fora de um run de verdade. O SDK
+  detecta "sob a Bravis" pela presença do id, então um fetcher rodado à mão
+  logava um id falso. As variáveis de identidade só saem com `RunID` real.
+
+---
+
+## [0.10.0] — 2026-09-03
+
+### Adicionado
+- `RunContext` — a engine passa contexto de execução ao SDK sem o consumidor
+  plumbá-lo: `ID`, `First`, `Attempt`, `Trigger`, `LogicalDate` e `Params`, por
+  ambiente. Quem usa só o SDK não precisa de nada disso.
+- `Target.CreateTable` virou `*bool`, porque dois estados não bastam: `nil` é
+  "não falei" e deixa a engine decidir (primeira execução do passo, ou
+  `create_table=true` no dispatch); uma recusa explícita vence a engine. Um
+  `bool` faria o zero value significar as duas coisas.
+
+---
+
+## [0.9.1] — 2026-09-03
+
+### Corrigido
+- **Três opções existiam e nenhum consumidor podia chamá-las.**
+  `WithCreateSQL`, `WithPartitionExpiration` e `WithRequirePartitionFilter`
+  eram declaradas em `internal/core` e nunca reexportadas na raiz. Há teste que
+  lê os dois arquivos e falha se alguma `With*` do core não tiver reexport.
+
+---
+
+## [0.9.0] — 2026-09-03
+
+**BREAKING.** O SDK deixa de impor colunas.
+
+### Removido
+- **O contrato de seis colunas.** `WriteEnvelopeColumns`, o schema de landing, a
+  verificação das seis colunas e o `AddMetadata` antigo que dobrava `provider`,
+  `entity`, `source_key` e `record_ts` para dentro do payload. O load escreve o
+  payload como o `Transform` o deixou, e nada mais: a estrutura da linha é
+  decisão de quem chama. Quem quiser as seis colunas monta num `Transformer` —
+  é o exemplo `07-own-shape`.
+- `MetadataNamespace` e `WithMetadataNamespace`, que eram aceitos, validados,
+  default-ados e ignorados: `IngestionID` fixa o namespace.
+- `SourceKeyField`, declarado e nunca lido.
+
+### Adicionado
+- `ExtraMetadata`, default `false`, que adiciona exatamente dois campos:
+  `ingestion_id` e `ingestion_loaded_at`. `Provider`, `Entity` e `SourceKey`
+  seguem sendo proveniência — constroem o id, não viram coluna.
+- `CreateTable` (default `false`, nada roda DDL sem ser pedido), com o schema
+  inferido dos dados. `CreateSQL` roda a DDL do cliente e depois confere que ela
+  produziu a tabela certa.
+- `PartitionExpiration` (zero mantém: apagar dado não é algo que biblioteca
+  começa a fazer sozinha), `RequirePartitionFilter`, `ClusterBy`, e descrição
+  mais labels na tabela criada.
+- `RequirePartitionFilter` é recusado junto de `DedupMerge`: o merge casa por
+  `ingestion_id` em todas as partições e não dá para escopar, já que
+  `ingestion_loaded_at` é o momento da carga.
+
+> A troca da lista de colunas do MERGE por `INSERT ROW`, feita aqui, estava
+> errada e foi desfeita na 0.12.0.
+
+---
+
+## [0.8.0] — 2026-09-03
+
+### Adicionado
+- `Data.Stats()` — os contadores de extract já existiam, mas só o `Result` final
+  os expunha, e os testes internos liam o campo privado. Um consumidor não
+  conseguia.
+
+---
+
+## [0.7.0] — 2026-09-03
+
+**BREAKING.** Três superfícies que não faziam o que diziam.
+
+### Corrigido
+- `applyLayout` era escrita e nunca chamada por nenhum dos dois caminhos de
+  carga, o que fazia de `CreateTable` uma flag sem efeito.
+- `Result.Pages` e `Result.Attempts` eram sempre zero.
+- `examples/` nunca compilou — cinco `func main()` num diretório, sem módulo, e
+  um `extract.Fonte` que nunca existiu. A CI escondia com `|| true`.
+
+---
+
+## [0.6.0] — 2026-09-02
+
+### Adicionado
+- **Passo `Transform` entre `Extract` e `Load`.** O consumidor passa funções que
+  recebem o payload e devolvem o payload transformado, preguiçosamente. Sai
+  `SkipRecord` para descartar um registro, e os auxiliares `Only`, `Without`,
+  `Rename` e `Compute`.
+
+---
+
+## [0.5.0] — 2026-09-02
+
+**BREAKING.** Os campos de metadado perderam o prefixo `_bravis_`.
+
+---
+
+## [0.4.1] — 2026-09-02
+
+### Corrigido
+- Descrições e um nome de flag que escaparam da tradução para inglês.
+
+---
+
+## [0.4.0] — 2026-09-02
+
+**BREAKING.** A API inteira em inglês.
+
+### Alterado
+- `Fonte` → `Source`, `Rodar` → `Run`, e o resto dos identificadores públicos.
+- `Driver` nos dois lados, extract e load, nomeando o backend (HTTP,
+  BigQuery) em vez de deixá-lo implícito.
+
+---
+
+## [0.3.0] — 2026-09-02
+
+### Adicionado
+- **A API de duas chamadas**: `Extract` devolve `*Data`, `Load` o consome.
+- Configuração por ambiente, com precedência documentada: o que você definiu,
+  depois a engine, depois o ambiente, depois o default, depois erro.
+- `LICENSE` e a higiene que um projeto aberto precisa ter.
+
+---
+
 ## [0.2.1] — 2026-09-02
 
 Conserto do `load`, conforme [`docs/SDK_LOAD.md`](docs/SDK_LOAD.md).
@@ -99,6 +297,19 @@ Primeira versão que compila.
 > versão de `proxy.golang.org`, então ela permanece publicada e quebrada para
 > sempre. Comece pela `v0.1.1`.
 
+[0.12.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.12.0
+[0.11.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.11.0
+[0.10.1]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.10.1
+[0.10.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.10.0
+[0.9.1]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.9.1
+[0.9.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.9.0
+[0.8.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.8.0
+[0.7.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.7.0
+[0.6.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.6.0
+[0.5.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.5.0
+[0.4.1]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.4.1
+[0.4.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.4.0
+[0.3.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.3.0
 [0.2.1]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.2.1
 [0.2.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.2.0
 [0.1.1]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.1.1

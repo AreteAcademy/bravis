@@ -338,3 +338,133 @@ func TestIntegrationRefusesMissingTableUnasked(t *testing.T) {
 		t.Fatal("loading into a missing table without CreateTable must fail")
 	}
 }
+
+// TestIntegrationMergeIntoADifferentColumnOrder is the regression for the
+// positional MERGE.
+//
+// The destination is created with its columns in a deliberately different
+// order from the one autodetect produces for the staged payload. With
+// INSERT ROW, BigQuery matches the two by position: the INT64 amount lands
+// on ingestion_id and the load dies with a type error naming a column that
+// is perfectly correct. Naming the columns is what makes this pass.
+//
+// The old tests never caught it because they let the SDK create the
+// destination from the same batch, so both orders were the same by accident.
+func TestIntegrationMergeIntoADifferentColumnOrder(t *testing.T) {
+	env := requireIntegration(t)
+	ctx := context.Background()
+
+	// Reverse of what autodetect yields (json.Marshal sorts a map's keys:
+	// amount, ingestion_id, ingestion_loaded_at, label).
+	client, name := createTable(ctx, t, env, bigquery.Schema{
+		{Name: "label", Type: bigquery.StringFieldType},
+		{Name: "ingestion_loaded_at", Type: bigquery.TimestampFieldType},
+		{Name: "ingestion_id", Type: bigquery.StringFieldType},
+		{Name: "amount", Type: bigquery.IntegerFieldType},
+	})
+
+	loader, err := New(ctx, nil,
+		core.WithProjectID(env.project),
+		core.WithDataset(env.dataset),
+		core.WithTable(name),
+		core.WithExtraMetadata(true),
+		core.WithDedup(core.DedupMerge),
+	)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	batch := envelopes(6)
+	if _, err := loader.Load(ctx, batch...); err != nil {
+		t.Fatalf("merging into a table whose column order differs: %v", err)
+	}
+
+	// Landing without an error is only half of it. Positional matching can
+	// also succeed and put every value in the wrong column, so read the rows
+	// back and check each one is where it belongs.
+	q := client.Query(fmt.Sprintf(
+		"SELECT amount, label FROM `%s.%s.%s` ORDER BY amount", env.project, env.dataset, name))
+	it, err := q.Read(ctx)
+	if err != nil {
+		t.Fatalf("reading back: %v", err)
+	}
+	for i := 0; i < 6; i++ {
+		var row struct {
+			Amount int64
+			Label  string
+		}
+		if err := it.Next(&row); err != nil {
+			t.Fatalf("row %d: %v", i, err)
+		}
+		if row.Amount != int64(i) {
+			t.Errorf("row %d: amount = %d", i, row.Amount)
+		}
+		if want := fmt.Sprintf("row-%d", i); row.Label != want {
+			t.Errorf("row %d: label = %q, want %q", i, row.Label, want)
+		}
+	}
+
+	// And it still deduplicates through the named column list.
+	second, err := loader.Load(ctx, batch...)
+	if err != nil {
+		t.Fatalf("second load: %v", err)
+	}
+	if second.RowsLoaded != 0 || second.RowsIgnored != 6 {
+		t.Errorf("second load wrote %d and ignored %d, expected 0 and 6",
+			second.RowsLoaded, second.RowsIgnored)
+	}
+}
+
+// TestIntegrationFirstMergeLoadStillPartitions guards the seam left by the
+// 0.11.0 fix.
+//
+// On a first load DedupMerge cedes to the plain path, because there is
+// nothing to deduplicate against yet. That is the path that has to apply the
+// layout -- and if it ever stops doing so, no row count would notice: the
+// data lands, the table is simply unpartitioned forever, and every query
+// against it scans everything.
+func TestIntegrationFirstMergeLoadStillPartitions(t *testing.T) {
+	env := requireIntegration(t)
+	ctx := context.Background()
+
+	client, err := bigquery.NewClient(ctx, env.project)
+	if err != nil {
+		t.Fatalf("bigquery client: %v", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	name := fmt.Sprintf("it_layout_%d", time.Now().UnixNano())
+	table := client.Dataset(env.dataset).Table(name)
+	t.Cleanup(func() { _ = table.Delete(context.Background()) })
+
+	loader, err := New(ctx, nil,
+		core.WithProjectID(env.project),
+		core.WithDataset(env.dataset),
+		core.WithTable(name),
+		core.WithExtraMetadata(true),
+		core.WithCreateTable(true),
+		core.WithDedup(core.DedupMerge),
+		core.WithClusterBy("label"),
+	)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	if _, err := loader.Load(ctx, envelopes(4)...); err != nil {
+		t.Fatalf("first load: %v", err)
+	}
+
+	meta, err := table.Metadata(ctx)
+	if err != nil {
+		t.Fatalf("reading metadata: %v", err)
+	}
+	if meta.TimePartitioning == nil {
+		t.Fatal("the table was created without partitioning; every query over it scans everything")
+	}
+	if meta.TimePartitioning.Field != "ingestion_loaded_at" {
+		t.Errorf("partitioned on %q, expected ingestion_loaded_at", meta.TimePartitioning.Field)
+	}
+	if meta.Clustering == nil || len(meta.Clustering.Fields) != 1 || meta.Clustering.Fields[0] != "label" {
+		t.Errorf("ClusterBy did not reach the created table: %+v", meta.Clustering)
+	}
+}
