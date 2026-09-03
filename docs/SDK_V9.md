@@ -103,10 +103,28 @@ ele amplia o alcance de um caminho que não cria a tabela.
 
 ### Como provar que ficou certo
 
-Um teste de integração que carrega com `CreateTable` **e** `DedupMerge` numa
-tabela que não existe, e depois faz `SELECT COUNT(*)`. Os dois testes de
-integração de hoje (`integration_test.go:210` e `:268`) usam `CreateTable` sem
-dedup — a combinação nunca foi exercitada, e é por isso que ela passou.
+> **Correção do que eu escrevi aqui na primeira versão.** Eu disse que a
+> combinação nunca foi exercitada por nenhum teste. Errado: ela é exatamente o
+> que `TestIntegrationMergeDoesNotDouble` (`integration_test.go:191`) monta —
+> tabela ausente, `CreateTable(true)`, `ExtraMetadata(true)`,
+> `Dedup(DedupMerge)`. O teste **existe e cobre o defeito**.
+>
+> Ele nunca rodou. `requireIntegration` (`integration_test.go:35`) pula sem
+> `BRAVIS_IT_PROJECT`, e essa variável não está definida em lugar nenhum
+> automatizado — é a mesma pendência que registrei no cabeçalho do
+> [`SDK_LOAD.md`](SDK_LOAD.md) em 2026-09-02.
+>
+> Isso muda a conclusão: o defeito não escapou por falta de teste, escapou
+> porque o teste que o cobre está atrás de uma variável de ambiente. Qualquer
+> conserto que não deixe essa suíte rodando em algum lugar automatizado deixa a
+> próxima regressão passar igual.
+
+Rodar o que já existe:
+
+```bash
+export BRAVIS_IT_PROJECT=<projeto-gcp>
+go test ./sdk/load/ -run TestIntegrationMergeDoesNotDouble -v
+```
 
 O conserto natural é o `MERGE` deixar de ser a primeira escrita: criar o destino
 a partir do schema da temporária quando `CreateTable` estiver ligado e a tabela
@@ -263,6 +281,9 @@ vendors em Python ou duplicar a chave.
 ---
 
 ## 5. Critério de pronto para a `v0.10.1`
+
+> Os itens 1 e 2 têm spec de execução própria, com implementação e provas:
+> [`plan/2026-09-03-sdk-conserto-do-merge.md`](plan/2026-09-03-sdk-conserto-do-merge.md).
 
 1. `CreateTable` + `DedupMerge` cria o destino, com teste de integração na
    combinação.
