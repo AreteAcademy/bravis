@@ -1,254 +1,888 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Bravis – Motor de Orquestração de Dados em Go</title>
-  <meta name="description" content="Bravis: motor de transformação e orquestração de dados em Go + Kubernetes. Um binário único que substitui dbt, Airflow e LeoFlow.">
-  <meta name="keywords" content="data engineering, data orchestration, go, kubernetes, dbt, airflow, pipeline, data transformation">
-  <meta name="author" content="Zarv">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lora:wght@400;600&display=swap">
-  <link rel="stylesheet" href="css/styles.css">
+<title>Bravis — orquestração e transformação de dados em Go + Kubernetes</title>
+<meta name="description" content="Um binário em Go no lugar de dbt, Airflow e Kestra: transformação, orquestração, fila, scheduler e UI. Cada passo do workflow vira um pod com a própria imagem — 5,8 MB e 0,18 s de partida a frio.">
+<meta name="author" content="Aretê Academy">
+<link rel="canonical" href="https://bravis.sh/">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Bravis">
+<meta property="og:title" content="Bravis — orquestração de dados na velocidade do Go">
+<meta property="og:description" content="Um binário. Transformação, orquestração, fila, scheduler e UI. Cada passo do workflow vira um pod com a própria imagem.">
+<meta property="og:url" content="https://bravis.sh/">
+<meta name="twitter:card" content="summary">
+
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,600&family=Inter:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="css/styles.css">
+
+<script>
+  /* Antes da primeira pintura: sem isto, um visitante que escolheu o tema
+     escuro vê o pergaminho por um frame a cada carregamento. */
+  (function () {
+    document.documentElement.classList.add('js');
+    try {
+      var t = localStorage.getItem('bravis-theme');
+      if (t === 'dark' || t === 'light') {
+        document.documentElement.setAttribute('data-theme', t);
+      }
+    } catch (e) { /* modo privado: cai no prefers-color-scheme */ }
+  })();
+</script>
 </head>
 <body>
-  <!-- HERO -->
-  <section class="hero container">
-    <div class="hero-content">
-      <h1 class="fade-in fade-in-1">Bravis</h1>
-      <div class="hero-subheading fade-in fade-in-2">
-        Motor de transformação e orquestração de dados.<br>
-        Um binário. Uma filosofia.
-      </div>
-      <div class="hero-quote fade-in fade-in-3">
-        "Não é que temos pouco tempo, é que desperdiçamos muito." — Sêneca
+
+<a class="skip-link" href="#conteudo">Pular para o conteúdo</a>
+
+<!-- Sprite de ícones. Um arquivo, um download, e cada uso herda currentColor. -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-logo" viewBox="0 0 32 32">
+    <path d="M9 9.5 L23 16 M9 22.5 L23 16" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" opacity="0.45" fill="none"/>
+    <circle cx="9" cy="9.5" r="3.25" fill="currentColor" opacity="0.75"/>
+    <circle cx="9" cy="22.5" r="3.25" fill="currentColor" opacity="0.75"/>
+    <circle cx="23" cy="16" r="4.25" fill="currentColor"/>
+  </symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+    <circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M19.1 4.9l-1.4 1.4M6.3 17.7l-1.4 1.4"/>
+  </symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+    <path d="M21 12.8A8.5 8.5 0 1 1 11.2 3a6.6 6.6 0 0 0 9.8 9.8z"/>
+  </symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+    <path d="M4 7h16M4 12h16M4 17h16"/>
+  </symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round">
+    <rect x="9" y="9" width="12" height="12" rx="2"/><path d="M6 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v2"/>
+  </symbol>
+  <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 12.5 9 17.5 20 6.5"/>
+  </symbol>
+  <symbol id="i-check-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.7 2.7L16 9.5"/>
+  </symbol>
+  <symbol id="i-x-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+    <circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/>
+  </symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 12h15M13 6l6 6-6 6"/>
+  </symbol>
+  <symbol id="i-box" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round">
+    <path d="M21 8.5v7L12 21l-9-5.5v-7L12 3z"/><path d="M3 8.5 12 14l9-5.5M12 14v7"/>
+  </symbol>
+  <symbol id="i-file" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M14 3H7a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V7z"/><path d="M14 3v4h4M9 13h6M9 17h4"/>
+  </symbol>
+  <symbol id="i-hex" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round">
+    <path d="M12 2.5 20 7v10l-8 4.5L4 17V7z"/><path d="M12 8.2 15.5 10v4L12 15.8 8.5 14v-4z"/>
+  </symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+    <circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3.2 2"/>
+  </symbol>
+  <symbol id="i-layers" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round">
+    <path d="M12 3 3 8l9 5 9-5z"/><path d="M3 12.5 12 17.5l9-5M3 16.5 12 21.5l9-5"/>
+  </symbol>
+  <symbol id="i-palette" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+    <path d="M12 21a9 9 0 1 1 9-9c0 2.5-2 3-3.5 3H16a2 2 0 0 0-1.4 3.4A1.9 1.9 0 0 1 12 21z"/><circle cx="8.5" cy="10.5" r="1"/><circle cx="12" cy="7.5" r="1"/><circle cx="15.5" cy="10" r="1"/>
+  </symbol>
+  <symbol id="i-activity" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3 12.5h3.5L9 5.5l3.5 13L16 10l2 2.5h3"/>
+  </symbol>
+  <symbol id="i-branch" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+    <circle cx="6.5" cy="5.5" r="2.5"/><circle cx="6.5" cy="18.5" r="2.5"/><circle cx="17.5" cy="12" r="2.5"/><path d="M6.5 8v8M9 5.9c4 0 6 1.3 6.3 4.4M9 18.1c4 0 6-1.3 6.3-4.4"/>
+  </symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round">
+    <path d="M12 2.8 20 6v6c0 4.4-3.3 7.8-8 9.2-4.7-1.4-8-4.8-8-9.2V6z"/><path d="M9 12.2l2.3 2.3L15.5 10"/>
+  </symbol>
+  <symbol id="i-github" viewBox="0 0 24 24">
+    <path fill="currentColor" d="M12 1.5a10.5 10.5 0 0 0-3.32 20.47c.53.1.72-.23.72-.5v-1.8c-2.92.63-3.54-1.4-3.54-1.4-.48-1.22-1.17-1.55-1.17-1.55-.95-.65.07-.64.07-.64 1.06.07 1.62 1.09 1.62 1.09.94 1.6 2.45 1.14 3.05.87.1-.68.37-1.14.67-1.4-2.33-.27-4.78-1.17-4.78-5.2 0-1.15.41-2.09 1.08-2.82-.11-.27-.47-1.34.1-2.8 0 0 .88-.28 2.88 1.08a10.1 10.1 0 0 1 5.24 0c2-1.36 2.87-1.08 2.87-1.08.58 1.46.22 2.53.11 2.8a4.05 4.05 0 0 1 1.08 2.82c0 4.04-2.46 4.93-4.8 5.19.38.33.72.97.72 1.96v2.9c0 .28.19.61.73.5A10.5 10.5 0 0 0 12 1.5z"/>
+  </symbol>
+</svg>
+
+<header class="site-header" id="topo">
+  <div class="shell header-bar">
+    <a class="brand" href="#topo">
+      <svg aria-hidden="true"><use href="#i-logo"></use></svg>
+      Bravis
+    </a>
+    <span class="brand-version">v0.2.9</span>
+
+    <nav class="main-nav" id="nav" aria-label="Navegação principal">
+      <a href="#eficiencia">Eficiência</a>
+      <a href="#kubernetes">Kubernetes</a>
+      <a href="#workflows">Workflows</a>
+      <a href="#arquitetura">Arquitetura</a>
+      <a href="#recursos">Recursos</a>
+      <a href="#comecar">Começar</a>
+    </nav>
+
+    <div class="header-actions">
+      <button class="icon-button theme-toggle" type="button" id="theme-toggle" aria-label="Alternar tema claro e escuro">
+        <svg class="icon-sun" aria-hidden="true"><use href="#i-sun"></use></svg>
+        <svg class="icon-moon" aria-hidden="true"><use href="#i-moon"></use></svg>
+      </button>
+      <a class="icon-button" href="https://github.com/AreteAcademy/bravis" target="_blank" rel="noopener" aria-label="Repositório no GitHub (abre em nova aba)">
+        <svg aria-hidden="true"><use href="#i-github"></use></svg>
+      </a>
+      <button class="icon-button nav-toggle" type="button" id="nav-toggle" aria-label="Abrir menu" aria-expanded="false" aria-controls="nav">
+        <svg aria-hidden="true"><use href="#i-menu"></use></svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main id="conteudo">
+
+  <!-- ================================================================ hero -->
+  <section class="hero">
+    <div class="shell hero-grid">
+      <div>
+        <p class="eyebrow">Go · Kubernetes · Open source</p>
+        <h1>Orquestração de dados na <span class="accent">velocidade do Go</span>.</h1>
+        <p class="lead">
+          Um binário único no lugar de dbt, Airflow e Kestra: transformação, orquestração,
+          fila persistente, scheduler e UI. Cada passo do workflow vira um pod com a sua
+          própria imagem.
+        </p>
+        <p class="hero-note">O trabalho traz o próprio runtime.</p>
+
+        <div class="button-group">
+          <a class="button button-primary" href="#comecar">
+            Começar em 4 passos
+            <svg width="16" height="16" aria-hidden="true"><use href="#i-arrow"></use></svg>
+          </a>
+          <a class="button button-secondary" href="https://github.com/AreteAcademy/bravis" target="_blank" rel="noopener">
+            <svg width="17" height="17" aria-hidden="true"><use href="#i-github"></use></svg>
+            Ver no GitHub
+          </a>
+        </div>
+
+        <div class="install">
+          <div class="install-tabs" role="tablist" aria-label="Formas de instalar">
+            <button class="tab" type="button" role="tab" id="tab-go" aria-controls="p-go" aria-selected="true">CLI (Go)</button>
+            <button class="tab" type="button" role="tab" id="tab-docker" aria-controls="p-docker" aria-selected="false">Docker</button>
+            <button class="tab" type="button" role="tab" id="tab-sdk" aria-controls="p-sdk" aria-selected="false">SDK</button>
+          </div>
+
+          <div class="install-row" role="tabpanel" id="p-go" aria-labelledby="tab-go">
+            <pre><span class="prompt">$ </span><code>go install github.com/AreteAcademy/bravis/cmd/bravis@latest</code></pre>
+            <button class="copy-button" type="button" data-copy="go install github.com/AreteAcademy/bravis/cmd/bravis@latest">
+              <svg aria-hidden="true"><use href="#i-copy"></use></svg>
+              <span>Copiar</span>
+            </button>
+          </div>
+
+          <div class="install-row" role="tabpanel" id="p-docker" aria-labelledby="tab-docker" hidden>
+            <pre><span class="prompt">$ </span><code>docker run -p 8080:8080 daniel3843/bravis:latest</code></pre>
+            <button class="copy-button" type="button" data-copy="docker run -p 8080:8080 daniel3843/bravis:latest">
+              <svg aria-hidden="true"><use href="#i-copy"></use></svg>
+              <span>Copiar</span>
+            </button>
+          </div>
+
+          <div class="install-row" role="tabpanel" id="p-sdk" aria-labelledby="tab-sdk" hidden>
+            <pre><span class="prompt">$ </span><code>go get github.com/AreteAcademy/bravis/sdk@latest</code></pre>
+            <button class="copy-button" type="button" data-copy="go get github.com/AreteAcademy/bravis/sdk@latest">
+              <svg aria-hidden="true"><use href="#i-copy"></use></svg>
+              <span>Copiar</span>
+            </button>
+          </div>
+        </div>
       </div>
 
-      <div class="cta-group">
-        <a href="#getting-started" class="cta-primary">Iniciar Grátis</a>
-        <a href="#demo" class="cta-secondary">Ver Demo (3 min)</a>
-      </div>
+      <!-- Painel de execução: o que a UI mostra ao vivo, com os passos do
+           examples/hello.yaml — dois deles rodam em paralelo. -->
+      <div class="panel" data-reveal>
+        <div class="panel-bar">
+          <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+          <span class="panel-title">hello</span>
+          <span class="panel-meta">run #1284 · scheduler</span>
+        </div>
+        <div class="panel-body">
+          <svg class="dag" viewBox="0 0 320 112" role="img" aria-label="Grafo do workflow: preparar alimenta extrair e validar em paralelo, e os dois alimentam publicar">
+            <path class="dag-edge" d="M44 56C70 56 88 32 132 30"/>
+            <path class="dag-edge" d="M44 56C70 56 88 80 132 82"/>
+            <path class="dag-edge" d="M148 30C190 32 218 56 254 56"/>
+            <path class="dag-edge" d="M148 82C190 80 218 56 254 56"/>
+            <circle class="dag-node dag-node-ok" cx="36" cy="56" r="7"/>
+            <circle class="dag-node dag-node-ok" cx="140" cy="30" r="7"/>
+            <circle class="dag-node dag-node-run" cx="140" cy="82" r="7"/>
+            <circle class="dag-node" cx="262" cy="56" r="7"/>
+            <text class="dag-label" x="36" y="78" text-anchor="middle">preparar</text>
+            <text class="dag-label" x="140" y="16" text-anchor="middle">extrair</text>
+            <text class="dag-label" x="140" y="104" text-anchor="middle">validar</text>
+            <text class="dag-label" x="262" y="78" text-anchor="middle">publicar</text>
+          </svg>
 
-      <!-- Social Proof -->
-      <div class="social-proof">
-        <p>Integrado com</p>
-        <div class="logo-cloud">
-          <span class="logo">Go 1.25+</span>
-          <span class="logo">Kubernetes</span>
-          <span class="logo">PostgreSQL</span>
-          <span class="logo">BigQuery</span>
-          <span class="logo">Docker</span>
+          <ul class="run-steps">
+            <li>
+              <span class="badge badge-ok">ok</span>
+              <span class="step-id">preparar</span>
+              <span class="step-time">1,0 s</span>
+            </li>
+            <li>
+              <span class="badge badge-ok">ok</span>
+              <span class="step-id">extrair</span>
+              <span class="step-time">2,1 s</span>
+            </li>
+            <li>
+              <span class="badge badge-run">exec</span>
+              <span class="step-id">validar</span>
+              <span class="step-time">0,7 s</span>
+            </li>
+            <li>
+              <span class="badge badge-idle">fila</span>
+              <span class="step-id">publicar</span>
+              <span class="step-time">—</span>
+            </li>
+          </ul>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- O PROBLEMA -->
-  <section class="container">
-    <h2>O Problema</h2>
-    <p>
-      Orquestração de dados exige <strong>múltiplas ferramentas</strong>. Você escolhe entre Airflow (pesado), dbt (sem orquestração), Kestra (complexo), LeoFlow (incompleto). E ainda assim tem que montar a interface você mesmo.
-    </p>
-
-    <div class="features-grid">
-      <div class="feature-card">
-        <span class="feature-icon">🗂️</span>
-        <h4>dbt</h4>
-        <p>Excelente para transformação. Não faz orquestração, nem agendamento, nem fila.</p>
-      </div>
-      <div class="feature-card">
-        <span class="feature-icon">⚙️</span>
-        <h4>Airflow</h4>
-        <p>Orquestração poderosa, mas pesada. UI complexa. Curva de aprendizado brutal.</p>
-      </div>
-      <div class="feature-card">
-        <span class="feature-icon">🔗</span>
-        <h4>Kestra</h4>
-        <p>Promete unificar. Acaba sendo mais uma dependência. Segue complexo.</p>
-      </div>
-      <div class="feature-card">
-        <span class="feature-icon">📦</span>
-        <h4>LeoFlow</h4>
-        <p>Focado em fila. Não traz transformação integrada. Você segue montando peças.</p>
-      </div>
+  <!-- =============================================================== stack -->
+  <div class="stack-strip">
+    <div class="shell stack-row">
+      <span class="stack-label">Roda sobre</span>
+      <span class="stack-item">Go 1.25+</span>
+      <span class="stack-item">Kubernetes</span>
+      <span class="stack-item">PostgreSQL 17</span>
+      <span class="stack-item">BigQuery</span>
+      <span class="stack-item">Docker</span>
+      <span class="stack-item">dbt</span>
     </div>
-  </section>
+  </div>
 
-  <!-- A SOLUÇÃO -->
-  <section class="container">
-    <h2>A Solução: Bravis</h2>
-    <p>
-      Um binário único, escrito em Go, que <strong>substitui dbt + Airflow + LeoFlow</strong> por uma arquitetura moderna: transformação, orquestração, fila, scheduler e UI integrados.
-    </p>
-
-    <div class="pillars">
-      <div class="pillar">
-        <span class="pillar-icon">⚙️</span>
-        <h4>Transform</h4>
-        <p>Transformação inspirada em dbt. Modelos, testes, materialização integrados.</p>
-      </div>
-      <div class="pillar">
-        <span class="pillar-icon">🔀</span>
-        <h4>Orchestrate</h4>
-        <p>DAGs em YAML. Scheduler com cron. Fila persistente. Backfill automático.</p>
-      </div>
-      <div class="pillar">
-        <span class="pillar-icon">👁️</span>
-        <h4>Observe</h4>
-        <p>UI server-rendered. DAG ao vivo. Métricas, gráficos e controle completo.</p>
-      </div>
-    </div>
-  </section>
-
-  <!-- CARACTERÍSTICAS -->
-  <section class="container">
-    <h2>Características</h2>
-    <div class="features-grid">
-      <div class="feature-card">
-        <span class="feature-icon">⚡</span>
-        <h4>Um Binário Único</h4>
-        <p>Escrito em Go. Executa em Kubernetes, Docker ou localmente. Sem dependências externas.</p>
-      </div>
-      <div class="feature-card">
-        <span class="feature-icon">📄</span>
-        <h4>Workflows em YAML</h4>
-        <p>Declarativo, versionável, humano-legível. Sem UI complexa para definir jobs.</p>
-      </div>
-      <div class="feature-card">
-        <span class="feature-icon">☸️</span>
-        <h4>Kubernetes-Native</h4>
-        <p>Cada passo vira um pod. Seu runtime, sua imagem, sua responsabilidade.</p>
-      </div>
-      <div class="feature-card">
-        <span class="feature-icon">⏱️</span>
-        <h4>Scheduler + Fila</h4>
-        <p>Dois laços independentes. Cron, backfill, retry automático. Um falha, outro segue.</p>
-      </div>
-      <div class="feature-card">
-        <span class="feature-icon">📦</span>
-        <h4>Imagens Otimizadas</h4>
-        <p>5.8 MB em Go, 118 MB em Python, 620 MB em dbt. Observabilidade integrada.</p>
-      </div>
-      <div class="feature-card">
-        <span class="feature-icon">🎨</span>
-        <h4>Marca Branca</h4>
-        <p>Customize título, frase e paleta. Seus dados, sua marca, nossa orquestração.</p>
-      </div>
-    </div>
-  </section>
-
-  <!-- ESCALABILIDADE -->
-  <section class="container">
-    <h2>Escalabilidade em Kubernetes</h2>
-    <p>
-      Bravis é desenhado para EKS. Cada passo de um workflow vira um pod independente. Você não tem workers genéricos esperando trabalho—<strong>o trabalho traz seu próprio runtime</strong>.
-    </p>
-
-    <div class="pillars">
-      <div class="pillar">
-        <span class="pillar-icon">📦</span>
-        <h4>Isolamento Total</h4>
-        <p>Cada passo roda em seu próprio container. Sem crosstalk, sem contaminação de estado.</p>
-      </div>
-      <div class="pillar">
-        <span class="pillar-icon">📈</span>
-        <h4>Escala Horizontal</h4>
-        <p>Kubernetes distribui pods conforme necessário. Carga spike? Novos pods sobem automaticamente.</p>
-      </div>
-      <div class="pillar">
-        <span class="pillar-icon">📊</span>
-        <h4>Observabilidade Nativa</h4>
-        <p>Logs, métricas, traces. Seu cluster já coleta. Bravis integra sem overhead.</p>
-      </div>
-    </div>
-
-    <div class="philosophy">
-      <div class="philosophy-text">
-        "A ferramenta não limita.<br>O desenvolvedor escolhe.<br>A arquitetura escala."
-      </div>
-    </div>
-  </section>
-
-  <!-- COMO COMEÇAR -->
-  <section class="container">
-    <h2 id="getting-started">Primeiros Passos</h2>
-
-    <p><strong>1. Instalar:</strong></p>
-    <div class="code-block">$ go install github.com/AreteAcademy/bravis@latest</div>
-
-    <p><strong>2. Validar um workflow (sem banco):</strong></p>
-    <div class="code-block">$ bravis validate examples/hello.yaml</div>
-
-    <p><strong>3. Executar agora:</strong></p>
-    <div class="code-block">$ bravis run examples/hello.yaml</div>
-
-    <p><strong>4. Publicar e agendar:</strong></p>
-    <div class="code-block">$ bravis publish examples/hello.yaml<br>$ bravis scheduler --concurrency 5</div>
-
-    <p>
-      <a href="https://github.com/AreteAcademy/bravis/tree/main/docs" style="color: var(--accent); border-bottom: 1px solid var(--accent);">Ver documentação completa →</a>
-    </p>
-  </section>
-
-  <!-- EXEMPLO WORKFLOW -->
-  <section class="container">
-    <h2>Exemplo: Um Workflow Real</h2>
-    <p>Tudo é YAML. Simples. Declarativo.</p>
-    <div class="code-block">name: diario
-schedule: "0 8 * * *"  # 8AM todo dia
-concurrency: 1
-
-params:
-  - name: load_full
-    type: boolean
-    default: "false"
-
-steps:
-  - id: bronze
-    run: dbt build --select bronze+
-
-  - id: silver
-    run: dbt build --select silver+
-    depends_on: [bronze]
-
-  - id: gold
-    run: dbt build --select gold+
-    depends_on: [silver]</div>
-  </section>
-
-  <!-- CTA FINAL -->
-  <section class="container" style="text-align: center; padding: 6rem 0 4rem 0; border-bottom: none;">
-    <h2>Pronto para simplificar sua stack?</h2>
-    <p>Bravis é open source. Gratuito. Sem restrições.</p>
-    <div class="cta-group" style="margin-top: 2rem; justify-content: center;">
-      <a href="https://github.com/AreteAcademy/bravis" class="cta-primary">Abrir no GitHub</a>
-      <a href="https://github.com/AreteAcademy/bravis/tree/main/docs" class="cta-secondary">Ler Documentação</a>
-    </div>
-  </section>
-
-  <!-- FOOTER -->
-  <footer>
-    <div class="container">
-      <p style="color: var(--text-secondary); margin: 0 0 2rem 0; font-style: italic; font-family: var(--font-serif);">
-        "Brevidade não é pobreza de informação. É clareza de propósito."
-      </p>
-
-      <div class="footer-links">
-        <a href="https://github.com/AreteAcademy/bravis">GitHub</a>
-        <a href="https://github.com/AreteAcademy/bravis/tree/main/docs">Documentação</a>
-        <a href="https://github.com/AreteAcademy/bravis/issues">Issues</a>
-        <a href="https://github.com/AreteAcademy/bravis/discussions">Discussions</a>
+  <!-- ========================================================== eficiência -->
+  <section class="section" id="eficiencia">
+    <div class="shell">
+      <div class="section-head section-head-split" data-reveal>
+        <div>
+          <p class="eyebrow">Eficiência medida</p>
+          <h2>Velocidade não é adjetivo. É número.</h2>
+        </div>
+        <p class="lead">
+          Em Kubernetes, tudo que sobra na imagem é baixado por todo nó que rodar aquele
+          passo. Por isso as imagens são por papel, não por projeto.
+        </p>
       </div>
 
-      <p style="margin-top: 2rem; font-size: 0.9rem; opacity: 0.7; color: var(--text-secondary);">
-        Bravis © 2026 • Construído com filosofia e Go<br>
-        Inspirado em Sêneca. Open source. Para todos.
+      <div class="stats" data-reveal>
+        <div class="stat">
+          <p class="stat-value">5,8<span class="unit">MB</span></p>
+          <p class="stat-label">Imagem de um passo em Go — contra 1,87 GB da imagem única que fazia tudo.</p>
+        </div>
+        <div class="stat">
+          <p class="stat-value">0,18<span class="unit">s</span></p>
+          <p class="stat-label">Partida a frio do pod em Go. Python: 0,54 s. dbt: 3,3 s.</p>
+        </div>
+        <div class="stat">
+          <p class="stat-value">2,68<span class="unit">s</span></p>
+          <p class="stat-label">Economizados por pod de dbt, com o <code>parse</code> já embutido na imagem.</p>
+        </div>
+        <div class="stat">
+          <p class="stat-value">1<span class="unit">binário</span></p>
+          <p class="stat-label">Transformação, orquestração, fila, scheduler e UI. Sem dependência externa.</p>
+        </div>
+      </div>
+      <p class="stats-source">
+        Medições e método em <a class="text-link" href="https://github.com/AreteAcademy/bravis/blob/master/docs/IMAGENS.md" target="_blank" rel="noopener">docs/IMAGENS.md</a>
       </p>
     </div>
-  </footer>
+  </section>
 
-  <script src="js/main.js"></script>
+  <!-- ========================================================== kubernetes -->
+  <section class="section section-soft" id="kubernetes">
+    <div class="shell">
+      <div class="section-head" data-reveal>
+        <p class="eyebrow">Um pod por passo</p>
+        <h2>Não existe worker genérico esperando trabalho.</h2>
+        <p class="lead">
+          Um worker monolítico obriga a imagem a conter tudo que qualquer passo possa
+          precisar. No Bravis, o pod sobe com a imagem exata daquele passo e um comando —
+          e desaparece quando termina.
+        </p>
+      </div>
+
+      <div class="table-wrap" data-reveal>
+        <table>
+          <caption class="sr-only">Comparação entre imagem única e um pod por passo</caption>
+          <thead>
+            <tr>
+              <th scope="col">Situação</th>
+              <th scope="col">Imagem única</th>
+              <th scope="col" class="is-highlight">Um pod por passo</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th scope="row">Passo de dbt</th>
+              <td>1,9 GB · 1Gi de RAM</td>
+              <td class="is-highlight">1,9 GB · 1Gi de RAM</td>
+            </tr>
+            <tr>
+              <th scope="row">Fetcher em Go ao lado</th>
+              <td>1,9 GB · 1Gi de RAM</td>
+              <td class="is-highlight">12 MB · 32Mi de RAM</td>
+            </tr>
+            <tr>
+              <th scope="row">Trocar a versão do dbt</th>
+              <td>Rebuild de tudo</td>
+              <td class="is-highlight">Uma linha no YAML daquele workflow</td>
+            </tr>
+            <tr>
+              <th scope="row">Um passo que vaza memória</th>
+              <td>Derruba o worker e os vizinhos</td>
+              <td class="is-highlight">Morre sozinho</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="split" style="margin-top:1.5rem" data-reveal>
+        <div class="split-panel">
+          <p class="split-label">O que você deixa de pagar</p>
+          <ul class="ticks">
+            <li class="tick-minus">
+              <svg aria-hidden="true"><use href="#i-x-circle"></use></svg>
+              <span>Uma imagem de <strong>1,87 GB</strong> baixada por todo nó, para rodar um fetcher de 12 MB.</span>
+            </li>
+            <li class="tick-minus">
+              <svg aria-hidden="true"><use href="#i-x-circle"></use></svg>
+              <span>Subir o dbt de 1.10 para 1.11 <strong>em todos os pipelines de uma vez</strong>.</span>
+            </li>
+            <li class="tick-minus">
+              <svg aria-hidden="true"><use href="#i-x-circle"></use></svg>
+              <span>Pico de memória do maior passo virando o piso de <strong>todos</strong> os passos.</span>
+            </li>
+          </ul>
+        </div>
+        <div class="split-panel split-panel-accent">
+          <p class="split-label">O que passa a valer</p>
+          <ul class="ticks">
+            <li class="tick-plus">
+              <svg aria-hidden="true"><use href="#i-check-circle"></use></svg>
+              <span><strong>Isolamento total.</strong> Cada passo em seu container, sem contaminação de estado.</span>
+            </li>
+            <li class="tick-plus">
+              <svg aria-hidden="true"><use href="#i-check-circle"></use></svg>
+              <span><strong>Escala horizontal.</strong> O cluster distribui os pods; o pico sobe e desce sozinho.</span>
+            </li>
+            <li class="tick-plus">
+              <svg aria-hidden="true"><use href="#i-check-circle"></use></svg>
+              <span><strong>O mesmo arquivo roda local</strong> como processo, sem cluster nenhum.</span>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- =========================================================== workflows -->
+  <section class="section" id="workflows">
+    <div class="shell">
+      <div class="section-head" data-reveal>
+        <p class="eyebrow">Declarativo por padrão</p>
+        <h2>Tudo é YAML. O que não é, é Go.</h2>
+        <p class="lead">
+          Workflow, agenda, dependências, recursos e parâmetros num arquivo versionável.
+          Quando o trabalho é buscar e carregar dados, o SDK em Go entrega o fetcher inteiro
+          em vinte linhas.
+        </p>
+      </div>
+
+      <div class="code-split" data-reveal>
+        <div>
+          <div class="code-tabs" role="tablist" aria-label="Exemplos de código">
+            <button class="tab" type="button" role="tab" id="tab-wf" aria-controls="p-wf" aria-selected="true">Workflow</button>
+            <button class="tab" type="button" role="tab" id="tab-params" aria-controls="p-params" aria-selected="false">Parâmetros</button>
+            <button class="tab" type="button" role="tab" id="tab-fetcher" aria-controls="p-fetcher" aria-selected="false">Fetcher em Go</button>
+            <button class="tab" type="button" role="tab" id="tab-cli" aria-controls="p-cli" aria-selected="false">CLI</button>
+          </div>
+
+          <div class="panel" role="tabpanel" id="p-wf" tabindex="0" aria-labelledby="tab-wf">
+            <div class="panel-bar">
+              <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+              <span class="panel-title">platform_workspace.yaml</span>
+            </div>
+<pre class="code"><code><span class="t-k">name</span><span class="t-o">:</span> platform_workspace
+<span class="t-k">schedule</span><span class="t-o">:</span> <span class="t-s">"0 5 * * *"</span>
+<span class="t-k">concurrency</span><span class="t-o">:</span> <span class="t-n">1</span>   <span class="t-c"># impede que um run se sobreponha</span>
+
+<span class="t-c"># Imagem padrão dos passos. Cada passo pode trocar a sua.</span>
+<span class="t-k">image</span><span class="t-o">:</span> us-central1-docker.pkg.dev/zarv/apps/dbt:1.10.3
+<span class="t-k">resources</span><span class="t-o">:</span>
+  <span class="t-k">cpu</span><span class="t-o">:</span> 200m
+  <span class="t-k">memory</span><span class="t-o">:</span> 1Gi
+  <span class="t-k">limits</span><span class="t-o">:</span> {<span class="t-k">memory</span><span class="t-o">:</span> 2Gi}
+
+<span class="t-k">steps</span><span class="t-o">:</span>
+  <span class="t-o">-</span> <span class="t-k">id</span><span class="t-o">:</span> bronze_workspace
+    <span class="t-k">run</span><span class="t-o">:</span> dbt build <span class="t-n">--select</span> bronze_workspace+
+
+  <span class="t-o">-</span> <span class="t-k">id</span><span class="t-o">:</span> silver_workspace
+    <span class="t-k">run</span><span class="t-o">:</span> dbt build <span class="t-n">--select</span> silver_workspace+
+    <span class="t-k">depends_on</span><span class="t-o">:</span> [bronze_workspace]
+
+  <span class="t-c"># Outro runtime, outro tamanho: binário Go em distroless.</span>
+  <span class="t-o">-</span> <span class="t-k">id</span><span class="t-o">:</span> notificar
+    <span class="t-k">image</span><span class="t-o">:</span> ghcr.io/zarvhq/notify:0.3
+    <span class="t-k">shell</span><span class="t-o">:</span> <span class="t-n">false</span>   <span class="t-c"># distroless não tem shell</span>
+    <span class="t-k">run</span><span class="t-o">:</span> /notify <span class="t-n">--canal</span> dados
+    <span class="t-k">resources</span><span class="t-o">:</span> {<span class="t-k">cpu</span><span class="t-o">:</span> 25m, <span class="t-k">memory</span><span class="t-o">:</span> 32Mi}
+    <span class="t-k">depends_on</span><span class="t-o">:</span> [silver_workspace]</code></pre>
+            <p class="code-note">
+              <strong>type: chain</strong> é açúcar para a ordem do arquivo — o parser converte
+              em arestas, e o motor conhece apenas DAG.
+            </p>
+          </div>
+
+          <div class="panel" role="tabpanel" id="p-params" tabindex="0" aria-labelledby="tab-params" hidden>
+            <div class="panel-bar">
+              <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+              <span class="panel-title">params — o que muda entre dois disparos</span>
+            </div>
+<pre class="code"><code><span class="t-k">params</span><span class="t-o">:</span>
+  <span class="t-o">-</span> <span class="t-k">name</span><span class="t-o">:</span> load_full
+    <span class="t-k">type</span><span class="t-o">:</span> boolean
+    <span class="t-k">default</span><span class="t-o">:</span> <span class="t-s">"false"</span>
+
+  <span class="t-o">-</span> <span class="t-k">name</span><span class="t-o">:</span> start_date
+    <span class="t-k">type</span><span class="t-o">:</span> string
+    <span class="t-k">pattern</span><span class="t-o">:</span> <span class="t-s">'^\d{4}-\d{2}-\d{2}$'</span>
+
+<span class="t-k">steps</span><span class="t-o">:</span>
+  <span class="t-o">-</span> <span class="t-k">id</span><span class="t-o">:</span> run
+    <span class="t-k">run</span><span class="t-o">:</span> dbt build <span class="t-n">--vars</span> <span class="t-s">'{"load_full":"{{ .load_full }}"}'</span>
+
+<span class="t-c"># Um disparo agora, com o parâmetro trocado:</span>
+<span class="t-p">$ </span>bravis run wf.yaml <span class="t-n">--param</span> load_full=<span class="t-n">true</span>
+
+<span class="t-c"># Um mês inteiro, mesmo parâmetro:</span>
+<span class="t-p">$ </span>bravis backfill diario <span class="t-n">--from</span> 2026-01-01 <span class="t-n">--to</span> 2026-01-31 \
+    <span class="t-n">--param</span> load_full=<span class="t-n">true</span></code></pre>
+            <p class="code-note">
+              Na UI, um workflow com <strong>params</strong> ganha formulário no lugar do
+              botão simples. Sem editar arquivo para trocar um disparo.
+            </p>
+          </div>
+
+          <div class="panel" role="tabpanel" id="p-fetcher" tabindex="0" aria-labelledby="tab-fetcher" hidden>
+            <div class="panel-bar">
+              <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+              <span class="panel-title">main.go — um fetcher inteiro</span>
+            </div>
+<pre class="code"><code><span class="t-k">package</span> main
+
+<span class="t-k">import</span> (
+    <span class="t-s">"time"</span>
+
+    <span class="t-s">"github.com/AreteAcademy/bravis/sdk"</span>
+)
+
+<span class="t-k">func</span> main() {
+    sdk.<span class="t-k">Run</span>(sdk.Pipeline{
+        Source: sdk.Source{
+            URL:     <span class="t-s">"https://api.example.com/v1/events"</span>,
+            Timeout: <span class="t-n">15</span> * time.Second,
+            Guard:   sdk.<span class="t-k">RejectIf</span>(<span class="t-s">"error"</span>),
+            Expand:  sdk.<span class="t-k">ArrayAt</span>(<span class="t-s">"results"</span>),
+        },
+        Target: sdk.Target{
+            Provider: <span class="t-s">"example"</span>,
+            Entity:   <span class="t-s">"events"</span>,
+            Key:      sdk.<span class="t-k">Key</span>(<span class="t-s">"id"</span>),
+            When:     sdk.<span class="t-k">Field</span>(<span class="t-s">"created_at"</span>),
+        },
+    })
+}</code></pre>
+            <p class="code-note">
+              Flags, <strong>-dry-run</strong>, logging, retry, paginação, procedência,
+              criação de tabela e código de saída vêm do <strong>sdk.Run</strong>. O que
+              sobra no arquivo é só o que é específico daquela fonte.
+            </p>
+          </div>
+
+          <div class="panel" role="tabpanel" id="p-cli" tabindex="0" aria-labelledby="tab-cli" hidden>
+            <div class="panel-bar">
+              <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+              <span class="panel-title">bash</span>
+            </div>
+<pre class="code"><code><span class="t-c"># Schema: subcomando próprio, porque `serve` nunca altera schema.</span>
+<span class="t-p">$ </span>bravis migrate up
+
+<span class="t-c"># API + UI server-rendered, com a DAG ao vivo.</span>
+<span class="t-p">$ </span>bravis serve
+<span class="t-o">  ouvindo em :8080</span>
+
+<span class="t-c"># O outro laço: materializa slots da agenda e executa a fila.</span>
+<span class="t-p">$ </span>bravis scheduler <span class="t-n">--interval</span> 5s <span class="t-n">--concurrency</span> 4
+
+<span class="t-c"># Liveness não consulta o banco. Readiness consulta, e nomeia</span>
+<span class="t-c"># a dependência que falhou.</span>
+<span class="t-p">$ </span>curl -s localhost:8080/health
+<span class="t-o">  {"status":"ok"}</span></code></pre>
+            <p class="code-note">
+              Liveness que depende de serviço externo faz o Kubernetes <strong>matar o
+              pod</strong> quando o banco oscila, em vez de apenas tirá-lo do balanceador.
+              Por isso <strong>/health</strong> e <strong>/ready</strong> são separados.
+            </p>
+          </div>
+        </div>
+
+        <div class="code-aside">
+          <div class="aside-item">
+            <h4><svg aria-hidden="true"><use href="#i-branch"></use></svg> chain ou dag</h4>
+            <p>
+              <code>type: chain</code> segue a ordem do arquivo. <code>type: dag</code> usa
+              <code>depends_on</code> — e passos irmãos rodam em paralelo.
+            </p>
+          </div>
+          <div class="aside-item">
+            <h4><svg aria-hidden="true"><use href="#i-clock"></use></svg> agenda e backfill</h4>
+            <p>
+              Cron no próprio arquivo. <code>concurrency: 1</code> impede que um
+              <code>*/15</code> se sobreponha a si mesmo. Backfill de um mês num comando.
+            </p>
+          </div>
+          <div class="aside-item">
+            <h4><svg aria-hidden="true"><use href="#i-shield"></use></svg> validado na CI</h4>
+            <p>
+              A validação de workflow não precisa de banco, então roda na pipeline junto
+              com os testes — antes de qualquer coisa chegar ao cluster.
+            </p>
+          </div>
+          <div class="aside-item">
+            <h4><svg aria-hidden="true"><use href="#i-box"></use></svg> mesmo arquivo, dois lugares</h4>
+            <p>
+              Local, cada passo é um processo. No cluster, cada passo é um pod. O YAML não
+              muda entre os dois.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================================================= arquitetura -->
+  <section class="section section-soft" id="arquitetura">
+    <div class="shell">
+      <div class="section-head section-head-center" data-reveal>
+        <p class="eyebrow eyebrow-center">Arquitetura</p>
+        <h2>Dois laços independentes.</h2>
+        <p class="lead">
+          O scheduler cria os runs. A fila os executa. Separar os dois significa que um pode
+          cair sem afetar o outro — e que reprocessar não depende do relógio.
+        </p>
+      </div>
+
+      <div class="arch" data-reveal>
+        <svg viewBox="0 0 880 310" role="img" aria-label="Diagrama: o scheduler lê a agenda e cria runs na fila persistente em Postgres; a fila executa cada passo como um pod no Kubernetes; a API e a UI leem o mesmo banco e mostram a DAG ao vivo">
+          <defs>
+            <marker id="arrow-head" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M0 1 L9 5 L0 9 z" fill="currentColor" class="arch-flow"/>
+            </marker>
+          </defs>
+
+          <!-- scheduler -->
+          <rect class="arch-box" x="20" y="26" width="240" height="96" rx="16"/>
+          <text class="arch-title" x="44" y="56">scheduler</text>
+          <text class="arch-text" x="44" y="76">cron · backfill · slots</text>
+          <text class="arch-text" x="44" y="94">cria os runs</text>
+
+          <!-- fila -->
+          <rect class="arch-box arch-box-accent" x="320" y="26" width="240" height="96" rx="16"/>
+          <text class="arch-title" x="344" y="56">fila persistente</text>
+          <text class="arch-text" x="344" y="76">PostgreSQL · retry</text>
+          <text class="arch-text" x="344" y="94">executa os runs</text>
+
+          <!-- api -->
+          <rect class="arch-box" x="620" y="26" width="240" height="96" rx="16"/>
+          <text class="arch-title" x="644" y="56">API + UI</text>
+          <text class="arch-text" x="644" y="76">server-rendered</text>
+          <text class="arch-text" x="644" y="94">DAG ao vivo · métricas</text>
+
+          <path class="arch-flow" d="M262 74 H312" marker-end="url(#arrow-head)"/>
+          <path class="arch-flow arch-flow-dashed" d="M562 74 H612" marker-end="url(#arrow-head)"/>
+          <path class="arch-flow" d="M440 124 V178" marker-end="url(#arrow-head)"/>
+
+          <!-- kubernetes -->
+          <rect class="arch-box" x="20" y="186" width="840" height="104" rx="16"/>
+          <text class="arch-title" x="44" y="214">Kubernetes — um pod por passo</text>
+
+          <rect class="arch-box arch-box-accent" x="44" y="228" width="184" height="44" rx="10"/>
+          <text class="arch-text" x="60" y="248">go · 5,8 MB</text>
+          <text class="arch-text" x="60" y="263">0,18 s · 32Mi</text>
+
+          <rect class="arch-box arch-box-accent" x="248" y="228" width="184" height="44" rx="10"/>
+          <text class="arch-text" x="264" y="248">dbt · 620 MB</text>
+          <text class="arch-text" x="264" y="263">3,3 s · 1Gi</text>
+
+          <rect class="arch-box arch-box-accent" x="452" y="228" width="184" height="44" rx="10"/>
+          <text class="arch-text" x="468" y="248">python · 118 MB</text>
+          <text class="arch-text" x="468" y="263">0,54 s · 256Mi</text>
+
+          <rect class="arch-box" x="656" y="228" width="180" height="44" rx="10"/>
+          <text class="arch-text" x="672" y="248">notify · 12 MB</text>
+          <text class="arch-text" x="672" y="263">distroless</text>
+        </svg>
+
+        <div class="arch-legend">
+          <span><strong>Pending → Running → Succeeded.</strong> O pod é criado, acompanhado, o log é seguido, o exit code é lido — e o pod desaparece.</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================ recursos -->
+  <section class="section" id="recursos">
+    <div class="shell">
+      <div class="section-head section-head-split" data-reveal>
+        <div>
+          <p class="eyebrow">Recursos</p>
+          <h2>A stack inteira, num artefato.</h2>
+        </div>
+        <p class="lead">
+          Nada aqui é plugin, sidecar ou serviço à parte. É o mesmo binário, com o
+          subcomando que o papel exige.
+        </p>
+      </div>
+
+      <div class="card-grid" data-reveal>
+        <article class="card">
+          <span class="card-icon"><svg aria-hidden="true"><use href="#i-box"></use></svg></span>
+          <h3>Binário único</h3>
+          <p>Escrito em Go, sem runtime para instalar. Roda em Kubernetes, em Docker ou direto na sua máquina — o mesmo artefato nos três.</p>
+        </article>
+        <article class="card">
+          <span class="card-icon"><svg aria-hidden="true"><use href="#i-file"></use></svg></span>
+          <h3>Workflows em YAML</h3>
+          <p>Declarativo, versionável e legível por gente. Revisão de pipeline vira revisão de diff, não uma sessão de cliques na UI.</p>
+        </article>
+        <article class="card">
+          <span class="card-icon"><svg aria-hidden="true"><use href="#i-hex"></use></svg></span>
+          <h3>Kubernetes-nativo</h3>
+          <p>Cada passo vira um pod com a imagem, o comando e os recursos que ele declarou. Seu runtime, seu limite, sua responsabilidade.</p>
+        </article>
+        <article class="card">
+          <span class="card-icon"><svg aria-hidden="true"><use href="#i-clock"></use></svg></span>
+          <h3>Scheduler e fila</h3>
+          <p>Dois laços independentes: cron, backfill e retry automático. Um cai, o outro segue — e a fila é persistente, não memória de processo.</p>
+        </article>
+        <article class="card">
+          <span class="card-icon"><svg aria-hidden="true"><use href="#i-activity"></use></svg></span>
+          <h3>UI server-rendered</h3>
+          <p>Overview com métricas e gráficos, busca e filtros nos workflows, pausar e executar, e a DAG com o estado de cada passo ao vivo.</p>
+        </article>
+        <article class="card">
+          <span class="card-icon"><svg aria-hidden="true"><use href="#i-layers"></use></svg></span>
+          <h3>Imagens por papel</h3>
+          <p>Go, Python e dbt em imagens separadas, cada uma com o mínimo do seu papel — em vez de um monólito de 1,87 GB para todos.</p>
+        </article>
+        <article class="card">
+          <span class="card-icon"><svg aria-hidden="true"><use href="#i-branch"></use></svg></span>
+          <h3>SDK em Go</h3>
+          <p>Extração HTTP com retry, timeout, guard e paginação (header <code>Link</code>, cursor, offset) e carga em lote no BigQuery.</p>
+        </article>
+        <article class="card">
+          <span class="card-icon"><svg aria-hidden="true"><use href="#i-shield"></use></svg></span>
+          <h3>Offline por desenho</h3>
+          <p>Fontes e bundles são servidos do próprio binário. A UI funciona num cluster sem saída para a internet.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================= começar -->
+  <section class="section section-soft" id="comecar">
+    <div class="shell">
+      <div class="section-head section-head-center" data-reveal>
+        <p class="eyebrow eyebrow-center">Primeiros passos</p>
+        <h2>Do zero à DAG ao vivo.</h2>
+        <p class="lead">
+          Precisa de um PostgreSQL e da variável <code>BRAVIS_DATABASE_URL</code>. O resto
+          está dentro do binário.
+        </p>
+      </div>
+
+      <div class="steps" data-reveal>
+        <article class="step">
+          <h3>Instalar</h3>
+          <p>Um <code>go install</code>, ou a imagem pronta se preferir container.</p>
+          <div class="step-cmd"><span class="t-p">$ </span>go install github.com/AreteAcademy/bravis/cmd/bravis@latest</div>
+        </article>
+        <article class="step">
+          <h3>Aplicar o schema</h3>
+          <p>Migrations embutidas, em subcomando próprio — <code>serve</code> nunca altera schema.</p>
+          <div class="step-cmd"><span class="t-p">$ </span>bravis migrate up</div>
+        </article>
+        <article class="step">
+          <h3>Subir a UI</h3>
+          <p>API e interface no mesmo processo, em <code>:8080</code>.</p>
+          <div class="step-cmd"><span class="t-p">$ </span>bravis serve</div>
+        </article>
+        <article class="step">
+          <h3>Ligar o scheduler</h3>
+          <p>O segundo laço: materializa a agenda e executa a fila.</p>
+          <div class="step-cmd"><span class="t-p">$ </span>bravis scheduler --interval 5s --concurrency 4</div>
+        </article>
+      </div>
+
+      <div class="button-group button-group-center" style="margin-top:2.5rem" data-reveal>
+        <a class="button button-secondary" href="https://github.com/AreteAcademy/bravis/tree/master/docs" target="_blank" rel="noopener">
+          Documentação completa
+          <svg width="16" height="16" aria-hidden="true"><use href="#i-arrow"></use></svg>
+        </a>
+        <a class="button button-secondary" href="https://github.com/AreteAcademy/bravis/tree/master/examples" target="_blank" rel="noopener">
+          Exemplos executáveis
+          <svg width="16" height="16" aria-hidden="true"><use href="#i-arrow"></use></svg>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================================================== marca branca -->
+  <section class="section">
+    <div class="shell brand-split" data-reveal>
+      <div>
+        <p class="eyebrow">Marca branca</p>
+        <h2>Seus dados, sua marca, nossa orquestração.</h2>
+        <p class="lead">
+          Título, subtítulo, frase e paleta saem de um YAML. As cores sobrescrevem as
+          variáveis CSS em tempo de execução, então trocar o tema de um cliente não
+          recompila nada.
+        </p>
+        <div class="swatches">
+          <span class="swatch" style="--sw:#f4efe4">#f4efe4</span>
+          <span class="swatch" style="--sw:#aa8450">#aa8450</span>
+          <span class="swatch" style="--sw:#21180f">#21180f</span>
+          <span class="swatch" style="--sw:#4c7a56">#4c7a56</span>
+        </div>
+        <p style="margin-top:1.5rem">
+          <a class="text-link" href="https://github.com/AreteAcademy/bravis/blob/master/brand.example.yaml" target="_blank" rel="noopener">
+            Ver brand.example.yaml
+            <svg width="15" height="15" aria-hidden="true"><use href="#i-arrow"></use></svg>
+          </a>
+        </p>
+      </div>
+
+      <div class="panel">
+        <div class="panel-bar">
+          <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+          <span class="panel-title">brand.yaml</span>
+        </div>
+<pre class="code"><code><span class="t-k">titulo</span><span class="t-o">:</span> <span class="t-s">"Dados Acme"</span>
+<span class="t-k">subtitulo</span><span class="t-o">:</span> <span class="t-s">"Plataforma de dados"</span>
+<span class="t-k">frase</span><span class="t-o">:</span> <span class="t-s">"Medir antes de decidir."</span>
+
+<span class="t-k">cores</span><span class="t-o">:</span>
+  <span class="t-k">fundo</span><span class="t-o">:</span>   <span class="t-s">"#f4efe4"</span>
+  <span class="t-k">tinta</span><span class="t-o">:</span>   <span class="t-s">"#21180f"</span>
+  <span class="t-k">destaque</span><span class="t-o">:</span> <span class="t-s">"#aa8450"</span></code></pre>
+        <p class="code-note">
+          O rodapé <strong>“Powered by Bravis”</strong> não vem da configuração — vem do
+          código.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================= citação -->
+  <div class="quote-band">
+    <div class="shell">
+      <figure data-reveal>
+        <blockquote>“Brevidade não é pobreza de informação. É clareza de propósito.”</blockquote>
+        <figcaption>Bravis · brevis, breve</figcaption>
+      </figure>
+    </div>
+  </div>
+
+  <!-- ================================================================= cta -->
+  <section class="section" style="padding-top:0">
+    <div class="shell">
+      <div class="cta" data-reveal>
+        <p class="eyebrow eyebrow-center">MIT · sem restrição</p>
+        <h2>Uma stack, não quatro.</h2>
+        <p class="lead">
+          Bravis é open source e gratuito. Comece pelo <code>examples/hello.yaml</code> —
+          é o que roda em qualquer lugar.
+        </p>
+        <div class="button-group button-group-center">
+          <a class="button button-primary" href="https://github.com/AreteAcademy/bravis" target="_blank" rel="noopener">
+            <svg width="17" height="17" aria-hidden="true"><use href="#i-github"></use></svg>
+            Abrir no GitHub
+          </a>
+          <a class="button button-secondary" href="https://pkg.go.dev/github.com/AreteAcademy/bravis/sdk" target="_blank" rel="noopener">
+            Referência do SDK
+            <svg width="16" height="16" aria-hidden="true"><use href="#i-arrow"></use></svg>
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="shell">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <a class="brand" href="#topo">
+          <svg aria-hidden="true"><use href="#i-logo"></use></svg>
+          Bravis
+        </a>
+        <p>
+          Engine de transformação e orquestração de dados, em Go. Um projeto da
+          <a class="text-link" href="https://areteacademy.com.br" target="_blank" rel="noopener">Aretê Academy</a>.
+        </p>
+      </div>
+
+      <div class="footer-col">
+        <h4>Produto</h4>
+        <ul>
+          <li><a href="#eficiencia">Eficiência</a></li>
+          <li><a href="#kubernetes">Kubernetes</a></li>
+          <li><a href="#workflows">Workflows</a></li>
+          <li><a href="#arquitetura">Arquitetura</a></li>
+          <li><a href="#recursos">Recursos</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col">
+        <h4>Documentação</h4>
+        <ul>
+          <li><a href="https://github.com/AreteAcademy/bravis/tree/master/docs" target="_blank" rel="noopener">Visão geral</a></li>
+          <li><a href="https://github.com/AreteAcademy/bravis/blob/master/docs/KUBERNETES.md" target="_blank" rel="noopener">Kubernetes</a></li>
+          <li><a href="https://github.com/AreteAcademy/bravis/blob/master/docs/IMAGENS.md" target="_blank" rel="noopener">Imagens por papel</a></li>
+          <li><a href="https://github.com/AreteAcademy/bravis/blob/master/docs/PARAMS.md" target="_blank" rel="noopener">Parâmetros</a></li>
+          <li><a href="https://pkg.go.dev/github.com/AreteAcademy/bravis/sdk" target="_blank" rel="noopener">SDK (pkg.go.dev)</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col">
+        <h4>Comunidade</h4>
+        <ul>
+          <li><a href="https://github.com/AreteAcademy/bravis" target="_blank" rel="noopener">GitHub</a></li>
+          <li><a href="https://github.com/AreteAcademy/bravis/issues" target="_blank" rel="noopener">Issues</a></li>
+          <li><a href="https://github.com/AreteAcademy/bravis/discussions" target="_blank" rel="noopener">Discussions</a></li>
+          <li><a href="https://github.com/AreteAcademy/bravis/blob/master/CHANGELOG.md" target="_blank" rel="noopener">Changelog</a></li>
+          <li><a href="https://github.com/AreteAcademy/bravis/blob/master/CONTRIBUTING.md" target="_blank" rel="noopener">Contribuir</a></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="footer-bottom">
+      <p>Bravis · <a href="https://github.com/AreteAcademy/bravis/blob/master/LICENSE" target="_blank" rel="noopener">MIT</a> · construído com Go</p>
+      <p>Aretê Academy — disciplina, propósito e excelência.</p>
+    </div>
+  </div>
+</footer>
+
+<script src="js/main.js" defer></script>
 </body>
 </html>

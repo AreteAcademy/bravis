@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Bravis">
+  <!-- Mesmo grafo do logo da UI (web/assets/logo.svg). Aqui a cor e fixa:
+       um favicon nao herda currentColor de pagina nenhuma. -->
+  <path d="M9 9.5 L23 16 M9 22.5 L23 16" fill="none" stroke="#aa8450" stroke-width="1.75" stroke-linecap="round" opacity="0.45"/>
+  <circle cx="9" cy="9.5" r="3.25" fill="#aa8450" opacity="0.75"/>
+  <circle cx="9" cy="22.5" r="3.25" fill="#aa8450" opacity="0.75"/>
+  <circle cx="23" cy="16" r="4.25" fill="#aa8450"/>
+</svg>

@@ -15,8 +15,8 @@ cloud.google.com/go/longrunning v0.4.1 h1:v+yFJOfKC3yZdY6ZUI933pIYdhyhV8S3NpWrXW
 cloud.google.com/go/longrunning v0.4.1/go.mod h1:4iWDqhBZ70CvZ6BfETbvam3T8FMvLK+eFj0E6AaRQTo=
 cloud.google.com/go/storage v1.30.0 h1:g1yrbxAWOrvg/594228pETWkOi00MLTrOWfh56veU5o=
 cloud.google.com/go/storage v1.30.0/go.mod h1:xAVretHSROm1BQX4IIsoVgJqw0LqOyX+I/O2GzRAzdE=
-github.com/AreteAcademy/bravis/sdk v0.9.1 h1:0wbbIuc1ZiSUqwoFYQ/yf8I7cXKDjIUoppXzwz1zMfk=
-github.com/AreteAcademy/bravis/sdk v0.9.1/go.mod h1:Eju9EbHS8wpO24CV2VsJRHMFJpymiq13i8q0kNoJqo0=
+github.com/AreteAcademy/bravis/sdk v0.10.0 h1:XhKVSygscWi+6byFtKVNUYDlgZbSff9s4WFLEarM0Hc=
+github.com/AreteAcademy/bravis/sdk v0.10.0/go.mod h1:Eju9EbHS8wpO24CV2VsJRHMFJpymiq13i8q0kNoJqo0=
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
 github.com/JohnCGriffin/overflow v0.0.0-20211019200055-46fa312c352c h1:RGWPOewvKIROun94nF7v2cua9qP+thov/7M50KEoeSU=
 github.com/JohnCGriffin/overflow v0.0.0-20211019200055-46fa312c352c/go.mod h1:X0CRv0ky0k6m906ixxpzmDRLvX58TFUKS2eePweuyxk=
