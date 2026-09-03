@@ -14,3 +14,8 @@
 # directives -- which is exactly how the CLI is meant to be installed.
 go.work
 go.work.sum
+
+# Binários compilados dos comandos. `go build -o bravis` dentro de cmd/bravis
+# deixa um de 30 MB ali, e um deles entrou no repositório na v0.4.1 e seguiu
+# sendo recommitado. Artefato de build não é fonte.
+/cmd/bravis/bravis
