@@ -649,3 +649,42 @@ func TestIngestionIDNamespaceIsNotConfigurable(t *testing.T) {
 		t.Errorf("ingestion_id = %s\nwant        = %s\nchanging this breaks every row already loaded", id, fromPython)
 	}
 }
+
+func TestDataStatsIsReadableWithoutLoad(t *testing.T) {
+	// A dry run, a validation pass, or an extract feeding something other
+	// than Load still has to be able to see whether the source was flaky.
+	hits := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		if hits == 1 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		_, _ = fmt.Fprint(w, `{"id": 1}`)
+	}))
+	defer srv.Close()
+
+	data, err := Extract(context.Background(), Source{
+		URL: srv.URL,
+		RetryConfig: &RetryConfig{
+			MaxAttempts: 3, InitialBackoff: time.Millisecond,
+			MaxBackoff: time.Millisecond, JitterFraction: 0.1,
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range data.Records {
+	}
+
+	stats := data.Stats()
+	if stats.Pages != 1 || stats.Attempts != 2 {
+		t.Errorf("Stats() = %+v, expected 1 page and 2 attempts", stats)
+	}
+
+	// Must not panic on a nil Data or one that never ran.
+	var none *Data
+	if none.Stats() != (Stats{}) {
+		t.Error("Stats() on a nil Data should be the zero value")
+	}
+}

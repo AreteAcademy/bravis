@@ -45,6 +45,23 @@ type Data struct {
 	stats  *core.Stats
 }
 
+// Stats reports what the fetch actually did: pages walked and HTTP attempts
+// spent, retries included. Attempts above Pages means the source was flaky.
+//
+// The counters are written as the stream is pulled, so read this after the
+// iteration ends. Before that it reports the walk so far, which is only the
+// first page.
+//
+// Load copies these into Result, so a pipeline that loads does not need this.
+// It is here for the cases that do not: a dry run, a validation pass, or an
+// extract feeding something other than Load.
+func (d *Data) Stats() core.Stats {
+	if d == nil || d.stats == nil {
+		return core.Stats{}
+	}
+	return *d.stats
+}
+
 // Extract fetches, decodes and, when Source.Expand is set, expands the
 // response into one record per reading.
 //

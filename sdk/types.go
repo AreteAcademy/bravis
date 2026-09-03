@@ -39,6 +39,9 @@ type (
 	// Driver selects which implementation carries out an extract or a load.
 	Driver = core.Driver
 
+	// Stats counts what an extract actually did.
+	Stats = core.Stats
+
 	// Dedup names how a load avoids writing a record twice.
 	Dedup = core.Dedup
 )

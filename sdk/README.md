@@ -348,6 +348,15 @@ slog.Info("done", res.Args()...)
 each counter to reality: a number in a result that is always zero is worse
 than no number, because nobody doubts it.
 
+For a pipeline that does not load — a dry run, a validation pass, an extract
+feeding somewhere else — the same counters are on `Data`:
+
+```go
+data, _ := sdk.Extract(ctx, source)
+for range data.Records { }
+stats := data.Stats()   // read after the stream is drained
+```
+
 > The `ingestion_id` namespace is **not** configurable. `WithMetadataNamespace`
 > used to accept one and then ignore it — the namespace is a `const`, checked
 > byte-for-byte against Python's `uuid.uuid5`. A configurable contract is not a

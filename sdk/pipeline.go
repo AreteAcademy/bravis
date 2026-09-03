@@ -159,8 +159,10 @@ func runDryRun(ctx context.Context, p *Pipeline, n int) error {
 		table = p.Target.defaultTable()
 	}
 
-	_, _ = fmt.Fprintf(os.Stdout, "dry-run %s -> %s (%d records, %s)\n\n",
-		p.name(), table, len(envelopes), time.Since(start).Round(time.Millisecond))
+	stats := data.Stats()
+	_, _ = fmt.Fprintf(os.Stdout, "dry-run %s -> %s (%d records, %d page(s), %d attempt(s), %s)\n\n",
+		p.name(), table, len(envelopes), stats.Pages, stats.Attempts,
+		time.Since(start).Round(time.Millisecond))
 
 	for i, env := range envelopes {
 		if i == n {
