@@ -330,15 +330,12 @@ func TestAddMetadataInjectsFields(t *testing.T) {
 	if got["amount"] != 10 {
 		t.Errorf("original payload fields must survive: %v", got)
 	}
-	for _, k := range []string{
-		"_bravis_ingestion_id", "_bravis_ingestion_loaded_at", "_bravis_provider",
-		"_bravis_entity", "_bravis_source_key", "_bravis_record_ts",
-	} {
+	for _, k := range metadataFields {
 		if _, ok := got[k]; !ok {
 			t.Errorf("missing metadata field %s", k)
 		}
 	}
-	if got["_bravis_provider"] != "gov" || got["_bravis_source_key"] != "k1" {
+	if got["provider"] != "gov" || got["source_key"] != "k1" {
 		t.Errorf("metadata values wrong: %v", got)
 	}
 }
@@ -361,8 +358,8 @@ func TestAddMetadataIngestionIDIsDeterministic(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	idA := a.Payload.(map[string]any)["_bravis_ingestion_id"]
-	idB := b.Payload.(map[string]any)["_bravis_ingestion_id"]
+	idA := a.Payload.(map[string]any)["ingestion_id"]
+	idB := b.Payload.(map[string]any)["ingestion_id"]
 	if idA != idB {
 		t.Errorf("same record produced different ids: %v vs %v", idA, idB)
 	}
@@ -372,7 +369,7 @@ func TestAddMetadataIngestionIDIsDeterministic(t *testing.T) {
 	if err := l.addMetadataToEnvelope(&other); err != nil {
 		t.Fatal(err)
 	}
-	if other.Payload.(map[string]any)["_bravis_ingestion_id"] == idA {
+	if other.Payload.(map[string]any)["ingestion_id"] == idA {
 		t.Error("different source keys collided on the same ingestion id")
 	}
 }
@@ -407,7 +404,7 @@ func TestAddMetadataConvertsStructPayload(t *testing.T) {
 	if got["amount"] != float64(10) {
 		t.Errorf("struct field lost in conversion: %v", got)
 	}
-	if _, ok := got["_bravis_ingestion_id"]; !ok {
+	if _, ok := got["ingestion_id"]; !ok {
 		t.Error("metadata not added to converted struct")
 	}
 }
@@ -509,5 +506,77 @@ func TestRowErrorsIncludesLocation(t *testing.T) {
 func TestRowErrorsNilStatus(t *testing.T) {
 	if got := rowErrors(nil); got != nil {
 		t.Errorf("nil status should yield nothing, got %v", got)
+	}
+}
+
+func TestAddMetadataRefusesToOverwritePayloadFields(t *testing.T) {
+	// The "_bravis_" prefix used to make this impossible. Without it a source
+	// that already has "provider" would have its value silently replaced by
+	// ours -- an invisible failure, and the worse one.
+	l := metaLoader(defaultMetadataNamespace)
+	env := core.Envelope{
+		Provider: "gov", Entity: "tx", SourceKey: "k1", RecordTS: "2026-01-01T00:00:00Z",
+		Payload: map[string]any{"provider": "the vendor's own value", "amount": 10},
+	}
+
+	err := l.addMetadataToEnvelope(&env)
+	if err == nil {
+		t.Fatal("a colliding payload field must be an error, not a silent overwrite")
+	}
+	if !strings.Contains(err.Error(), "provider") {
+		t.Errorf("the error must name the colliding field: %v", err)
+	}
+	if !strings.Contains(err.Error(), "WriteEnvelopeColumns") {
+		t.Errorf("the error should point at the mode that cannot collide: %v", err)
+	}
+}
+
+func TestAddMetadataDoesNotMutateCallerPayload(t *testing.T) {
+	l := metaLoader(defaultMetadataNamespace)
+	original := map[string]any{"amount": 10}
+	env := core.Envelope{
+		Provider: "gov", Entity: "tx", SourceKey: "k1", RecordTS: "2026-01-01T00:00:00Z",
+		Payload: original,
+	}
+
+	if err := l.addMetadataToEnvelope(&env); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(original) != 1 {
+		t.Errorf("the caller's map was mutated: %v", original)
+	}
+}
+
+func TestFlatAndEnvelopeUseTheSameNames(t *testing.T) {
+	// One spelling downstream: a flat row and a wrapped row must describe a
+	// record with the same field names, or SQL has to know which mode wrote it.
+	l := metaLoader(defaultMetadataNamespace)
+	env := core.Envelope{
+		Provider: "gov", Entity: "tx", SourceKey: "k1", RecordTS: "2026-01-01T00:00:00Z",
+		Payload: map[string]any{"amount": 10},
+	}
+
+	cols, err := l.envelopeColumns(env)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	flat := env
+	if err := l.addMetadataToEnvelope(&flat); err != nil {
+		t.Fatal(err)
+	}
+	flatMap := flat.Payload.(map[string]any)
+
+	for _, f := range []string{"ingestion_id", "ingestion_loaded_at", "provider", "entity", "source_key"} {
+		if _, ok := cols[f]; !ok {
+			t.Errorf("envelope mode is missing %s", f)
+		}
+		if _, ok := flatMap[f]; !ok {
+			t.Errorf("flat mode is missing %s", f)
+		}
+	}
+	if cols["ingestion_id"] != flatMap["ingestion_id"] {
+		t.Error("the two modes computed different ingestion_ids for the same record")
 	}
 }

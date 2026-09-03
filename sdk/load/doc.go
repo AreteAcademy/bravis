@@ -3,6 +3,11 @@
 // By default the SDK imposes no schema: it writes your payload as-is, and the
 // destination table must already exist. You decide what the columns are.
 //
+// Dataset and Table address the destination directly, so an existing table is
+// written to as it stands. Only CreateTable, alongside WriteEnvelopeColumns,
+// makes the SDK create one -- and it never alters a table that is already
+// there.
+//
 // # Basic usage
 //
 //	loader, err := load.New(ctx, nil,
@@ -40,12 +45,19 @@
 // WithMetadata(true): provenance folded into the payload as a flat object,
 // under these keys:
 //
-//   - _bravis_ingestion_id          deterministic UUID v5
-//   - _bravis_ingestion_loaded_at   load timestamp
-//   - _bravis_provider              data source
-//   - _bravis_entity                entity type
-//   - _bravis_source_key            unique key at the source
-//   - _bravis_record_ts             record timestamp at the source
+//   - ingestion_id          deterministic UUID v5
+//   - ingestion_loaded_at   load timestamp
+//   - provider              data source
+//   - entity                entity type
+//   - source_key            unique key at the source
+//   - record_ts             record timestamp at the source
+//
+// These are the same names the envelope contract uses as columns, so a flat
+// row and a wrapped row describe a record identically and downstream SQL
+// reads one spelling. They carry no prefix, so a payload that already has one
+// of them is an error naming the field rather than a silent overwrite. When
+// your source genuinely owns those names, use WriteEnvelopeColumns: it nests
+// the payload and cannot collide.
 //
 // WithEnvelopeColumns(true): the six-column landing contract, with your
 // payload nested rather than merged.

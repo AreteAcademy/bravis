@@ -280,7 +280,7 @@ pass it.
 | mode | writes | use when |
 |---|---|---|
 | default | the payload, as-is | you own the schema and want nothing imposed |
-| `WithMetadata(true)` | payload with `_bravis_*` fields folded in | you want provenance beside the data, in one flat object |
+| `WithMetadata(true)` | payload with the provenance fields folded in flat | you want the source's own fields as real columns |
 | `WithEnvelopeColumns(true)` | the six-column landing contract, payload nested | you need rows to match a bronze layer keyed on `ingestion_id` |
 
 The last two are mutually exclusive and `New` refuses both at once — they are
@@ -305,6 +305,28 @@ It exists so `ingestion_id` keeps a single owner. Rebuild those columns in each
 consumer and the ids drift apart, which is the duplication the contract exists
 to prevent.
 
+Both modes use the same field names, so a flat row and a wrapped row describe a
+record identically and downstream SQL reads one spelling. The flat mode carries
+no prefix, so a payload that already owns one of those names is an error naming
+the field rather than a silent overwrite.
+
+### Writing to a table that already exists
+
+`Dataset` and `Table` address the destination directly:
+
+```go
+sdk.Target{
+	Driver:  sdk.DriverBigQuery,
+	Dataset: "landing",
+	Table:   "vendors_open_meteo_hourly_temperatures", // already there
+	// ...
+}
+```
+
+Leave `Table` empty and it defaults to `vendors_<provider>_<entity>s`. Set
+`NoCreateTable` to stop the SDK creating anything; it never alters a table that
+already exists either way.
+
 ## BigQuery Schema
 
 **You define the schema.** The SDK writes raw JSON payloads.
@@ -325,13 +347,13 @@ Or with metadata:
 CREATE TABLE {dataset}.{table} (
   payload JSON NOT NULL
 )
--- Metadata fields (if AddMetadata=true) will be inside payload:
--- - _bravis_ingestion_id (deterministic UUID v5)
--- - _bravis_ingestion_loaded_at (load timestamp)
--- - _bravis_provider (data source)
--- - _bravis_entity (entity type)
--- - _bravis_source_key (unique key from source)
--- - _bravis_record_ts (record timestamp at source)
+-- Metadata fields (if AddMetadata=true) sit alongside your payload fields:
+-- - ingestion_id (deterministic UUID v5)
+-- - ingestion_loaded_at (load timestamp)
+-- - provider (data source)
+-- - entity (entity type)
+-- - source_key (unique key from source)
+-- - record_ts (record timestamp at source)
 ```
 
 Or structured:

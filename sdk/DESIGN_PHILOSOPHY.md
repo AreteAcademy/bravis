@@ -69,12 +69,12 @@ When `AddMetadata: true`, the SDK adds fields to the `Payload`:
   "currency": "USD",
   
   // bravis metadata (injected into payload)
-  "_bravis_ingestion_id": "550e8400-e29b-41d4-a716-446655440000",
-  "_bravis_ingestion_loaded_at": "2026-01-02T15:30:45Z",
-  "_bravis_provider": "example_api",
-  "_bravis_entity": "transactions",
-  "_bravis_source_key": "tx-123",
-  "_bravis_record_ts": "2026-01-02T10:00:00Z"
+  "ingestion_id": "550e8400-e29b-41d4-a716-446655440000",
+  "ingestion_loaded_at": "2026-01-02T15:30:45Z",
+  "provider": "example_api",
+  "entity": "transactions",
+  "source_key": "tx-123",
+  "record_ts": "2026-01-02T10:00:00Z"
 }
 ```
 
@@ -133,12 +133,12 @@ loader.Load(ctx, &sdk.LoadConfig{
 Query:
 ```sql
 SELECT
-  JSON_EXTRACT_SCALAR(payload, '$._bravis_ingestion_id') as ingestion_id,
-  JSON_EXTRACT_SCALAR(payload, '$._bravis_ingestion_loaded_at') as loaded_at,
+  JSON_EXTRACT_SCALAR(payload, '$.ingestion_id') as ingestion_id,
+  JSON_EXTRACT_SCALAR(payload, '$.ingestion_loaded_at') as loaded_at,
   JSON_EXTRACT_SCALAR(payload, '$.id') as id,
   JSON_EXTRACT_SCALAR(payload, '$.amount') as amount
 FROM landing.raw_data
-ORDER BY JSON_EXTRACT(payload, '$._bravis_ingestion_loaded_at') DESC;
+ORDER BY JSON_EXTRACT(payload, '$.ingestion_loaded_at') DESC;
 ```
 
 ### Structured: Extract to Columns
@@ -169,8 +169,8 @@ Transform (dbt, SQL, etc):
 ```sql
 INSERT INTO landing.transactions (ingestion_id, loaded_at, id, amount, currency, raw_payload)
 SELECT
-  JSON_EXTRACT_SCALAR(payload, '$._bravis_ingestion_id') as ingestion_id,
-  JSON_EXTRACT(payload, '$._bravis_ingestion_loaded_at') as loaded_at,
+  JSON_EXTRACT_SCALAR(payload, '$.ingestion_id') as ingestion_id,
+  JSON_EXTRACT(payload, '$.ingestion_loaded_at') as loaded_at,
   JSON_EXTRACT_SCALAR(payload, '$.id') as id,
   JSON_EXTRACT(payload, '$.amount') as amount,
   JSON_EXTRACT_SCALAR(payload, '$.currency') as currency,
@@ -180,7 +180,7 @@ FROM landing.raw_data;
 
 ## Idempotency: Your Responsibility
 
-The `_bravis_ingestion_id` is deterministic UUID v5, derived from:
+The `ingestion_id` is deterministic UUID v5, derived from:
 ```
 namespace = e3a4f8c0-1b9d-4ea0-9c2e-77f6a6c4a4d7
 key = {provider}|{entity}|{source_key}|{record_ts}
@@ -192,7 +192,7 @@ id = SHA1(namespace, key)
 -- Deduplicate on load
 CREATE TEMP TABLE new_data AS
 SELECT * FROM staging.raw_data
-WHERE JSON_EXTRACT_SCALAR(payload, '$._bravis_ingestion_id') NOT IN (
+WHERE JSON_EXTRACT_SCALAR(payload, '$.ingestion_id') NOT IN (
   SELECT ingestion_id FROM landing.transactions
 );
 
@@ -205,7 +205,7 @@ Or:
 -- Merge on duplicate
 MERGE landing.transactions t
 USING staging.raw_data s
-ON t.ingestion_id = JSON_EXTRACT_SCALAR(s.payload, '$._bravis_ingestion_id')
+ON t.ingestion_id = JSON_EXTRACT_SCALAR(s.payload, '$.ingestion_id')
 WHEN NOT MATCHED THEN INSERT (...) VALUES (...);
 ```
 
@@ -237,13 +237,13 @@ A: Only if you need the ingestion_id for deduplication or audit trail.
 A: Create multiple tables. Load each source to its table. No problem.
 
 **Q: Can I change my schema without breaking the SDK?**
-A: Yes. Metadata is always in `_bravis_*` fields. Your original data is untouched.
+A: Yes. Metadata is always in `the provenance fields` fields. Your original data is untouched.
 
 **Q: What about schema validation?**
 A: That's your responsibility. Use BigQuery schema validation, dbt contracts, or custom checks.
 
 **Q: How do I handle late-arriving data?**
-A: Use the `_bravis_record_ts` (source timestamp) vs `_bravis_ingestion_loaded_at` (load time) to detect and handle late arrivals.
+A: Use the `record_ts` (source timestamp) vs `ingestion_loaded_at` (load time) to detect and handle late arrivals.
 
 ---
 

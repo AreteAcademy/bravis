@@ -89,7 +89,7 @@ type LoadConfig struct {
 	ThresholdForGCS int    // row count above which to use GCS; default: 5000
 	Format          string // "ndjson", "csv", or "parquet"; default: "ndjson"
 	DeleteAfterLoad bool   // delete staged file after successful load; default: true
-	AddMetadata     bool   // fold _bravis_* fields into the payload; default: false
+	AddMetadata     bool   // fold provenance fields flat into the payload; default: false
 
 	// Driver selects the destination. Empty means DriverBigQuery, the only
 	// one implemented today.

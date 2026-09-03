@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"cloud.google.com/go/bigquery"
@@ -113,7 +114,7 @@ func resolveConfig(cfg *core.LoadConfig, opts ...core.LoadOption) (*core.LoadCon
 
 	if c.AddMetadata && c.WriteEnvelopeColumns {
 		return nil, fmt.Errorf("AddMetadata and WriteEnvelopeColumns are two different answers " +
-			"to the same question: the first folds _bravis_* fields into your payload, the " +
+			"to the same question: the first folds provenance flat into your payload, the " +
 			"second wraps it in the six envelope columns. Pick one")
 	}
 	if c.MetadataNamespace == "" {
@@ -275,46 +276,71 @@ func (l *Loader) envelopeColumns(env core.Envelope) (map[string]any, error) {
 	}, nil
 }
 
-// addMetadataToEnvelope adds metadata fields to the envelope's payload.
+// metadataFields are the provenance keys AddMetadata merges into a payload.
+//
+// They carry no prefix: these are the same names the envelope contract uses
+// as columns, so a flat row and a wrapped row describe a record identically
+// and downstream SQL reads one spelling, not two.
+//
+// The prefix used to be "_bravis_", which made collisions impossible. Without
+// it a source that has its own "provider" field would be silently overwritten
+// -- so a collision is an error now, naming the field. Silently replacing a
+// vendor's data with our provenance is the worse failure: it is invisible.
+var metadataFields = []string{
+	"ingestion_id",
+	"ingestion_loaded_at",
+	"provider",
+	"entity",
+	"source_key",
+	"record_ts",
+}
+
+// addMetadataToEnvelope merges provenance into the envelope's payload.
 func (l *Loader) addMetadataToEnvelope(env *core.Envelope) error {
-	// Calculate ingestion ID
 	id, err := env.IngestionID()
 	if err != nil {
 		return err
 	}
 
-	// Convert payload to map if it isn't already
-	var payloadMap map[string]interface{}
+	var payload map[string]any
 	switch p := env.Payload.(type) {
-	case map[string]interface{}:
-		payloadMap = p
+	case map[string]any:
+		// Copy: the caller may still hold this map, and a load must not
+		// mutate what it was handed.
+		payload = make(map[string]any, len(p)+len(metadataFields))
+		for k, v := range p {
+			payload[k] = v
+		}
 	default:
-		// Try to marshal and unmarshal to convert to map
 		data, err := json.Marshal(env.Payload)
 		if err != nil {
 			return fmt.Errorf("marshal payload: %w", err)
 		}
-		if err := json.Unmarshal(data, &payloadMap); err != nil {
+		if err := json.Unmarshal(data, &payload); err != nil {
 			return fmt.Errorf("unmarshal to map: %w", err)
 		}
 	}
 
-	// Add metadata fields
-	metadata := map[string]interface{}{
-		"_bravis_ingestion_id":        id,
-		"_bravis_ingestion_loaded_at": time.Now().UTC().Format(time.RFC3339),
-		"_bravis_provider":            env.Provider,
-		"_bravis_entity":              env.Entity,
-		"_bravis_source_key":          env.SourceKey,
-		"_bravis_record_ts":           env.RecordTS,
+	var clashes []string
+	for _, f := range metadataFields {
+		if _, taken := payload[f]; taken {
+			clashes = append(clashes, f)
+		}
+	}
+	if len(clashes) > 0 {
+		return fmt.Errorf("payload already has the field(s) %s, which AddMetadata would overwrite. "+
+			"Rename them in your payload, or use WriteEnvelopeColumns, which nests the payload "+
+			"under a payload column and cannot collide", strings.Join(clashes, ", "))
 	}
 
-	// Merge metadata into payload
-	for k, v := range metadata {
-		payloadMap[k] = v
-	}
+	payload["ingestion_id"] = id
+	payload["ingestion_loaded_at"] = time.Now().UTC().Format(time.RFC3339)
+	payload["provider"] = env.Provider
+	payload["entity"] = env.Entity
+	payload["source_key"] = env.SourceKey
+	payload["record_ts"] = env.RecordTS
 
-	env.Payload = payloadMap
+	env.Payload = payload
 	return nil
 }
 
