@@ -2,6 +2,19 @@
 
 **Aberto em** 2026-09-02 · **Versão analisada** `v0.1.1` · **Alvo** `v0.1.2`
 
+> **CONCLUÍDA em 2026-09-02, entregue na `sdk/v0.2.1`.** Os itens 1 e 6 saíram
+> antes, na `v0.2.0`; os itens 2, 3, 4, 5 e o teste de integração do 8.7 saíram
+> na `v0.2.1`. Ver [`CHANGELOG.md`](../CHANGELOG.md).
+>
+> Fica em aberto: a issue de CSV/Parquet (item 3) não foi aberta, e o teste de
+> integração nunca rodou — precisa de `BRAVIS_IT_PROJECT` apontando para um
+> projeto GCP real. Enquanto não rodar, os caminhos que falam de fato com o
+> BigQuery seguem sem prova, que é exatamente o argumento do item 8.7.
+>
+> Um achado extra, da mesma classe: `LoadResult.ErrorRows` era declarado e nunca
+> preenchido, e `Load` devolvia `nil` em todo caminho de erro — enquanto o README
+> mandava lê-lo depois de uma falha. O trecho documentado causava panic.
+
 Spec de conserto, escrita para ser executada. Cada item traz o arquivo e a linha,
 o que o código faz hoje, o que precisa fazer, e como provar que ficou certo.
 

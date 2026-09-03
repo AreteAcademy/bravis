@@ -1,0 +1,35 @@
+name: Proposta
+description: Sugerir um recurso ou mudança
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Qual problema isso resolve
+      description: |
+        O caso concreto, não o recurso. "Preciso paginar uma API que devolve o
+        cursor num header customizado" diz mais que "adicionar suporte a header".
+    validations:
+      required: true
+
+  - type: textarea
+    id: workaround
+    attributes:
+      label: Como você resolve hoje
+      description: Se dá para resolver fora do SDK, isso pesa contra somar superfície pública.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Como você imagina a API
+      render: go
+
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Restrições do projeto
+      options:
+        - label: Não exige dependência nova no SDK (hoje são três; o argumento do projeto é o tamanho do binário)
+        - label: Ou exige, e eu justifiquei acima por que vale

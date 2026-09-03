@@ -1,5 +1,12 @@
 # Bravis
 
+[![Test & Lint](https://github.com/AreteAcademy/bravis/actions/workflows/test.yml/badge.svg?branch=master)](https://github.com/AreteAcademy/bravis/actions/workflows/test.yml)
+[![Code Quality](https://github.com/AreteAcademy/bravis/actions/workflows/quality.yml/badge.svg?branch=master)](https://github.com/AreteAcademy/bravis/actions/workflows/quality.yml)
+[![Go Reference](https://pkg.go.dev/badge/github.com/AreteAcademy/bravis/sdk.svg)](https://pkg.go.dev/github.com/AreteAcademy/bravis/sdk)
+[![Go Report Card](https://goreportcard.com/badge/github.com/AreteAcademy/bravis/sdk)](https://goreportcard.com/report/github.com/AreteAcademy/bravis/sdk)
+[![SDK](https://img.shields.io/github/v/tag/AreteAcademy/bravis?filter=sdk/*&label=sdk&color=aa8450)](https://github.com/AreteAcademy/bravis/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-aa8450.svg)](LICENSE)
+
 Engine de transformação e orquestração de dados, em Go. Substitui o par
 Kestra/Leoflow (orquestração) e o dbt (transformação) por um binário único, com
 execução em pod no Kubernetes.
@@ -7,9 +14,24 @@ execução em pod no Kubernetes.
 Arquitetura e faseamento: [`docs/plan.md`](docs/plan.md).
 Relatórios por fase: [`docs/phases/`](docs/phases/).
 
-SDK público: [`docs/SDK.md`](docs/SDK.md) — publicado em
-[pkg.go.dev](https://pkg.go.dev/github.com/AreteAcademy/bravis/sdk).
-Conserto pendente do `load`: [`docs/SDK_LOAD.md`](docs/SDK_LOAD.md).
+## SDK
+
+```bash
+go get github.com/AreteAcademy/bravis/sdk@latest
+```
+
+Extração HTTP com retry, timeout, guard e paginação; carga em lote para o
+BigQuery. Requer Go 1.23+.
+
+- Referência da API: [pkg.go.dev](https://pkg.go.dev/github.com/AreteAcademy/bravis/sdk)
+- Guia e decisões de desenho: [`docs/SDK.md`](docs/SDK.md) · [`sdk/README.md`](sdk/README.md)
+- Exemplos executáveis: [`examples/`](examples/)
+- Histórico de versões: [`CHANGELOG.md`](CHANGELOG.md)
+
+> **Não use a `v0.1.0`.** Ela foi publicada com um `go.mod` quebrado e o proxy
+> do Go é imutável, então não há como corrigi-la. Comece na `v0.1.1`.
+
+CLI: [`cmd/bravis/`](cmd/bravis/) — `go install github.com/AreteAcademy/bravis/cmd/bravis@latest`
 
 **Estado: PHASE 6 concluída.** Workflows em YAML, fila persistente, scheduler com
 cron, backfill, UI server-rendered (Overview com métricas e gráficos, lista de

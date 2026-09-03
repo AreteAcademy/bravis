@@ -166,4 +166,4 @@ GOOS=windows GOARCH=amd64 go build -o bravis-windows-amd64.exe
 
 ## License
 
-MIT
+MIT — see [LICENSE](../../LICENSE).

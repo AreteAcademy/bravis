@@ -1,0 +1,60 @@
+name: Bug
+description: Algo não funciona como documentado
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Antes de abrir: a `sdk/v0.1.0` está publicada e quebrada de forma
+        irreversível. Se você está nela, atualize para a mais recente — não é bug novo.
+
+  - type: input
+    id: version
+    attributes:
+      label: Versão
+      description: "`go list -m github.com/AreteAcademy/bravis/sdk`, ou `bravis version` para o CLI"
+      placeholder: v0.2.1
+    validations:
+      required: true
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Componente
+      options: [sdk/extract, sdk/load, CLI, engine, site, CI]
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: O que você esperava
+      description: E onde isso está documentado, se estiver.
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: O que aconteceu
+      description: Mensagem de erro completa, se houver. Não recorte o stack trace.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Como reproduzir
+      description: |
+        O menor programa que mostra o problema. Se envolve HTTP, um
+        `httptest.Server` que devolva a resposta problemática vale mais que
+        descrever a API real.
+      render: go
+    validations:
+      required: true
+
+  - type: input
+    id: goversion
+    attributes:
+      label: Versão do Go
+      placeholder: go1.25.7 darwin/arm64

@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Dúvida de uso
+    url: https://github.com/AreteAcademy/bravis/discussions
+    about: Perguntas sobre como usar o SDK ou o CLI
+  - name: Documentação do SDK
+    url: https://pkg.go.dev/github.com/AreteAcademy/bravis/sdk
+    about: Referência da API no pkg.go.dev

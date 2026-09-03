@@ -372,4 +372,4 @@ The SDK has its own `go.mod` to keep dependencies minimal. Import only:
 
 ## License
 
-See LICENSE in the Bravis repository.
+MIT — see [LICENSE](../LICENSE).
