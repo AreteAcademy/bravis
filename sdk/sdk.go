@@ -1,16 +1,16 @@
 // Package sdk is the front door: two calls to write a fetcher.
 //
-//	dados, err := sdk.Extract(ctx, sdk.Fonte{
+//	data, err := sdk.Extract(ctx, sdk.Source{
 //		URL:      "https://api.open-meteo.com/v1/forecast?...",
-//		Guarda:   sdk.RecusarSe("error"),
-//		Expandir: sdk.ArraysParalelos("hourly", "time", "temperature_2m"),
+//		Guard:   sdk.RejectIf("error"),
+//		Expand: sdk.ParallelArrays("hourly", "time", "temperature_2m"),
 //	})
 //
-//	res, err := sdk.Load(ctx, dados, sdk.Destino{
+//	res, err := sdk.Load(ctx, data, sdk.Target{
 //		Provider: "open_meteo",
 //		Entity:   "hourly_temperature",
-//		Chave:    sdk.Chave("latitude", "longitude", "time"),
-//		Quando:   sdk.Campo("time"),
+//		Key:    sdk.Key("latitude", "longitude", "time"),
+//		When:   sdk.Field("time"),
 //	})
 //
 // Everything between those two calls that is not specific to the vendor lives
@@ -34,86 +34,89 @@ import (
 	"github.com/AreteAcademy/bravis/sdk/load"
 )
 
-// Dados is a stream of records with the statistics of the fetch that produced
+// Data is a stream of records with the statistics of the fetch that produced
 // them. It is an iterator, not a slice: a paginated source must not have to
 // fit in memory before the first record can be used.
-type Dados struct {
-	Registros iter.Seq2[Envelope, error]
+type Data struct {
+	Records iter.Seq2[Envelope, error]
 
-	fonte  Fonte
-	inicio time.Time
+	source Source
+	start  time.Time
 }
 
-// Extract fetches, decodes and, when Fonte.Expandir is set, expands the
+// Extract fetches, decodes and, when Source.Expand is set, expands the
 // response into one record per reading.
 //
 // The returned records carry only Payload. Provider, Entity, SourceKey and
-// RecordTS are provenance, and provenance is decided at Load, where Destino
+// RecordTS are provenance, and provenance is decided at Load, where Target
 // says how to derive it.
-func Extract(ctx context.Context, fonte Fonte) (*Dados, error) {
-	if fonte.Formato == "" {
-		fonte.Formato = FormatoJSON
+func Extract(ctx context.Context, source Source) (*Data, error) {
+	switch source.Driver {
+	case "", DriverHTTP:
+		source.Driver = DriverHTTP
+	default:
+		return nil, fmt.Errorf("extract driver %q is not implemented; use %q", source.Driver, DriverHTTP)
 	}
 
-	if fonte.Guarda != nil && fonte.Guard == nil {
-		fonte.Guard = fonte.Guarda
+	if source.Format == "" {
+		source.Format = FormatJSON
 	}
 
-	inicio := time.Now()
+	start := time.Now()
 
 	var (
-		linhas iter.Seq2[Envelope, error]
-		err    error
+		lines iter.Seq2[Envelope, error]
+		err   error
 	)
-	switch fonte.Formato {
-	case FormatoJSON:
-		linhas, err = extract.JSON(ctx, fonte)
-	case FormatoNDJSON:
-		linhas, err = extract.NDJSON(ctx, fonte)
-	case FormatoCSV:
-		linhas, err = extract.CSV(ctx, fonte)
-	case FormatoXML:
-		linhas, err = extract.XML(ctx, fonte)
+	switch source.Format {
+	case FormatJSON:
+		lines, err = extract.JSON(ctx, source)
+	case FormatNDJSON:
+		lines, err = extract.NDJSON(ctx, source)
+	case FormatCSV:
+		lines, err = extract.CSV(ctx, source)
+	case FormatXML:
+		lines, err = extract.XML(ctx, source)
 	default:
-		return nil, fmt.Errorf("formato %q desconhecido; use JSON, NDJSON, CSV ou XML", fonte.Formato)
+		return nil, fmt.Errorf("unknown format %q; use JSON, NDJSON, CSV or XML", source.Format)
 	}
 	if err != nil {
-		return nil, classificarExtract(fonte, err)
+		return nil, classifyExtract(source, err)
 	}
 
-	if fonte.Expandir != nil {
-		linhas = expandirStream(fonte, linhas)
+	if source.Expand != nil {
+		lines = expandStream(source, lines)
 	}
 
-	return &Dados{Registros: linhas, fonte: fonte, inicio: inicio}, nil
+	return &Data{Records: lines, source: source, start: start}, nil
 }
 
-// expandirStream applies the expansor to each decoded document, emitting one
+// expandStream applies the expansor to each decoded document, emitting one
 // record per reading. It stays lazy: page N is not held waiting for page N+1.
-func expandirStream(fonte Fonte, linhas iter.Seq2[Envelope, error]) iter.Seq2[Envelope, error] {
+func expandStream(source Source, lines iter.Seq2[Envelope, error]) iter.Seq2[Envelope, error] {
 	return func(yield func(Envelope, error) bool) {
 		doc := 0
-		for env, err := range linhas {
+		for env, err := range lines {
 			if err != nil {
-				if !yield(Envelope{}, classificarExtract(fonte, err)) {
+				if !yield(Envelope{}, classifyExtract(source, err)) {
 					return
 				}
 				continue
 			}
 
-			registros, err := fonte.Expandir(env.Payload)
+			records, err := source.Expand(env.Payload)
 			if err != nil {
-				yield(Envelope{}, &ErroDeFormato{
-					URL:     redigir(fonte.URL),
-					Formato: string(fonte.Formato),
-					Linha:   doc,
-					Causa:   err,
+				yield(Envelope{}, &FormatError{
+					URL:    redact(source.URL),
+					Format: string(source.Format),
+					Line:   doc,
+					Cause:  err,
 				})
 				return
 			}
 			doc++
 
-			for _, r := range registros {
+			for _, r := range records {
 				if !yield(Envelope{Payload: r}, nil) {
 					return
 				}
@@ -127,91 +130,91 @@ func expandirStream(fonte Fonte, linhas iter.Seq2[Envelope, error]) iter.Seq2[En
 // It resolves configuration with the documented precedence, logs where each
 // value came from, creates the landing table when absent, and reports what it
 // actually did.
-func Load(ctx context.Context, dados *Dados, destino Destino) (*Resultado, error) {
-	inicio := time.Now()
+func Load(ctx context.Context, data *Data, target Target) (*Result, error) {
+	start := time.Now()
 
-	if dados == nil {
-		return nil, fmt.Errorf("Load recebeu dados nulos: chame Extract primeiro")
+	if data == nil {
+		return nil, fmt.Errorf("Load got nil data: call Extract first")
 	}
 
-	cfg, origens, err := destino.resolver()
+	cfg, origins, err := target.resolve()
 	if err != nil {
 		return nil, err
 	}
-	logResolucao(ctx, origens)
+	logResolution(ctx, origins)
 
-	envelopes, err := coletar(dados, destino)
+	envelopes, err := collect(data, target)
 	if err != nil {
 		return nil, err
 	}
 
-	res := &Resultado{
-		Registros:    int64(len(envelopes)),
-		TempoExtract: time.Since(dados.inicio),
-		Tabela:       fmt.Sprintf("%s.%s", cfg.Dataset, cfg.Table),
+	res := &Result{
+		Records:     int64(len(envelopes)),
+		ExtractTime: time.Since(data.start),
+		Table:       fmt.Sprintf("%s.%s", cfg.Dataset, cfg.Table),
 	}
 
 	if len(envelopes) == 0 {
-		res.Duracao = time.Since(inicio)
+		res.Duration = time.Since(start)
 		return res, nil
 	}
 
-	inicioLoad := time.Now()
+	loadStart := time.Now()
 
-	carregador, err := load.New(ctx, cfg)
+	loader, err := load.New(ctx, cfg)
 	if err != nil {
-		return res, &ErroDeDestino{Tabela: res.Tabela, Causa: err}
+		return res, &TargetError{Table: res.Table, Cause: err}
 	}
 
-	lr, err := carregador.Load(ctx, envelopes...)
-	res.TempoLoad = time.Since(inicioLoad)
-	res.Duracao = time.Since(inicio)
+	lr, err := loader.Load(ctx, envelopes...)
+	res.LoadTime = time.Since(loadStart)
+	res.Duration = time.Since(start)
 
 	if lr != nil {
-		aplicar(res, lr)
+		apply(res, lr)
 	}
 	if err != nil {
-		return res, &ErroDeDestino{Tabela: res.Tabela, Linhas: res.ErrosPorLinha, Causa: err}
+		return res, &TargetError{Table: res.Table, Rows: res.RowErrors, Cause: err}
 	}
 
 	return res, nil
 }
 
-// coletar drains the stream, stamping provenance from Destino onto each
+// collect drains the stream, stamping provenance from Target onto each
 // record. Load needs the batch in hand to choose a strategy and to size the
 // staged file, so this is where streaming ends.
-func coletar(dados *Dados, destino Destino) ([]Envelope, error) {
-	quando := destino.Quando
-	if quando == nil {
-		quando = Agora()
+func collect(data *Data, target Target) ([]Envelope, error) {
+	when := target.When
+	if when == nil {
+		when = Now()
 	}
 
 	var envelopes []Envelope
 	i := 0
-	for env, err := range dados.Registros {
+	for env, err := range data.Records {
 		if err != nil {
 			return nil, err
 		}
 
-		chave, err := destino.Chave(env.Payload)
+		key, err := target.Key(env.Payload)
 		if err != nil {
-			return nil, &ErroDeFormato{
-				URL: redigir(dados.fonte.URL), Formato: string(dados.fonte.Formato),
-				Linha: i, Causa: fmt.Errorf("montando source_key: %w", err),
+			return nil, &FormatError{
+				URL: redact(data.source.URL), Format: string(data.source.Format),
+				Line: i, Cause: fmt.Errorf("building source_key: %w", err),
 			}
 		}
 
-		ts, err := quando(env.Payload)
+		ts, err := when(env.Payload)
 		if err != nil {
-			return nil, &ErroDeFormato{
-				URL: redigir(dados.fonte.URL), Formato: string(dados.fonte.Formato),
-				Linha: i, Causa: fmt.Errorf("lendo record_ts: %w", err),
+			return nil, &FormatError{
+				URL: redact(data.source.URL), Format: string(data.source.Format),
+				Line: i, Cause: fmt.Errorf("reading record_ts: %w", err),
 			}
 		}
 
-		env.Provider = destino.Provider
-		env.Entity = destino.Entity
-		env.SourceKey = chave
+		env.Provider = target.Provider
+		env.Entity = target.Entity
+		env.SourceKey = key
 		env.RecordTS = ts
 
 		envelopes = append(envelopes, env)
@@ -221,34 +224,34 @@ func coletar(dados *Dados, destino Destino) ([]Envelope, error) {
 	return envelopes, nil
 }
 
-func aplicar(res *Resultado, lr *core.LoadResult) {
-	res.Linhas = lr.RowsLoaded
-	res.Ignoradas = lr.RowsIgnored
+func apply(res *Result, lr *core.LoadResult) {
+	res.Rows = lr.RowsLoaded
+	res.Ignored = lr.RowsIgnored
 	res.Bytes = lr.BytesStaged
-	res.Estrategia = lr.Strategy
-	res.Formato = lr.Format
+	res.Strategy = lr.Strategy
+	res.Format = lr.Format
 	res.Dedup = lr.Dedup
-	res.TabelaCriada = lr.TableCreated
-	res.ErrosPorLinha = lr.ErrorRows
+	res.TableCreated = lr.TableCreated
+	res.RowErrors = lr.ErrorRows
 }
 
-// classificarExtract turns a transport or decode failure into the typed error
+// classifyExtract turns a transport or decode failure into the typed error
 // that says which action it calls for.
-func classificarExtract(fonte Fonte, err error) error {
-	url := redigir(fonte.URL)
+func classifyExtract(source Source, err error) error {
+	url := redact(source.URL)
 
-	tentativas := 1
-	if fonte.RetryConfig != nil {
-		tentativas = fonte.RetryConfig.MaxAttempts
+	attempts := 1
+	if source.RetryConfig != nil {
+		attempts = source.RetryConfig.MaxAttempts
 	}
 
-	if status, ok := statusDe(err); ok {
-		return &ErroDeFonte{URL: url, Status: status, Tentativas: tentativas, Causa: err}
+	if status, ok := statusOf(err); ok {
+		return &SourceError{URL: url, Status: status, Attempts: attempts, Cause: err}
 	}
-	if ehDeTransporte(err) {
-		return &ErroDeFonte{URL: url, Tentativas: tentativas, Causa: err}
+	if isTransport(err) {
+		return &SourceError{URL: url, Attempts: attempts, Cause: err}
 	}
-	return &ErroDeFormato{URL: url, Formato: string(fonte.Formato), Linha: -1, Causa: err}
+	return &FormatError{URL: url, Format: string(source.Format), Line: -1, Cause: err}
 }
 
 var _ = slog.LevelInfo

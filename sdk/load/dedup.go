@@ -9,7 +9,7 @@ import (
 	"cloud.google.com/go/bigquery"
 )
 
-// carregarComMerge stages the batch in a temporary table and MERGEs it into
+// loadWithMerge stages the batch in a temporary table and MERGEs it into
 // the destination on ingestion_id, so re-running the same window is a no-op.
 //
 // This costs one scan of the destination per load, which is why it is opt-in.
@@ -20,7 +20,7 @@ import (
 //
 // Reports how many rows were inserted and how many the MERGE matched as
 // already present.
-func (l *Loader) carregarComMerge(ctx context.Context, table *bigquery.Table, data []byte, total int64) (inseridas, ignoradas int64, rowErrs []string, err error) {
+func (l *Loader) loadWithMerge(ctx context.Context, table *bigquery.Table, data []byte, total int64) (inserted, ignored int64, rowErrs []string, err error) {
 	format, err := sourceFormat(l.cfg.Format)
 	if err != nil {
 		return 0, 0, nil, err
@@ -29,11 +29,11 @@ func (l *Loader) carregarComMerge(ctx context.Context, table *bigquery.Table, da
 	// The temporary table carries an expiration so an interrupted run cannot
 	// leave a table behind forever.
 	temp := l.bq.Dataset(l.cfg.Dataset).Table(fmt.Sprintf("_bravis_merge_%d", time.Now().UnixNano()))
-	md := metadataLanding()
+	md := landingMetadata()
 	md.ExpirationTime = time.Now().Add(6 * time.Hour)
 
 	if err := temp.Create(ctx, md); err != nil {
-		return 0, 0, nil, fmt.Errorf("criando tabela temporária: %w", err)
+		return 0, 0, nil, fmt.Errorf("creating temporary table: %w", err)
 	}
 	defer func() {
 		if err := temp.Delete(context.WithoutCancel(ctx)); err != nil {
@@ -46,7 +46,7 @@ func (l *Loader) carregarComMerge(ctx context.Context, table *bigquery.Table, da
 	source.SourceFormat = format
 
 	if rows, err := runLoadJob(ctx, temp.LoaderFrom(source)); err != nil {
-		return 0, 0, rows, fmt.Errorf("carregando temporária: %w", err)
+		return 0, 0, rows, fmt.Errorf("loading the temporary table: %w", err)
 	}
 
 	// WHEN NOT MATCHED only. The landing layer is append-only by contract, so
@@ -64,24 +64,24 @@ WHEN NOT MATCHED THEN
 
 	job, err := l.bq.Query(sql).Run(ctx)
 	if err != nil {
-		return 0, 0, nil, fmt.Errorf("iniciando merge: %w", err)
+		return 0, 0, nil, fmt.Errorf("starting merge: %w", err)
 	}
 
 	status, err := job.Wait(ctx)
 	if err != nil {
-		return 0, 0, nil, fmt.Errorf("aguardando merge: %w", err)
+		return 0, 0, nil, fmt.Errorf("waiting for merge: %w", err)
 	}
 	if err := status.Err(); err != nil {
-		return 0, 0, rowErrors(status), fmt.Errorf("merge falhou: %w", err)
+		return 0, 0, rowErrors(status), fmt.Errorf("merge failed: %w", err)
 	}
 
-	inseridas = total
+	inserted = total
 	if qs, ok := status.Statistics.Details.(*bigquery.QueryStatistics); ok {
-		inseridas = qs.NumDMLAffectedRows
+		inserted = qs.NumDMLAffectedRows
 	}
-	if inseridas > total {
-		inseridas = total
+	if inserted > total {
+		inserted = total
 	}
 
-	return inseridas, total - inseridas, nil, nil
+	return inserted, total - inserted, nil, nil
 }

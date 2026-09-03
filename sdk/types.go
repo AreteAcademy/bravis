@@ -15,8 +15,8 @@ type (
 	// Envelope is one extracted record plus its provenance.
 	Envelope = core.Envelope
 
-	// Fonte describes where and how to extract.
-	Fonte = core.Fonte
+	// Source describes where and how to extract.
+	Source = core.Source
 
 	// RetryConfig tunes the backoff between attempts.
 	RetryConfig = core.RetryConfig
@@ -24,41 +24,54 @@ type (
 	// Limiter throttles outbound requests; *rate.Limiter satisfies it.
 	Limiter = core.Limiter
 
-	// LoadConfig is the low-level loader configuration. Prefer Destino.
+	// LoadConfig is the low-level loader configuration. Prefer Target.
 	LoadConfig = core.LoadConfig
 
 	// LoadOption configures a LoadConfig.
 	LoadOption = core.LoadOption
 
-	// LoadResult is the low-level load outcome. Prefer Resultado.
+	// LoadResult is the low-level load outcome. Prefer Result.
 	LoadResult = core.LoadResult
 
-	// Formato names the wire format of a response.
-	Formato = core.Formato
+	// Format names the wire format of a response.
+	Format = core.Format
+
+	// Driver selects which implementation carries out an extract or a load.
+	Driver = core.Driver
 
 	// Dedup names how a load avoids writing a record twice.
 	Dedup = core.Dedup
 )
 
-// Wire formats accepted by Fonte.Formato.
+// Drivers. One of each exists today; an empty Driver takes the default for
+// its side, so nothing has to be set for the common case.
 const (
-	FormatoJSON   = core.FormatoJSON
-	FormatoNDJSON = core.FormatoNDJSON
-	FormatoCSV    = core.FormatoCSV
-	FormatoXML    = core.FormatoXML
+	// DriverHTTP fetches over HTTP. The default for a Source.
+	DriverHTTP = core.DriverHTTP
+
+	// DriverBigQuery writes to BigQuery. The default for a Target.
+	DriverBigQuery = core.DriverBigQuery
 )
 
-// Deduplication modes accepted by Destino.Dedup.
+// Wire formats accepted by Source.Format.
 const (
-	// DedupNenhum appends; the bronze layer deduplicates on ingestion_id.
-	DedupNenhum = core.DedupNenhum
+	FormatJSON   = core.FormatJSON
+	FormatNDJSON = core.FormatNDJSON
+	FormatCSV    = core.FormatCSV
+	FormatXML    = core.FormatXML
+)
+
+// Deduplication modes accepted by Target.Dedup.
+const (
+	// DedupNone appends; the bronze layer deduplicates on ingestion_id.
+	DedupNone = core.DedupNone
 
 	// DedupMerge stages and MERGEs on ingestion_id, so a re-run is a no-op.
 	// It costs one scan of the destination per load.
 	DedupMerge = core.DedupMerge
 )
 
-// Low-level load options, re-exported. Destino covers the common cases.
+// Low-level load options, re-exported. Target covers the common cases.
 var (
 	WithProjectID         = core.WithProjectID
 	WithDataset           = core.WithDataset
@@ -69,4 +82,7 @@ var (
 	WithMetadata          = core.WithMetadata
 	WithEnvelopeColumns   = core.WithEnvelopeColumns
 	WithMetadataNamespace = core.WithMetadataNamespace
+	WithDriver            = core.WithDriver
+	WithCreateTable       = core.WithCreateTable
+	WithDedup             = core.WithDedup
 )

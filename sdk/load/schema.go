@@ -11,14 +11,14 @@ import (
 	"google.golang.org/api/googleapi"
 )
 
-// esquemaLanding is the six-column landing contract, the only schema the SDK
+// landingSchema is the six-column landing contract, the only schema the SDK
 // knows well enough to create.
 //
 // Partitioning and clustering ship by default and are not optional: an
 // unpartitioned landing table costs a full scan on every MERGE the bronze
 // layer runs. Measured on a consumer, one entity spent 58.96 GiB of MERGE
 // against 0.0 GiB of SELECT.
-func esquemaLanding() bigquery.Schema {
+func landingSchema() bigquery.Schema {
 	return bigquery.Schema{
 		{Name: "ingestion_id", Type: bigquery.StringFieldType, Required: true},
 		{Name: "ingestion_loaded_at", Type: bigquery.TimestampFieldType, Required: true},
@@ -29,9 +29,9 @@ func esquemaLanding() bigquery.Schema {
 	}
 }
 
-func metadataLanding() *bigquery.TableMetadata {
+func landingMetadata() *bigquery.TableMetadata {
 	return &bigquery.TableMetadata{
-		Schema: esquemaLanding(),
+		Schema: landingSchema(),
 		TimePartitioning: &bigquery.TimePartitioning{
 			Type:  bigquery.DayPartitioningType,
 			Field: "ingestion_loaded_at",
@@ -42,93 +42,93 @@ func metadataLanding() *bigquery.TableMetadata {
 	}
 }
 
-// garantirTabela makes sure the destination exists and matches the contract.
+// ensureTable makes sure the destination exists and matches the contract.
 //
 // It creates the table when absent and, when present, compares and refuses on
 // any difference. It never alters: a loader that can ALTER or DROP on its own
 // is a loader that can erase history, and no convenience is worth that.
 //
 // Reports whether it created the table.
-func (l *Loader) garantirTabela(ctx context.Context, table *bigquery.Table) (bool, error) {
+func (l *Loader) ensureTable(ctx context.Context, table *bigquery.Table) (bool, error) {
 	md, err := table.Metadata(ctx)
 	if err == nil {
-		return false, conferirEsquema(table, md)
+		return false, checkSchema(table, md)
 	}
 
-	if !ehNaoEncontrado(err) {
-		return false, fmt.Errorf("consultando %s: %w", nomeDe(table), err)
+	if !isNotFound(err) {
+		return false, fmt.Errorf("looking up %s: %w", nameOf(table), err)
 	}
 
-	if !l.cfg.CriarTabela {
-		return false, fmt.Errorf("tabela %s não existe. Crie-a, ou use CriarTabela para o SDK criá-la "+
-			"com o contrato de seis colunas", nomeDe(table))
+	if !l.cfg.CreateTable {
+		return false, fmt.Errorf("table %s does not exist. Create it, or set CreateTable to let the SDK "+
+			"create it with the six-column contract", nameOf(table))
 	}
 	if !l.cfg.WriteEnvelopeColumns {
-		return false, fmt.Errorf("CriarTabela exige WriteEnvelopeColumns: o SDK só conhece o schema " +
-			"do contrato de landing, não o seu")
+		return false, fmt.Errorf("CreateTable requires WriteEnvelopeColumns: the SDK only knows the " +
+			"landing contract schema, not yours")
 	}
 
-	if err := table.Create(ctx, metadataLanding()); err != nil {
+	if err := table.Create(ctx, landingMetadata()); err != nil {
 		// Another process may have created it between our check and this call.
-		if md, segunda := table.Metadata(ctx); segunda == nil {
-			return false, conferirEsquema(table, md)
+		if md, second := table.Metadata(ctx); second == nil {
+			return false, checkSchema(table, md)
 		}
-		return false, fmt.Errorf("criando %s: %w", nomeDe(table), err)
+		return false, fmt.Errorf("creating %s: %w", nameOf(table), err)
 	}
 
 	return true, nil
 }
 
-// conferirEsquema refuses a table that does not match the contract, naming the
+// checkSchema refuses a table that does not match the contract, naming the
 // difference. A vague "schema mismatch" costs an investigation; the caller
 // needs to know which column is wrong.
-func conferirEsquema(table *bigquery.Table, md *bigquery.TableMetadata) error {
-	esperado := esquemaLanding()
+func checkSchema(table *bigquery.Table, md *bigquery.TableMetadata) error {
+	expected := landingSchema()
 
-	tipos := map[string]bigquery.FieldType{}
+	types := map[string]bigquery.FieldType{}
 	for _, f := range md.Schema {
-		tipos[f.Name] = f.Type
+		types[f.Name] = f.Type
 	}
 
-	var faltando, divergentes []string
-	for _, f := range esperado {
-		tipo, ok := tipos[f.Name]
+	var missing, differing []string
+	for _, f := range expected {
+		tipo, ok := types[f.Name]
 		if !ok {
-			faltando = append(faltando, f.Name)
+			missing = append(missing, f.Name)
 			continue
 		}
 		if tipo != f.Type {
-			divergentes = append(divergentes, fmt.Sprintf("%s é %s, esperado %s", f.Name, tipo, f.Type))
+			differing = append(differing, fmt.Sprintf("%s is %s, expected %s", f.Name, tipo, f.Type))
 		}
 	}
 
-	if len(faltando) == 0 && len(divergentes) == 0 {
+	if len(missing) == 0 && len(differing) == 0 {
 		return nil
 	}
 
 	var b strings.Builder
-	fmt.Fprintf(&b, "tabela %s existe mas não bate com o contrato de landing", nomeDe(table))
-	if len(faltando) > 0 {
-		sort.Strings(faltando)
-		fmt.Fprintf(&b, "; colunas faltando: %s", strings.Join(faltando, ", "))
+	fmt.Fprintf(&b, "table %s exists but does not match the landing contract", nameOf(table))
+	if len(missing) > 0 {
+		sort.Strings(missing)
+		fmt.Fprintf(&b, "; missing columns: %s", strings.Join(missing, ", "))
 	}
-	if len(divergentes) > 0 {
-		sort.Strings(divergentes)
-		fmt.Fprintf(&b, "; tipos divergentes: %s", strings.Join(divergentes, "; "))
+	if len(differing) > 0 {
+		sort.Strings(differing)
+		fmt.Fprintf(&b, "; types differing: %s", strings.Join(differing, "; "))
 	}
-	b.WriteString(". O SDK não altera tabela existente — ajuste-a, ou aponte para outra")
+	b.WriteString(". The SDK never alters an existing table -- fix it, or point somewhere else")
 
 	return fmt.Errorf("%s", b.String())
 }
 
-func nomeDe(t *bigquery.Table) string {
+func nameOf(t *bigquery.Table) string {
 	return fmt.Sprintf("%s.%s", t.DatasetID, t.TableID)
 }
 
-// ehNaoEncontrado distinguishes "the table is not there" from "we could not
+// isNotFound distinguishes "the table is not there" from "we could not
 // ask" -- creating a table because of a permissions blip would be wrong, so
 // this checks for a 404 specifically rather than any failure.
-func ehNaoEncontrado(err error) bool {
+func isNotFound(err error) bool {
 	if err == nil {
 		return false
 	}

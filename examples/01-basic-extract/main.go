@@ -17,7 +17,7 @@ func main() {
 	flag.Parse()
 
 	// The first row names the columns; pass NoHeader to key rows positionally.
-	lines, err := extract.CSV(context.Background(), sdk.Fonte{URL: *url})
+	lines, err := extract.CSV(context.Background(), sdk.Source{URL: *url})
 	if err != nil {
 		log.Fatalf("extract: %v", err)
 	}

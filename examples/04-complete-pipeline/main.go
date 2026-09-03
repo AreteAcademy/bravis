@@ -44,7 +44,7 @@ func main() {
 
 	// Follows Link: rel="next" until the API stops offering one. Use
 	// CursorKey or OffsetKey instead when the API paginates in the body.
-	lines, err := extract.NDJSON(ctx, sdk.Fonte{
+	lines, err := extract.NDJSON(ctx, sdk.Source{
 		URL:          *source,
 		FollowLinks:  true,
 		TotalTimeout: 30 * time.Minute,

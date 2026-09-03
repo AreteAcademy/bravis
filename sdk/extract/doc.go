@@ -2,7 +2,7 @@
 //
 // # Basic usage
 //
-//	lines, err := extract.CSV(ctx, extract.Fonte{
+//	lines, err := extract.CSV(ctx, extract.Source{
 //		URL: "https://example.gov/api/data.csv",
 //	})
 //	if err != nil {

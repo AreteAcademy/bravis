@@ -36,7 +36,7 @@ func TestXMLDecodesRepeatedChildren(t *testing.T) {
 	}))
 	defer server.Close()
 
-	lines, err := XML(context.Background(), core.Fonte{URL: server.URL})
+	lines, err := XML(context.Background(), core.Source{URL: server.URL})
 	if err != nil {
 		t.Fatalf("XML() error: %v", err)
 	}
@@ -61,7 +61,7 @@ func TestXMLDecodesRepeatedChildren(t *testing.T) {
 func TestXMLIsNoLongerUnsupported(t *testing.T) {
 	// XML() used to return a sequence that immediately failed with
 	// "unsupported format: xml" because NewDecoder had no xml case.
-	if d := NewDecoder(nil, core.Fonte{Format: "xml"}); d == nil {
+	if d := NewDecoder(nil, core.Source{Format: "xml"}); d == nil {
 		t.Fatal("NewDecoder returned nil for xml")
 	}
 }
@@ -92,7 +92,7 @@ func TestRateLimiterIsConsulted(t *testing.T) {
 	lim := &countingLimiter{delay: 150 * time.Millisecond}
 	start := time.Now()
 
-	lines, err := NDJSON(context.Background(), core.Fonte{URL: server.URL, RateLimiter: lim})
+	lines, err := NDJSON(context.Background(), core.Source{URL: server.URL, RateLimiter: lim})
 	if err != nil {
 		t.Fatalf("NDJSON() error: %v", err)
 	}
@@ -115,7 +115,7 @@ func TestRateLimiterErrorAborts(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // limiter will see a dead context
 
-	_, err := NDJSON(ctx, core.Fonte{URL: server.URL, RateLimiter: &countingLimiter{}})
+	_, err := NDJSON(ctx, core.Source{URL: server.URL, RateLimiter: &countingLimiter{}})
 	if err == nil {
 		t.Fatal("Expected the limiter's error to abort the fetch")
 	}
@@ -142,7 +142,7 @@ func TestPaginationFollowsLinkHeader(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	lines, err := NDJSON(context.Background(), core.Fonte{URL: srv.URL, FollowLinks: true})
+	lines, err := NDJSON(context.Background(), core.Source{URL: srv.URL, FollowLinks: true})
 	if err != nil {
 		t.Fatalf("NDJSON() error: %v", err)
 	}
@@ -186,7 +186,7 @@ func TestPaginationFollowsCursor(t *testing.T) {
 	}))
 	defer server.Close()
 
-	lines, err := JSON(context.Background(), core.Fonte{
+	lines, err := JSON(context.Background(), core.Source{
 		URL:       server.URL,
 		CursorKey: "next_page",
 		DataKey:   "results",
@@ -209,7 +209,7 @@ func TestCursorStopsWhenAbsent(t *testing.T) {
 	}))
 	defer server.Close()
 
-	lines, err := JSON(context.Background(), core.Fonte{
+	lines, err := JSON(context.Background(), core.Source{
 		URL: server.URL, CursorKey: "next_page", DataKey: "results",
 	})
 	if err != nil {
@@ -239,7 +239,7 @@ func TestPaginationAdvancesOffset(t *testing.T) {
 	}))
 	defer server.Close()
 
-	lines, err := NDJSON(context.Background(), core.Fonte{
+	lines, err := NDJSON(context.Background(), core.Source{
 		URL: server.URL, OffsetKey: "offset", PageSize: 2,
 	})
 	if err != nil {
@@ -270,7 +270,7 @@ func TestMaxPagesStopsRunawayPagination(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	lines, err := NDJSON(context.Background(), core.Fonte{
+	lines, err := NDJSON(context.Background(), core.Source{
 		URL: srv.URL, FollowLinks: true, MaxPages: 5,
 	})
 	if err != nil {
@@ -328,7 +328,7 @@ func TestPaginationStopsOnRepeatedCursor(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	lines, err := NDJSON(context.Background(), core.Fonte{
+	lines, err := NDJSON(context.Background(), core.Source{
 		URL: srv.URL, FollowLinks: true, MaxPages: 500,
 	})
 	if err != nil {
@@ -355,7 +355,7 @@ func TestPaginationDistinctCursorsKeepGoing(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	lines, err := NDJSON(context.Background(), core.Fonte{URL: srv.URL, FollowLinks: true})
+	lines, err := NDJSON(context.Background(), core.Source{URL: srv.URL, FollowLinks: true})
 	if err != nil {
 		t.Fatalf("NDJSON() error: %v", err)
 	}

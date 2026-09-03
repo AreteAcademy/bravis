@@ -47,10 +47,10 @@ func (e *Envelope) IngestionID() (string, error) {
 type Dedup string
 
 const (
-	// DedupNenhum appends. Two runs over the same window write the same rows
+	// DedupNone appends. Two runs over the same window write the same rows
 	// twice, and the bronze layer deduplicates on ingestion_id. This is the
 	// default because it is the only mode that costs nothing.
-	DedupNenhum Dedup = "nenhum"
+	DedupNone Dedup = "none"
 
 	// DedupMerge stages into a temporary table and MERGEs on ingestion_id, so
 	// a re-run is a no-op. It costs one scan of the destination per load, so
@@ -91,18 +91,22 @@ type LoadConfig struct {
 	DeleteAfterLoad bool   // delete staged file after successful load; default: true
 	AddMetadata     bool   // fold _bravis_* fields into the payload; default: false
 
+	// Driver selects the destination. Empty means DriverBigQuery, the only
+	// one implemented today.
+	Driver Driver
+
 	// Dedup selects how repeated records are handled; see Dedup.
-	// Zero value is DedupNenhum.
+	// Zero value is DedupNone.
 	Dedup Dedup
 
-	// CriarTabela lets the loader create the destination table when it does
+	// CreateTable lets the loader create the destination table when it does
 	// not exist. Only possible alongside WriteEnvelopeColumns, since that is
 	// the only case where the SDK knows the schema.
 	//
 	// It never alters an existing table: a table whose schema differs is an
 	// error naming the difference. A loader that can ALTER or DROP is a
 	// loader that can erase history.
-	CriarTabela bool
+	CreateTable bool
 
 	// WriteEnvelopeColumns wraps each payload in the six-column landing
 	// contract instead of writing it flat:
@@ -118,32 +122,51 @@ type LoadConfig struct {
 	SourceKeyField       string // which field in payload contains the source key; if empty, uses Envelope.SourceKey
 }
 
-// Formato names the wire format of a response.
-type Formato string
+// Driver selects which implementation carries out an extract or a load.
+//
+// Only one of each exists today; the type is here so that adding a second
+// does not change any signature. An empty Driver takes the default for its
+// side, so nothing has to be set for the common case.
+type Driver string
 
 const (
-	FormatoJSON   Formato = "json"
-	FormatoNDJSON Formato = "ndjson"
-	FormatoCSV    Formato = "csv"
-	FormatoXML    Formato = "xml"
+	// DriverHTTP fetches over HTTP. The default for a Source.
+	DriverHTTP Driver = "http"
+
+	// DriverBigQuery writes to BigQuery. The default for a Target.
+	DriverBigQuery Driver = "bigquery"
 )
 
-// ExtractOption is a functional option for extract.Fonte.
-type ExtractOption func(*Fonte)
+// Format names the wire format of a response.
+type Format string
+
+const (
+	FormatJSON   Format = "json"
+	FormatNDJSON Format = "ndjson"
+	FormatCSV    Format = "csv"
+	FormatXML    Format = "xml"
+)
+
+// ExtractOption is a functional option for a Source.
+type ExtractOption func(*Source)
 
 // Limiter throttles outbound requests. It is satisfied by
 // *golang.org/x/time/rate.Limiter, so callers can pass one directly without
 // the SDK taking on the dependency:
 //
-//	fonte.RateLimiter = rate.NewLimiter(rate.Every(time.Second), 1)
+//	source.RateLimiter = rate.NewLimiter(rate.Every(time.Second), 1)
 //
 // Any type with a matching Wait works too.
 type Limiter interface {
 	Wait(ctx context.Context) error
 }
 
-// Fonte describes the source for extraction.
-type Fonte struct {
+// Source describes where and how to extract.
+type Source struct {
+	// Driver selects the transport. Empty means DriverHTTP, the only one
+	// implemented today.
+	Driver Driver
+
 	URL          string    // required
 	Method       string    // default: GET
 	Body         io.Reader // for POST/PUT
@@ -152,16 +175,23 @@ type Fonte struct {
 	TotalTimeout time.Duration // total; default: 5 minutes
 	RetryConfig  *RetryConfig  // nil uses defaults
 	RateLimiter  Limiter       // throttles each attempt; nil disables
-	Guard        func(status int, body []byte) error
-	Format       string // "json", "ndjson", "csv", "xml"; auto-detected if omitted
 
-	// Formato, Guarda and Expandir are the sdk.Extract spelling of the three
-	// above. Format and Guard keep working for sdk/extract callers.
-	Formato  Formato
-	Guarda   func(status int, body []byte) error
-	Expandir func(payload any) ([]any, error)
-	NoHeader bool // for CSV: treat every row as data with field_N keys.
-	// Default (false) uses the first row as column names. Ignored for other formats.
+	// Guard inspects a 200 before it is decoded, so a body that is not data
+	// fails loudly instead of landing in the warehouse. See RejectIf.
+	Guard func(status int, body []byte) error
+
+	// Format of the response. Empty means FormatJSON.
+	Format Format
+
+	// Expand turns one decoded document into the records it holds, for the
+	// common case of an API that wraps its readings. Nil means each decoded
+	// document is one record. See ParallelArrays and ArrayAt.
+	Expand func(payload any) ([]any, error)
+
+	// NoHeader, for CSV: treat every row as data with field_N keys. The
+	// default uses the first row as column names. Ignored for other formats.
+	NoHeader bool
+
 	// Pagination. At most one strategy applies, checked in this order:
 	//
 	//   FollowLinks  follow RFC 8288 Link headers with rel="next"
@@ -227,6 +257,13 @@ func WithThresholdForGCS(threshold int) LoadOption {
 	}
 }
 
+// WithDriver selects the destination implementation.
+func WithDriver(d Driver) LoadOption {
+	return func(cfg *LoadConfig) {
+		cfg.Driver = d
+	}
+}
+
 // WithDedup selects the deduplication mode.
 func WithDedup(d Dedup) LoadOption {
 	return func(cfg *LoadConfig) {
@@ -234,10 +271,10 @@ func WithDedup(d Dedup) LoadOption {
 	}
 }
 
-// WithCriarTabela lets the loader create the landing table when absent.
-func WithCriarTabela(enabled bool) LoadOption {
+// WithCreateTable lets the loader create the landing table when absent.
+func WithCreateTable(enabled bool) LoadOption {
 	return func(cfg *LoadConfig) {
-		cfg.CriarTabela = enabled
+		cfg.CreateTable = enabled
 	}
 }
 

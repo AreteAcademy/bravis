@@ -17,20 +17,20 @@ Requires Go 1.23 or newer (the SDK streams rows as `iter.Seq2`).
 > not exist, so it fails to build for everyone. The Go module proxy is
 > immutable and cannot be corrected after the fact. Start at `v0.1.1`.
 
-## Duas chamadas
+## Two calls
 
 ```go
-dados, err := sdk.Extract(ctx, sdk.Fonte{
+dados, err := sdk.Extract(ctx, sdk.Source{
 	URL:      "https://api.open-meteo.com/v1/forecast?...",
-	Guarda:   sdk.RecusarSe("error"),
-	Expandir: sdk.ArraysParalelos("hourly", "time", "temperature_2m"),
+	Guard:   sdk.RejectIf("error"),
+	Expand: sdk.ParallelArrays("hourly", "time", "temperature_2m"),
 })
 
-res, err := sdk.Load(ctx, dados, sdk.Destino{
+res, err := sdk.Load(ctx, dados, sdk.Target{
 	Provider: "open_meteo",
 	Entity:   "hourly_temperature",
-	Chave:    sdk.Chave("latitude", "longitude", "time"),
-	Quando:   sdk.Campo("time"),
+	Key:    sdk.Key("latitude", "longitude", "time"),
+	When:   sdk.Field("time"),
 })
 ```
 
@@ -38,17 +38,25 @@ Everything between those two calls that is not specific to the vendor lives in
 the SDK: config, retry, pagination, expansion, provenance, table creation,
 deduplication and the result you log.
 
+`Driver` selects the implementation on each side — `DriverHTTP` for a Source,
+`DriverBigQuery` for a Target. One of each exists today, and an empty Driver
+takes the default, so nothing has to be set for the common case.
+
+> **`Driver` is not `Provider`.** Driver is which system carries the rows;
+> Provider is which vendor the data came from. Only Provider feeds
+> `ingestion_id`.
+
 Or the whole fetcher as a value, which gets flags, `-dry-run`, logging and the
 exit code for free:
 
 ```go
 func main() {
-	sdk.Rodar(sdk.Pipeline{
-		Fonte:   sdk.Fonte{URL: "...", Expandir: sdk.ArrayEm("results")},
-		Destino: sdk.Destino{
+	sdk.Run(sdk.Pipeline{
+		Source:   sdk.Source{URL: "...", Expand: sdk.ArrayAt("results")},
+		Target: sdk.Target{
 			Provider: "example", Entity: "events",
-			Chave:  sdk.Chave("id"),
-			Quando: sdk.Campo("created_at"),
+			Key:  sdk.Key("id"),
+			When: sdk.Field("created_at"),
 		},
 	})
 }
@@ -65,9 +73,9 @@ to stay possible.
 Resolved in this order: what you set explicitly, then the environment, then the
 SDK default, then an error when there is no sensible default.
 
-| variável | default |
+| variable | default |
 |---|---|
-| `GOOGLE_PROJECT_ID` | — (erro) |
+| `GOOGLE_PROJECT_ID` | — (error) |
 | `BRAVIS_SDK_DATASET` | `landing` |
 | `BRAVIS_SDK_STAGING_BUCKET` | `<projeto>-bravis-staging` |
 | `BRAVIS_SDK_LOG_LEVEL` | `info` |
@@ -78,7 +86,7 @@ to the wrong dataset in the pod.
 
 ### Deduplication
 
-`Destino.Dedup` defaults to appending, which costs nothing. `sdk.DedupMerge`
+`Target.Dedup` defaults to appending, which costs nothing. `sdk.DedupMerge`
 stages into a temporary table and MERGEs on `ingestion_id`, so re-running the
 same window is a no-op — at the cost of one scan of the destination per load,
 which is why it is never enabled on your behalf.
@@ -94,7 +102,7 @@ It never alters an existing table: one that does not match the contract is an
 error naming the differing column. A loader that can ALTER is a loader that can
 erase history.
 
-> **`Chave` is frozen.** The field order you give it and the `|` separator both
+> **`Key` is frozen.** The field order you give it and the `|` separator both
 > feed `source_key`, which feeds `ingestion_id`. Change either and the same
 > reading lands twice and stops matching the row a Python fetcher writes for it.
 
@@ -115,7 +123,7 @@ import (
 
 func main() {
 	ctx := context.Background()
-	lines, err := extract.CSV(ctx, sdk.Fonte{
+	lines, err := extract.CSV(ctx, sdk.Source{
 		URL: "https://example.gov/api/data.csv",
 	})
 	if err != nil {
@@ -187,7 +195,7 @@ header and N data rows yields N Envelopes keyed by those names:
 // name,age
 // Alice,30
 // Bob,25
-lines, _ := extract.CSV(ctx, sdk.Fonte{URL: url})
+lines, _ := extract.CSV(ctx, sdk.Source{URL: url})
 // -> {name: Alice, age: 30}
 // -> {name: Bob,   age: 25}
 ```
@@ -196,7 +204,7 @@ Set `NoHeader: true` when the file has no header row. No row is then treated as
 special and every line is keyed positionally:
 
 ```go
-lines, _ := extract.CSV(ctx, sdk.Fonte{URL: url, NoHeader: true})
+lines, _ := extract.CSV(ctx, sdk.Source{URL: url, NoHeader: true})
 // -> {field_0: name,  field_1: age}
 // -> {field_0: Alice, field_1: 30}
 // -> {field_0: Bob,   field_1: 25}
@@ -210,19 +218,19 @@ cannot spin forever.
 
 ```go
 // Link: <...>; rel="next"
-extract.NDJSON(ctx, sdk.Fonte{URL: url, FollowLinks: true})
+extract.NDJSON(ctx, sdk.Source{URL: url, FollowLinks: true})
 
 // {"results": [...], "next_page": "abc"} -- the cursor is sent back as the
 // query parameter of the same name, and DataKey says where the rows live.
-extract.JSON(ctx, sdk.Fonte{URL: url, CursorKey: "next_page", DataKey: "results"})
+extract.JSON(ctx, sdk.Source{URL: url, CursorKey: "next_page", DataKey: "results"})
 
 // ?offset=0, ?offset=100, ... until a page comes back empty
-extract.NDJSON(ctx, sdk.Fonte{URL: url, OffsetKey: "offset", PageSize: 100})
+extract.NDJSON(ctx, sdk.Source{URL: url, OffsetKey: "offset", PageSize: 100})
 ```
 
 ## Rate limiting
 
-`Fonte.RateLimiter` is any type with `Wait(ctx) error`, which
+`Source.RateLimiter` is any type with `Wait(ctx) error`, which
 `*golang.org/x/time/rate.Limiter` satisfies as-is — so you get it without the
 SDK taking on the dependency:
 
@@ -368,7 +376,7 @@ if err != nil {
 
 ### Extract
 ```go
-fonte := sdk.Fonte{
+fonte := sdk.Source{
 	URL:          "https://api.example.com/data",
 	Method:       "GET",           // default
 	Timeout:      30 * time.Second, // per attempt

@@ -35,7 +35,7 @@ func main() {
 		Level: slog.LevelDebug,
 	})))
 
-	fonte := sdk.Fonte{
+	fonte := sdk.Source{
 		URL:    "https://api.example.com/v1/transactions",
 		Method: "GET",
 		Header: map[string][]string{

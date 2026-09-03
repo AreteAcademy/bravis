@@ -14,7 +14,7 @@ import (
 // drift away from the real API the way the README once did.
 
 func ExampleCSV() {
-	lines, err := extract.CSV(context.Background(), sdk.Fonte{
+	lines, err := extract.CSV(context.Background(), sdk.Source{
 		URL: "https://example.gov/data.csv",
 	})
 	if err != nil {
@@ -32,7 +32,7 @@ func ExampleCSV() {
 // The first CSV row names the columns by default. Pass NoHeader when the file
 // has none, and every line is keyed field_0, field_1, ...
 func ExampleCSV_noHeader() {
-	lines, _ := extract.CSV(context.Background(), sdk.Fonte{
+	lines, _ := extract.CSV(context.Background(), sdk.Source{
 		URL:      "https://example.gov/headerless.csv",
 		NoHeader: true,
 	})
@@ -44,7 +44,7 @@ func ExampleCSV_noHeader() {
 // Retry, guard and the two timeouts are what make an unattended pipeline
 // survive a flaky upstream.
 func ExampleNDJSON_resilient() {
-	fonte := sdk.Fonte{
+	source := sdk.Source{
 		URL:          "https://api.example.com/events",
 		Timeout:      15 * time.Second, // per attempt
 		TotalTimeout: 5 * time.Minute,  // whole walk
@@ -62,14 +62,14 @@ func ExampleNDJSON_resilient() {
 		},
 	}
 
-	lines, _ := extract.NDJSON(context.Background(), fonte)
+	lines, _ := extract.NDJSON(context.Background(), source)
 	for range lines {
 	}
 }
 
 // Follow RFC 8288 Link headers until the API stops offering rel="next".
 func ExampleNDJSON_pagination() {
-	lines, _ := extract.NDJSON(context.Background(), sdk.Fonte{
+	lines, _ := extract.NDJSON(context.Background(), sdk.Source{
 		URL:         "https://api.example.com/events",
 		FollowLinks: true,
 		MaxPages:    50,
@@ -81,7 +81,7 @@ func ExampleNDJSON_pagination() {
 // A wrapped page: {"results": [...], "next_page": "abc"}. The cursor goes
 // back as a query parameter of the same name; DataKey says where rows live.
 func ExampleJSON_cursor() {
-	lines, _ := extract.JSON(context.Background(), sdk.Fonte{
+	lines, _ := extract.JSON(context.Background(), sdk.Source{
 		URL:       "https://api.example.com/events",
 		CursorKey: "next_page",
 		DataKey:   "results",
@@ -92,7 +92,7 @@ func ExampleJSON_cursor() {
 
 // XML turns each repeated element under the root into one Envelope.
 func ExampleXML() {
-	lines, _ := extract.XML(context.Background(), sdk.Fonte{
+	lines, _ := extract.XML(context.Background(), sdk.Source{
 		URL: "https://example.gov/feed.xml",
 	})
 	for env := range lines {

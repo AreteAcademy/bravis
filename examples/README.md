@@ -63,9 +63,9 @@ a memória ficar plana independente do tamanho total.
 As três estratégias de paginação:
 
 ```go
-sdk.Fonte{URL: url, FollowLinks: true}                              // Link header
-sdk.Fonte{URL: url, CursorKey: "next_page", DataKey: "results"}     // cursor no corpo
-sdk.Fonte{URL: url, OffsetKey: "offset", PageSize: 100}             // offset
+sdk.Source{URL: url, FollowLinks: true}                              // Link header
+sdk.Source{URL: url, CursorKey: "next_page", DataKey: "results"}     // cursor no corpo
+sdk.Source{URL: url, OffsetKey: "offset", PageSize: 100}             // offset
 ```
 
 Todas param em `MaxPages` (mil por padrão), para um servidor que sempre anuncia

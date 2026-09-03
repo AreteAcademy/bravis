@@ -257,16 +257,16 @@ func TestIntegrationCriaTabelaDeLanding(t *testing.T) {
 	}
 	defer func() { _ = client.Close() }()
 
-	nome := fmt.Sprintf("it_criada_%d", time.Now().UnixNano())
-	table := client.Dataset(env.dataset).Table(nome)
+	name := fmt.Sprintf("it_criada_%d", time.Now().UnixNano())
+	table := client.Dataset(env.dataset).Table(name)
 	t.Cleanup(func() { _ = table.Delete(context.Background()) })
 
 	loader, err := New(ctx, nil,
 		core.WithProjectID(env.project),
 		core.WithDataset(env.dataset),
-		core.WithTable(nome),
+		core.WithTable(name),
 		core.WithEnvelopeColumns(true),
-		core.WithCriarTabela(true),
+		core.WithCreateTable(true),
 	)
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -277,7 +277,7 @@ func TestIntegrationCriaTabelaDeLanding(t *testing.T) {
 		t.Fatalf("Load: %v", err)
 	}
 	if !res.TableCreated {
-		t.Error("o resultado tem de dizer que criou a tabela")
+		t.Error("the result must say it created the table")
 	}
 
 	md, err := table.Metadata(ctx)
@@ -288,13 +288,13 @@ func TestIntegrationCriaTabelaDeLanding(t *testing.T) {
 	// Partitioning is not decoration: an unpartitioned landing table costs a
 	// full scan on every MERGE the bronze layer runs.
 	if md.TimePartitioning == nil || md.TimePartitioning.Field != "ingestion_loaded_at" {
-		t.Errorf("tabela criada sem partição por ingestion_loaded_at: %+v", md.TimePartitioning)
+		t.Errorf("table created without partitioning on ingestion_loaded_at: %+v", md.TimePartitioning)
 	}
 	if md.Clustering == nil || len(md.Clustering.Fields) != 2 {
-		t.Errorf("tabela criada sem clustering por provider/entity: %+v", md.Clustering)
+		t.Errorf("table created without clustering on provider/entity: %+v", md.Clustering)
 	}
 	if len(md.Schema) != 6 {
-		t.Errorf("esperado 6 colunas, veio %d", len(md.Schema))
+		t.Errorf("expected 6 columns, got %d", len(md.Schema))
 	}
 }
 
@@ -316,7 +316,7 @@ func TestIntegrationRecusaTabelaDivergente(t *testing.T) {
 		core.WithDataset(env.dataset),
 		core.WithTable(table),
 		core.WithEnvelopeColumns(true),
-		core.WithCriarTabela(true),
+		core.WithCreateTable(true),
 	)
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -324,11 +324,11 @@ func TestIntegrationRecusaTabelaDivergente(t *testing.T) {
 
 	_, err = loader.Load(ctx, envelopes(1)...)
 	if err == nil {
-		t.Fatal("carregar numa tabela que não bate com o contrato tem de falhar")
+		t.Fatal("loading into a table that does not match the contract must fail")
 	}
-	// O erro precisa dizer qual coluna está errada, senão custa investigação.
+	// The error must say which column is wrong, or it costs an investigation.
 	if !strings.Contains(err.Error(), "provider") {
-		t.Errorf("o erro deveria nomear as colunas faltando: %v", err)
+		t.Errorf("the error should name the missing columns: %v", err)
 	}
 }
 
@@ -344,48 +344,48 @@ func TestIntegrationMergeNaoDobra(t *testing.T) {
 	}
 	defer func() { _ = client.Close() }()
 
-	nome := fmt.Sprintf("it_merge_%d", time.Now().UnixNano())
-	table := client.Dataset(env.dataset).Table(nome)
+	name := fmt.Sprintf("it_merge_%d", time.Now().UnixNano())
+	table := client.Dataset(env.dataset).Table(name)
 	t.Cleanup(func() { _ = table.Delete(context.Background()) })
 
 	loader, err := New(ctx, nil,
 		core.WithProjectID(env.project),
 		core.WithDataset(env.dataset),
-		core.WithTable(nome),
+		core.WithTable(name),
 		core.WithEnvelopeColumns(true),
-		core.WithCriarTabela(true),
+		core.WithCreateTable(true),
 		core.WithDedup(core.DedupMerge),
 	)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
 
-	lote := envelopes(24)
+	batch := envelopes(24)
 
-	primeira, err := loader.Load(ctx, lote...)
+	first, err := loader.Load(ctx, batch...)
 	if err != nil {
-		t.Fatalf("primeira carga: %v", err)
+		t.Fatalf("first load: %v", err)
 	}
-	if primeira.RowsLoaded != 24 {
-		t.Errorf("primeira carga escreveu %d linhas, esperado 24", primeira.RowsLoaded)
+	if first.RowsLoaded != 24 {
+		t.Errorf("the first load wrote %d rows, expected 24", first.RowsLoaded)
 	}
 
-	segunda, err := loader.Load(ctx, lote...)
+	second, err := loader.Load(ctx, batch...)
 	if err != nil {
-		t.Fatalf("segunda carga: %v", err)
+		t.Fatalf("second load: %v", err)
 	}
-	if segunda.RowsLoaded != 0 {
-		t.Errorf("a segunda carga escreveu %d linhas; o merge deveria ignorar todas", segunda.RowsLoaded)
+	if second.RowsLoaded != 0 {
+		t.Errorf("the second load wrote %d rows; the merge should have ignored them all", second.RowsLoaded)
 	}
-	if segunda.RowsIgnored != 24 {
-		t.Errorf("RowsIgnored = %d, esperado 24", segunda.RowsIgnored)
+	if second.RowsIgnored != 24 {
+		t.Errorf("RowsIgnored = %d, expected 24", second.RowsIgnored)
 	}
-	if segunda.Dedup != core.DedupMerge {
-		t.Errorf("o resultado tem de dizer qual dedup rodou: %q", segunda.Dedup)
+	if second.Dedup != core.DedupMerge {
+		t.Errorf("the result must say which dedup ran: %q", second.Dedup)
 	}
 
-	// A prova que importa: sem dedup seriam 48.
-	if got := countRows(ctx, t, client, env, nome); got != 24 {
-		t.Errorf("após duas cargas do mesmo lote a tabela tem %d linhas, esperado 24", got)
+	// The proof that matters: without dedup this would be 48.
+	if got := countRows(ctx, t, client, env, name); got != 24 {
+		t.Errorf("after loading the same batch twice the table has %d rows, expected 24", got)
 	}
 }

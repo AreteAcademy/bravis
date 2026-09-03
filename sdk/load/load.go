@@ -98,9 +98,17 @@ func resolveConfig(cfg *core.LoadConfig, opts ...core.LoadOption) (*core.LoadCon
 		return nil, err
 	}
 
+	switch c.Driver {
+	case "", core.DriverBigQuery:
+		c.Driver = core.DriverBigQuery
+	default:
+		return nil, fmt.Errorf("load driver %q is not implemented; use %q",
+			c.Driver, core.DriverBigQuery)
+	}
+
 	if c.Dedup == core.DedupMerge && !c.WriteEnvelopeColumns {
-		return nil, fmt.Errorf("DedupMerge exige WriteEnvelopeColumns: o merge casa por ingestion_id, " +
-			"que só existe como coluna no contrato de landing")
+		return nil, fmt.Errorf("DedupMerge requires WriteEnvelopeColumns: the merge matches on " +
+			"ingestion_id, which only exists as a column in the landing contract")
 	}
 
 	if c.AddMetadata && c.WriteEnvelopeColumns {
@@ -160,7 +168,7 @@ func (l *Loader) Load(ctx context.Context, envelopes ...core.Envelope) (*core.Lo
 	// error, and returning nil there turns a failed load into a panic.
 	dedup := l.cfg.Dedup
 	if dedup == "" {
-		dedup = core.DedupNenhum
+		dedup = core.DedupNone
 	}
 
 	result := &core.LoadResult{
@@ -187,11 +195,11 @@ func (l *Loader) Load(ctx context.Context, envelopes ...core.Envelope) (*core.Lo
 
 	table := l.bq.Dataset(l.cfg.Dataset).Table(l.cfg.Table)
 
-	criada, err := l.garantirTabela(ctx, table)
+	created, err := l.ensureTable(ctx, table)
 	if err != nil {
 		return fail(err)
 	}
-	result.TableCreated = criada
+	result.TableCreated = created
 
 	data, err := l.encodeRows(envelopes)
 	if err != nil {
@@ -201,14 +209,14 @@ func (l *Loader) Load(ctx context.Context, envelopes ...core.Envelope) (*core.Lo
 	var rowErrs []string
 
 	if dedup == core.DedupMerge {
-		inseridas, ignoradas, errs, err := l.carregarComMerge(ctx, table, data, int64(len(envelopes)))
+		inserted, ignored, errs, err := l.loadWithMerge(ctx, table, data, int64(len(envelopes)))
 		result.BytesStaged = int64(len(data))
 		result.ErrorRows = errs
 		if err != nil {
 			return fail(err)
 		}
-		result.RowsLoaded = inseridas
-		result.RowsIgnored = ignoradas
+		result.RowsLoaded = inserted
+		result.RowsIgnored = ignored
 	} else {
 		var bytesStaged int64
 		if result.Strategy == "gcs" {
