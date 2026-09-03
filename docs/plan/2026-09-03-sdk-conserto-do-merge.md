@@ -2,6 +2,27 @@
 
 **Escrito em** 2026-09-03 · **Base** `sdk/v0.10.1` · **Alvo** `sdk/v0.10.2`
 
+> **CONCLUÍDA em 2026-09-03, entregue na `sdk/v0.12.0`** (a `v0.12.1` corrige um
+> exemplo do README que não compilava). Os dez critérios do §4 estão atendidos,
+> com duas ressalvas que são acertos e não faltas:
+>
+> - **Critérios 2 e 3 caíram por construção.** O item 1 foi resolvido fazendo o
+>   `DedupMerge` ceder ao caminho comum quando a tabela não existe, em vez de
+>   criar o destino a partir do schema da temporária. Como não há um segundo
+>   lugar criando tabela, não há `layout()` a extrair nem `409` a tratar. A
+>   solução é mais simples que a proposta aqui.
+> - **`TestIntegrationGCSStrategy` fica em SKIP** sem `BRAVIS_IT_BUCKET`. É a
+>   estratégia dos lotes acima de 5000 linhas, e é onde vive o conserto do
+>   `KeepStagedFile` — definir essa variável no ambiente automatizado é o que
+>   falta para o §0 valer para o pacote inteiro.
+>
+> Rodar os testes de integração pela primeira vez achou **quatro** defeitos além
+> dos dois desta spec: `CreateTable` com `DedupMerge`, `Load` mutando a fatia do
+> chamador (que quebrava exatamente o retry que o `DedupMerge` existe para
+> tratar), `ClusterBy` falhando só depois do job submetido, e `DeleteAfterLoad`
+> nunca limpando — documentado como `default: true`, que um `bool` não consegue
+> ser. Ver `3f4d762`.
+
 Spec escrita para ser executada. Os itens 3 (telemetria que mente) e 4 (as seis
 colunas) do [`SDK_V9.md`](../SDK_V9.md) **ficam fora**: são de outra natureza, e
 misturá-los aqui atrasa os dois que travam um consumidor real hoje.

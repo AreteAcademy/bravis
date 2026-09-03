@@ -3,6 +3,35 @@
 **Aberto em** 2026-09-03 · **Versões analisadas** `sdk/v0.9.0`, `sdk/v0.9.1`,
 `sdk/v0.10.0` · **Alvo** `sdk/v0.10.1`
 
+> **ITENS 1 E 2 CONCLUÍDOS em 2026-09-03, entregues na `sdk/v0.12.0`.** Ver
+> [`plan/2026-09-03-sdk-conserto-do-merge.md`](plan/2026-09-03-sdk-conserto-do-merge.md)
+> e o `CHANGELOG.md`, que foi reconstruído da `0.3.0` à `0.12.0` no mesmo passo.
+>
+> Verificado por quem reportou, na `v0.12.1`:
+>
+> ```
+> go vet ./...            limpo
+> go test ./... -short    4 pacotes ok
+> go test ./load/ -run TestIntegration -v
+>   PASS  TestIntegrationMergeDoesNotDouble              (item 1, teste nao alterado)
+>   PASS  TestIntegrationMergeIntoADifferentColumnOrder  (item 2, novo)
+>   PASS  TestIntegrationFirstMergeLoadStillPartitions   (a costura da v0.11.0)
+>   PASS  TestIntegrationInlineStrategy / CreatesTableFromData / RefusesMissingTableUnasked
+>   SKIP  TestIntegrationGCSStrategy                     (BRAVIS_IT_BUCKET ausente)
+> ```
+>
+> O item 1 foi resolvido por um caminho **diferente** do que a spec propôs, e
+> melhor: em vez de criar o destino a partir do schema da temporária, o
+> `DedupMerge` cede ao caminho comum quando a tabela não existe
+> (`load.go:241`) — numa primeira carga não há contra o que deduplicar, e o
+> caminho comum já é quem cria a tabela com o layout certo. Isso dispensa os
+> critérios 2 e 3 da spec por construção: não há um segundo lugar criando
+> tabela, então não há decisão de layout duplicada nem corrida de `409`.
+>
+> **Seguem abertos os itens 3 e 4**, que estavam fora do escopo daquela spec de
+> propósito. O item 4 é hoje a **única** razão pela qual o consumidor
+> `zarv-data-pipeline` continua na `v0.8.0`.
+
 Achados ao migrar o consumidor `zarv-data-pipeline` da `v0.8.0` para a `v0.9.x`.
 A migração foi **revertida**: o consumidor está preso na `v0.8.0` e não sobe
 enquanto os itens 1 e 2 estiverem abertos.
@@ -197,7 +226,7 @@ ele que me fez procurar o defeito no lugar errado primeiro.
 
 ---
 
-## 3. `msg=loaded` sai antes de saber se carregou — terceira ocorrência da mesma classe
+## 3. `msg=loaded` sai antes de saber se carregou — **ABERTO**, e localizado
 
 Numa carga que falhou, a saída foi:
 
@@ -205,6 +234,26 @@ Numa carga que falhou, a saída foi:
 msg=loaded  pipeline=open_meteo/hourly_temperature records=24 ...
 msg=failed  error="target bronze.… refused: waiting for merge: …404…"
 ```
+
+Reconfirmado na `v0.12.1`, e agora com a linha exata. `pipeline.go:145`:
+
+```go
+res, err := loadWith(ctx, data, p.Target, p.Run)
+if res != nil {
+    slog.Info("loaded", append([]any{"pipeline", p.name()}, res.Args()...)...)
+    ...
+}
+return err
+```
+
+O `slog.Info("loaded", ...)` dispara sempre que existe resultado, e existe
+resultado em todo caminho de erro — por desenho, desde a `v0.2.1`, para que
+`result.ErrorRows` seja legível depois de uma falha. As duas decisões estão
+certas isoladas; juntas produzem `msg=loaded` numa carga que não carregou.
+
+Repare que o próprio log carrega a verdade ao lado da mentira:
+`records=24 lines=0`. Quem filtrar por `msg=loaded` conta 24; quem ler
+`lines` vê 0.
 
 Nada carregou. É a mesma classe do item 3 do
 [`SDK_LOAD.md`](SDK_LOAD.md) (`Format` reportando Parquet enquanto gravava
@@ -220,7 +269,7 @@ qual chave está em qual língua.
 
 ---
 
-## 4. A decisão de produto: quem produz as seis colunas
+## 4. A decisão de produto: quem produz as seis colunas — **ABERTO, e agora é o único bloqueio**
 
 > **Correção do que eu mesmo escrevi na primeira versão deste documento.** Eu
 > descrevi o modo envelope como opt-in. Ele era o **padrão**, opt-**out**:
