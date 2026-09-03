@@ -117,16 +117,11 @@ func resolveConfig(cfg *core.LoadConfig, opts ...core.LoadOption) (*core.LoadCon
 			"to the same question: the first folds provenance flat into your payload, the " +
 			"second wraps it in the six envelope columns. Pick one")
 	}
-	if c.MetadataNamespace == "" {
-		c.MetadataNamespace = defaultMetadataNamespace
-	}
-
 	return &c, nil
 }
 
 const (
-	defaultThresholdForGCS   = 5000
-	defaultMetadataNamespace = "e3a4f8c0-1b9d-4ea0-9c2e-77f6a6c4a4d7"
+	defaultThresholdForGCS = 5000
 )
 
 // sourceFormat maps a configured format onto the BigQuery source format, and

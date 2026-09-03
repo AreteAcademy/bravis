@@ -63,6 +63,7 @@ func Transform(data *Data, fns ...Transformer) *Data {
 	return &Data{
 		source: source,
 		start:  data.start,
+		stats:  data.stats,
 		Records: func(yield func(Envelope, error) bool) {
 			i := 0
 			for env, err := range upstream {

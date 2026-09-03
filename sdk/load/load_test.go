@@ -55,9 +55,6 @@ func TestResolveConfigDefaults(t *testing.T) {
 	if got.Format != "ndjson" {
 		t.Errorf("Format = %q", got.Format)
 	}
-	if got.MetadataNamespace != defaultMetadataNamespace {
-		t.Errorf("MetadataNamespace = %q", got.MetadataNamespace)
-	}
 }
 
 func TestResolveConfigFromOptionsAlone(t *testing.T) {
@@ -231,7 +228,6 @@ func TestEncodeRowsStructPayloadUsesJSONTags(t *testing.T) {
 func TestEncodeRowsEnvelopeMode(t *testing.T) {
 	l := &Loader{cfg: &core.LoadConfig{
 		Format: "ndjson", WriteEnvelopeColumns: true,
-		MetadataNamespace: defaultMetadataNamespace,
 	}}
 
 	data, err := l.encodeRows([]core.Envelope{{
@@ -305,15 +301,15 @@ func TestEnvelopeModeRequiresSourceKey(t *testing.T) {
 
 // --- metadata -------------------------------------------------------------
 
-func metaLoader(ns string) *Loader {
+func metaLoader() *Loader {
 	return &Loader{cfg: &core.LoadConfig{
 		ProjectID: "p", Dataset: "d", Table: "t",
-		AddMetadata: true, MetadataNamespace: ns, Format: "ndjson",
+		AddMetadata: true, Format: "ndjson",
 	}}
 }
 
 func TestAddMetadataInjectsFields(t *testing.T) {
-	l := metaLoader(defaultMetadataNamespace)
+	l := metaLoader()
 	env := core.Envelope{
 		Provider:  "gov",
 		Entity:    "tx",
@@ -350,7 +346,7 @@ func TestAddMetadataIngestionIDIsDeterministic(t *testing.T) {
 	}
 
 	a, b := base, base
-	l := metaLoader(defaultMetadataNamespace)
+	l := metaLoader()
 	if err := l.addMetadataToEnvelope(&a); err != nil {
 		t.Fatal(err)
 	}
@@ -375,7 +371,7 @@ func TestAddMetadataIngestionIDIsDeterministic(t *testing.T) {
 }
 
 func TestAddMetadataRequiresSourceKey(t *testing.T) {
-	l := metaLoader(defaultMetadataNamespace)
+	l := metaLoader()
 	env := core.Envelope{Provider: "gov", Entity: "tx", Payload: map[string]any{}}
 	if err := l.addMetadataToEnvelope(&env); err == nil {
 		t.Fatal("Expected an error: without a source key there is no stable id")
@@ -383,7 +379,7 @@ func TestAddMetadataRequiresSourceKey(t *testing.T) {
 }
 
 func TestAddMetadataConvertsStructPayload(t *testing.T) {
-	l := metaLoader(defaultMetadataNamespace)
+	l := metaLoader()
 	type tx struct {
 		Amount int `json:"amount"`
 	}
@@ -449,8 +445,7 @@ func TestLoadReturnsResultOnFailure(t *testing.T) {
 	// following the documentation panicked.
 	l := &Loader{cfg: &core.LoadConfig{
 		ProjectID: "p", Dataset: "d", Table: "t", Format: "ndjson",
-		AddMetadata: true, MetadataNamespace: defaultMetadataNamespace,
-	}}
+		AddMetadata: true}}
 
 	// A missing SourceKey fails in metadata, before any client is touched.
 	result, err := l.Load(context.Background(), core.Envelope{
@@ -513,7 +508,7 @@ func TestAddMetadataRefusesToOverwritePayloadFields(t *testing.T) {
 	// The "_bravis_" prefix used to make this impossible. Without it a source
 	// that already has "provider" would have its value silently replaced by
 	// ours -- an invisible failure, and the worse one.
-	l := metaLoader(defaultMetadataNamespace)
+	l := metaLoader()
 	env := core.Envelope{
 		Provider: "gov", Entity: "tx", SourceKey: "k1", RecordTS: "2026-01-01T00:00:00Z",
 		Payload: map[string]any{"provider": "the vendor's own value", "amount": 10},
@@ -532,7 +527,7 @@ func TestAddMetadataRefusesToOverwritePayloadFields(t *testing.T) {
 }
 
 func TestAddMetadataDoesNotMutateCallerPayload(t *testing.T) {
-	l := metaLoader(defaultMetadataNamespace)
+	l := metaLoader()
 	original := map[string]any{"amount": 10}
 	env := core.Envelope{
 		Provider: "gov", Entity: "tx", SourceKey: "k1", RecordTS: "2026-01-01T00:00:00Z",
@@ -551,7 +546,7 @@ func TestAddMetadataDoesNotMutateCallerPayload(t *testing.T) {
 func TestFlatAndEnvelopeUseTheSameNames(t *testing.T) {
 	// One spelling downstream: a flat row and a wrapped row must describe a
 	// record with the same field names, or SQL has to know which mode wrote it.
-	l := metaLoader(defaultMetadataNamespace)
+	l := metaLoader()
 	env := core.Envelope{
 		Provider: "gov", Entity: "tx", SourceKey: "k1", RecordTS: "2026-01-01T00:00:00Z",
 		Payload: map[string]any{"amount": 10},

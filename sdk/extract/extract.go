@@ -115,6 +115,9 @@ func fetch(ctx context.Context, source core.Source) (iter.Seq2[core.Envelope, er
 
 		for {
 			pages++
+			if source.Stats != nil {
+				source.Stats.Pages = pages
+			}
 			emitted, next, err := drainPage(ctxTotal, source, page, yield)
 			rows += emitted
 			page.close()
@@ -265,6 +268,10 @@ func fetchPage(ctxTotal context.Context, source core.Source, pageURL string) (*p
 	release := func() {}
 
 	for attempt := 0; attempt < source.RetryConfig.MaxAttempts; attempt++ {
+		if source.Stats != nil {
+			source.Stats.Attempts++
+		}
+
 		if source.RateLimiter != nil {
 			if err := source.RateLimiter.Wait(ctxTotal); err != nil {
 				return nil, fmt.Errorf("rate limiter: %w", err)

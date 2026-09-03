@@ -32,6 +32,11 @@ func (e *Envelope) IngestionID() (string, error) {
 		return "", fmt.Errorf("SourceKey cannot be empty")
 	}
 
+	// FROZEN, and deliberately not configurable. This namespace, the field
+	// order and the "|" separator together define ingestion_id. A row written
+	// here has to match the row a Python fetcher writes for the same record,
+	// and it does -- checked against uuid.uuid5. Make any of the three a
+	// setting and the guarantee is gone, silently, for whoever changes it.
 	const ingestNS = "e3a4f8c0-1b9d-4ea0-9c2e-77f6a6c4a4d7"
 	ns, err := uuid.Parse(ingestNS)
 	if err != nil {
@@ -118,8 +123,6 @@ type LoadConfig struct {
 	// ingestion_id, so a row written here matches the row a Python fetcher
 	// writes for the same record. Mutually exclusive with AddMetadata.
 	WriteEnvelopeColumns bool
-	MetadataNamespace    string // namespace UUID for ingestion_id; default: "e3a4f8c0-1b9d-4ea0-9c2e-77f6a6c4a4d7"
-	SourceKeyField       string // which field in payload contains the source key; if empty, uses Envelope.SourceKey
 }
 
 // Driver selects which implementation carries out an extract or a load.
@@ -136,6 +139,24 @@ const (
 	// DriverBigQuery writes to BigQuery. The default for a Target.
 	DriverBigQuery Driver = "bigquery"
 )
+
+// Stats counts what an extract actually did.
+//
+// Pass a pointer in Source.Stats and it is filled in as the walk proceeds.
+// Read it after the iteration ends: it is written by the goroutine doing the
+// pulling, and it is only final once the stream is drained.
+//
+// It exists because Result.Pages and Result.Attempts have to describe what
+// happened. A number in a result that is always zero is worse than no number,
+// because nobody doubts it.
+type Stats struct {
+	// Pages fetched, including the first. Always at least 1 on success.
+	Pages int
+
+	// Attempts is every HTTP request made, retries included, across all
+	// pages. Attempts above Pages means the source was flaky.
+	Attempts int
+}
 
 // Format names the wire format of a response.
 type Format string
@@ -182,6 +203,9 @@ type Source struct {
 
 	// Format of the response. Empty means FormatJSON.
 	Format Format
+
+	// Stats, when not nil, is filled in as the extract runs. See Stats.
+	Stats *Stats
 
 	// Expand turns one decoded document into the records it holds, for the
 	// common case of an API that wraps its readings. Nil means each decoded
@@ -290,12 +314,5 @@ func WithEnvelopeColumns(enabled bool) LoadOption {
 func WithMetadata(enabled bool) LoadOption {
 	return func(cfg *LoadConfig) {
 		cfg.AddMetadata = enabled
-	}
-}
-
-// WithMetadataNamespace sets the UUID namespace for ingestion IDs.
-func WithMetadataNamespace(ns string) LoadOption {
-	return func(cfg *LoadConfig) {
-		cfg.MetadataNamespace = ns
 	}
 }

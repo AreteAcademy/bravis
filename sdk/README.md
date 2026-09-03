@@ -333,6 +333,26 @@ Configure the threshold with `sdk.WithThresholdForGCS(n)`, or set
 `*LoadConfig`, a list of options, or both — and never mutates the config you
 pass it.
 
+### What the Result tells you
+
+Every field describes what happened, including `Pages` and `Attempts` — the
+two that make a flaky source visible:
+
+```go
+res, err := sdk.Load(ctx, data, target)
+slog.Info("done", res.Args()...)
+// records=24 rows=24 ignored=0 pages=3 attempts=4 ...
+```
+
+`Attempts` above `Pages` means requests were retried. There is a test locking
+each counter to reality: a number in a result that is always zero is worse
+than no number, because nobody doubts it.
+
+> The `ingestion_id` namespace is **not** configurable. `WithMetadataNamespace`
+> used to accept one and then ignore it — the namespace is a `const`, checked
+> byte-for-byte against Python's `uuid.uuid5`. A configurable contract is not a
+> contract, so the option is gone rather than wired up.
+
 ## Three ways to shape a row
 
 | mode | writes | use when |

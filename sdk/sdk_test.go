@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 // --- Key e Field ---------------------------------------------------------
@@ -529,5 +530,122 @@ func TestDriverIsNotProvider(t *testing.T) {
 	id2, _ := withoutDriver.IngestionID()
 	if withDriver != id2 {
 		t.Error("the driver must not take part in ingestion_id")
+	}
+}
+
+// --- Result counters -------------------------------------------------------
+
+// A number in a result that is always zero is worse than no number, because
+// nobody doubts it. These lock Pages and Attempts to reality.
+
+func TestResultCountsPagesWalked(t *testing.T) {
+	hits := 0
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		if hits < 3 {
+			w.Header().Set("Link", fmt.Sprintf(`<%s/?page=%d>; rel="next"`, srv.URL, hits+1))
+		}
+		_, _ = fmt.Fprintf(w, `{"id": %d}`, hits)
+	}))
+	defer srv.Close()
+
+	data, err := Extract(context.Background(), Source{URL: srv.URL, FollowLinks: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := collect(data, Target{Provider: "p", Entity: "e", Key: Key("id")}); err != nil {
+		t.Fatal(err)
+	}
+
+	if data.stats.Pages != 3 {
+		t.Errorf("Pages = %d, walked %d", data.stats.Pages, hits)
+	}
+	if data.stats.Attempts != 3 {
+		t.Errorf("Attempts = %d, expected one per page with no retries", data.stats.Attempts)
+	}
+}
+
+func TestResultCountsRetriedAttempts(t *testing.T) {
+	// Attempts above Pages is the signal that the source was flaky. It only
+	// carries that meaning if retries are actually counted.
+	hits := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		if hits == 1 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		_, _ = fmt.Fprint(w, `{"id": 1}`)
+	}))
+	defer srv.Close()
+
+	data, err := Extract(context.Background(), Source{
+		URL: srv.URL,
+		RetryConfig: &RetryConfig{
+			MaxAttempts: 3, InitialBackoff: time.Millisecond,
+			MaxBackoff: time.Millisecond, JitterFraction: 0.1,
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := collect(data, Target{Provider: "p", Entity: "e", Key: Key("id")}); err != nil {
+		t.Fatal(err)
+	}
+
+	if data.stats.Pages != 1 {
+		t.Errorf("Pages = %d, expected 1", data.stats.Pages)
+	}
+	if data.stats.Attempts != 2 {
+		t.Errorf("Attempts = %d, expected 2 (the 503 and the retry)", data.stats.Attempts)
+	}
+}
+
+func TestTransformKeepsTheCounters(t *testing.T) {
+	// Transform rebuilds Data; dropping the stats there would silently zero
+	// the counters for every pipeline that transforms.
+	srv := openMeteoServer(t)
+	defer srv.Close()
+
+	data, err := Extract(context.Background(), Source{
+		URL: srv.URL, Expand: ParallelArrays("hourly", "time", "temperature_2m"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	data = Transform(data, Only("time", "temperature_2m", "latitude"))
+	if _, err := collect(data, Target{Provider: "p", Entity: "e", Key: Key("time")}); err != nil {
+		t.Fatal(err)
+	}
+
+	if data.stats == nil || data.stats.Pages != 1 || data.stats.Attempts != 1 {
+		t.Errorf("Transform lost the counters: %+v", data.stats)
+	}
+}
+
+// --- Removed surface -------------------------------------------------------
+
+func TestIngestionIDNamespaceIsNotConfigurable(t *testing.T) {
+	// WithMetadataNamespace used to be accepted, validated and defaulted, and
+	// then ignored: IngestionID hardcodes the namespace. Anyone setting it got
+	// identical ids and believed otherwise. It is gone; this locks the value
+	// that the Python implementation was checked against.
+	env := Envelope{
+		Provider: "gov", Entity: "tx", SourceKey: "k1", RecordTS: "2026-01-01T00:00:00Z",
+	}
+	id, err := env.IngestionID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Computed with Python, which is the whole point of the contract:
+	//
+	//	ns = uuid.UUID("e3a4f8c0-1b9d-4ea0-9c2e-77f6a6c4a4d7")
+	//	uuid.uuid5(ns, "gov|tx|k1|2026-01-01T00:00:00Z")
+	const fromPython = "93460f64-f56f-5209-a86e-6de9db9fd916"
+	if id != fromPython {
+		t.Errorf("ingestion_id = %s\nwant        = %s\nchanging this breaks every row already loaded", id, fromPython)
 	}
 }

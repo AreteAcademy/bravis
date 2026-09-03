@@ -42,6 +42,7 @@ type Data struct {
 
 	source Source
 	start  time.Time
+	stats  *core.Stats
 }
 
 // Extract fetches, decodes and, when Source.Expand is set, expands the
@@ -63,6 +64,12 @@ func Extract(ctx context.Context, source Source) (*Data, error) {
 	}
 
 	start := time.Now()
+
+	// Filled in as the walk proceeds, read once the stream is drained. Load
+	// copies it into Result, so Pages and Attempts describe what happened
+	// rather than being zeroes nobody doubts.
+	stats := &core.Stats{}
+	source.Stats = stats
 
 	var (
 		lines iter.Seq2[Envelope, error]
@@ -88,7 +95,7 @@ func Extract(ctx context.Context, source Source) (*Data, error) {
 		lines = expandStream(source, lines)
 	}
 
-	return &Data{Records: lines, source: source, start: start}, nil
+	return &Data{Records: lines, source: source, start: start, stats: stats}, nil
 }
 
 // expandStream applies the expansor to each decoded document, emitting one
@@ -148,10 +155,16 @@ func Load(ctx context.Context, data *Data, target Target) (*Result, error) {
 		return nil, err
 	}
 
+	// Read after collect drained the stream: that is when the counters are
+	// final.
 	res := &Result{
 		Records:     int64(len(envelopes)),
 		ExtractTime: time.Since(data.start),
 		Table:       fmt.Sprintf("%s.%s", cfg.Dataset, cfg.Table),
+	}
+	if data.stats != nil {
+		res.Pages = data.stats.Pages
+		res.Attempts = data.stats.Attempts
 	}
 
 	if len(envelopes) == 0 {
