@@ -38,6 +38,64 @@ Everything between those two calls that is not specific to the vendor lives in
 the SDK: config, retry, pagination, expansion, provenance, table creation,
 deduplication and the result you log.
 
+## Transform
+
+The step between, where your own function reshapes each record before it is
+written:
+
+```go
+data, err := sdk.Extract(ctx, source)
+
+data = sdk.Transform(data,
+	sdk.Without("generationtime_ms"),                            // request metadata
+	sdk.Rename(map[string]string{"temperature_2m": "temp_c"}),   // name it what it is
+	sdk.Compute("temp_f", func(r map[string]any) (any, error) {  // derive
+		return r["temp_c"].(float64)*9/5 + 32, nil
+	}),
+	func(payload any) (any, error) {                             // or anything of yours
+		r := payload.(map[string]any)
+		if r["temp_c"] == nil {
+			return nil, sdk.SkipRecord                           // drop the record
+		}
+		return r, nil
+	},
+)
+
+res, err := sdk.Load(ctx, data, target)
+```
+
+`Transformer` is `func(payload any) (any, error)`. The helpers are the four
+things every fetcher ends up writing by hand:
+
+| helper | does |
+|---|---|
+| `Only(fields...)` | keep just these |
+| `Without(fields...)` | keep everything except these |
+| `Rename(map)` | source's name → yours |
+| `Compute(name, fn)` | add a derived field |
+
+`Rename` and `Compute` refuse to overwrite an existing field: which value
+survived would otherwise depend on map iteration order, and a silently
+replaced value is the kind of thing nobody notices until the numbers are
+wrong.
+
+It stays lazy, so a paginated source still does not have to fit in memory.
+
+**Order matters against `Target.Key`.** Provenance is stamped after every
+Transformer has run, so a rename here has to be reflected there:
+
+```go
+sdk.Transform(data, sdk.Rename(map[string]string{"time": "observed_at"}))
+sdk.Target{Key: sdk.Key("latitude", "longitude", "observed_at")}  // the new name
+```
+
+Naming the old one is an error listing what the record actually has — not a
+short key, which would silently change every `ingestion_id`.
+
+This is a seam, not a transformation engine. Heavy reshaping belongs
+downstream in dbt; what belongs here is the shaping a row needs before it is
+worth storing at all.
+
 `Driver` selects the implementation on each side — `DriverHTTP` for a Source,
 `DriverBigQuery` for a Target. One of each exists today, and an empty Driver
 takes the default, so nothing has to be set for the common case.

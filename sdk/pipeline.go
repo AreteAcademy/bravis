@@ -16,8 +16,11 @@ import (
 //	func main() {
 //		sdk.Run(sdk.Pipeline{
 //			Source: sdk.Source{
-//				URL:      "https://api.example.com/events",
+//				URL:    "https://api.example.com/events",
 //				Expand: sdk.ArrayAt("results"),
+//			},
+//			Transform: []sdk.Transformer{
+//				sdk.Without("generationtime_ms"),
 //			},
 //			Target: sdk.Target{
 //				Provider: "example",
@@ -32,6 +35,11 @@ import (
 // directly.
 type Pipeline struct {
 	Source Source
+
+	// Transform reshapes each record between Extract and Load, in order. See
+	// Transformer.
+	Transform []Transformer
+
 	Target Target
 
 	// Name appears in logs. Defaults to provider/entity.
@@ -110,6 +118,7 @@ func Execute(ctx context.Context, p *Pipeline, args []string) error {
 	if err != nil {
 		return err
 	}
+	data = Transform(data, p.Transform...)
 
 	res, err := Load(ctx, data, p.Target)
 	if res != nil {
@@ -134,6 +143,9 @@ func runDryRun(ctx context.Context, p *Pipeline, n int) error {
 	if err != nil {
 		return err
 	}
+	// Transform runs here too: a dry-run that printed untransformed records
+	// would show a payload -- and an ingestion_id -- that is not what lands.
+	data = Transform(data, p.Transform...)
 
 	// Provenance must be stamped the same way Load would, or the printed
 	// ingestion_id would not be the one that lands.

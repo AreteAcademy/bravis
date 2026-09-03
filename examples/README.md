@@ -53,6 +53,22 @@ Quando as linhas precisam casar com uma camada bronze que deduplica por
 Existe para o `ingestion_id` ter **um** dono: remontar essas colunas em cada
 consumidor faz os ids divergirem, que é a duplicação que o contrato evita.
 
+## Transform
+
+### [09-transform](09-transform/) — o passo entre extract e load
+
+```bash
+go run ./09-transform -dry-run
+```
+
+`Without` para descartar metadado de requisição, `Rename` para dar aos campos
+o nome que você usa, `Compute` para derivar, e uma função sua para o resto —
+com `sdk.SkipRecord` para filtrar.
+
+`Target.Key` e `Target.When` leem o payload **depois** de todo Transformer, então
+apontam para o nome novo. Apontar para o antigo é erro listando o que o registro
+tem de fato — e não uma chave curta, que mudaria todo `ingestion_id` em silêncio.
+
 ## Pipeline
 
 ### [04-complete-pipeline](04-complete-pipeline/) — extract → load paginado

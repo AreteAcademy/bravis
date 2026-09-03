@@ -428,20 +428,19 @@ func TestSomenteFiltraCamposVolateis(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, tem := raw[0].(map[string]any)["generationtime_ms"]; !tem {
+	if _, present := raw[0].(map[string]any)["generationtime_ms"]; !present {
 		t.Fatal("precondition: ParallelArrays copies every top-level scalar")
 	}
 
-	clean, err := Only(
-		ParallelArrays("hourly", "time", "temperature_2m"),
-		"time", "temperature_2m", "latitude",
-	)(doc)
+	// Only is a Transformer now: it projects a record, it does not expand a
+	// document, so it belongs between Extract and Load.
+	clean, err := Only("time", "temperature_2m", "latitude")(raw[0])
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	r := clean[0].(map[string]any)
-	if _, tem := r["generationtime_ms"]; tem {
+	r := clean.(map[string]any)
+	if _, present := r["generationtime_ms"]; present {
 		t.Errorf("a volatile field survived the filter: %v", r)
 	}
 	if len(r) != 3 || r["latitude"] != -23.55 || r["time"] != "h1" {
