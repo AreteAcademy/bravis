@@ -222,16 +222,17 @@ func loadWith(ctx context.Context, data *Data, target Target, run RunContext) (*
 // staged file, so this is where streaming ends.
 // collect drains the stream into envelopes.
 //
-// The payload is passed through untouched. Provenance -- provider, entity,
-// source_key, record_ts -- is filled in only when ExtraMetadata is on, because
-// that is the only thing it is for: those four build ingestion_id. With the
-// flag off the SDK never reads a field out of your payload, never needs to
-// know its shape, and cannot fail a load because a selector missed.
+// The record is passed through untouched. Provenance -- provider, entity,
+// source_key, record_ts -- is filled in only when there is a Metadata block,
+// because that is the only thing it is for: those four build ingestion_id.
+// Without the block the SDK never reads a field out of your record, never
+// needs to know its shape, and cannot fail a load because a selector missed.
 //
-// What a row looks like is the caller's decision, made in Transform. The SDK
-// writes it and, on request, adds two fields.
+// What a row looks like is composed in Transform. The SDK writes it and, on
+// request, adds two fields.
 func collect(data *Data, target Target) ([]Envelope, error) {
-	if !target.ExtraMetadata {
+	meta := target.Metadata
+	if meta == nil {
 		var envelopes []Envelope
 		for env, err := range data.Records {
 			if err != nil {
@@ -242,7 +243,7 @@ func collect(data *Data, target Target) ([]Envelope, error) {
 		return envelopes, nil
 	}
 
-	when := target.When
+	when := meta.When
 	if when == nil {
 		when = Now()
 	}
@@ -254,7 +255,7 @@ func collect(data *Data, target Target) ([]Envelope, error) {
 			return nil, err
 		}
 
-		key, err := target.Key(env.Payload)
+		key, err := meta.Key(env.Payload)
 		if err != nil {
 			return nil, &FormatError{
 				URL: redact(data.source.URL), Format: string(data.source.Format),
@@ -270,8 +271,8 @@ func collect(data *Data, target Target) ([]Envelope, error) {
 			}
 		}
 
-		env.Provider = target.Provider
-		env.Entity = target.Entity
+		env.Provider = meta.Provider
+		env.Entity = meta.Entity
 		env.SourceKey = key
 		env.RecordTS = ts
 

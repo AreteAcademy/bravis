@@ -65,7 +65,7 @@ func TestResolveConfigFromOptionsAlone(t *testing.T) {
 		core.WithDataset("d"),
 		core.WithTable("t"),
 		core.WithThresholdForGCS(10),
-		core.WithExtraMetadata(true),
+		core.WithMetadata(true),
 	)
 	if err != nil {
 		t.Fatalf("resolveConfig: %v", err)
@@ -73,7 +73,7 @@ func TestResolveConfigFromOptionsAlone(t *testing.T) {
 	if got.ProjectID != "p" || got.Dataset != "d" || got.Table != "t" {
 		t.Errorf("options did not build the config: %+v", got)
 	}
-	if got.ThresholdForGCS != 10 || !got.ExtraMetadata {
+	if got.ThresholdForGCS != 10 || !got.Metadata {
 		t.Errorf("behaviour options did not apply: %+v", got)
 	}
 }
@@ -223,7 +223,7 @@ func TestEncodeRowsStructPayloadUsesJSONTags(t *testing.T) {
 func metaLoader() *Loader {
 	return &Loader{cfg: &core.LoadConfig{
 		ProjectID: "p", Dataset: "d", Table: "t",
-		ExtraMetadata: true, Format: "ndjson",
+		Metadata: true, Format: "ndjson",
 	}}
 }
 
@@ -366,7 +366,7 @@ func TestLoadReturnsResultOnFailure(t *testing.T) {
 	// following the documentation panicked.
 	l := &Loader{cfg: &core.LoadConfig{
 		ProjectID: "p", Dataset: "d", Table: "t", Format: "ndjson",
-		ExtraMetadata: true}}
+		Metadata: true}}
 
 	// A missing SourceKey fails in metadata, before any client is touched.
 	result, err := l.Load(context.Background(), core.Envelope{
@@ -493,7 +493,7 @@ func TestRequirePartitionFilterRefusesMerge(t *testing.T) {
 	// filter would make the merge miss and write the duplicate.
 	_, err := resolveConfig(nil,
 		core.WithProjectID("p"), core.WithDataset("d"), core.WithTable("t"),
-		core.WithExtraMetadata(true),
+		core.WithMetadata(true),
 		core.WithRequirePartitionFilter(true),
 		core.WithDedup(core.DedupMerge),
 	)
@@ -520,9 +520,9 @@ func TestCreateTableAloneIsEnough(t *testing.T) {
 	}
 }
 
-func TestPartitionOptionsNeedExtraMetadata(t *testing.T) {
+func TestPartitionOptionsNeedMetadata(t *testing.T) {
 	// The table is partitioned on ingestion_loaded_at, and that column only
-	// exists when ExtraMetadata adds it. Asking for one without the other is
+	// exists when Metadata adds it. Asking for one without the other is
 	// a contradiction, caught before anything touches the warehouse.
 	for _, opt := range []core.LoadOption{
 		core.WithPartitionExpiration(24 * time.Hour),
@@ -532,22 +532,22 @@ func TestPartitionOptionsNeedExtraMetadata(t *testing.T) {
 			core.WithProjectID("p"), core.WithDataset("d"), core.WithTable("t"), opt,
 		)
 		if err == nil {
-			t.Error("a partition option without ExtraMetadata must be refused")
-		} else if !strings.Contains(err.Error(), "ExtraMetadata") {
+			t.Error("a partition option without Metadata must be refused")
+		} else if !strings.Contains(err.Error(), "Metadata") {
 			t.Errorf("the error must name what is missing: %v", err)
 		}
 	}
 }
 
-func TestDedupMergeNeedsExtraMetadata(t *testing.T) {
-	// The merge matches rows on ingestion_id; without ExtraMetadata there is
+func TestDedupMergeNeedsMetadata(t *testing.T) {
+	// The merge matches rows on ingestion_id; without Metadata there is
 	// no such column to match on.
 	_, err := resolveConfig(nil,
 		core.WithProjectID("p"), core.WithDataset("d"), core.WithTable("t"),
 		core.WithDedup(core.DedupMerge),
 	)
 	if err == nil {
-		t.Fatal("DedupMerge without ExtraMetadata must be refused")
+		t.Fatal("DedupMerge without Metadata must be refused")
 	}
 	if !strings.Contains(err.Error(), "ingestion_id") {
 		t.Errorf("the error must say what is missing: %v", err)
@@ -558,7 +558,7 @@ func TestDedupMergeNeedsExtraMetadata(t *testing.T) {
 
 func TestDefaultWritesThePayloadUntouched(t *testing.T) {
 	// The whole point: what a row looks like is the caller's decision, made
-	// in Transform. With ExtraMetadata off the SDK adds nothing at all.
+	// in Transform. With Metadata off the SDK adds nothing at all.
 	l := &Loader{cfg: &core.LoadConfig{Format: "ndjson"}}
 
 	data, err := l.encodeRows([]core.Envelope{{
@@ -582,7 +582,7 @@ func TestDefaultWritesThePayloadUntouched(t *testing.T) {
 	}
 }
 
-func TestExtraMetadataAddsExactlyTwoFields(t *testing.T) {
+func TestMetadataAddsExactlyTwoFields(t *testing.T) {
 	l := metaLoader()
 	env := core.Envelope{
 		Provider: "open_meteo", Entity: "hourly", SourceKey: "k1",
@@ -642,7 +642,7 @@ func TestTableDescriptionNamesTheSource(t *testing.T) {
 		t.Errorf("description should say what writes here: %q", d)
 	}
 
-	cfg.ExtraMetadata = true
+	cfg.Metadata = true
 	if d := tableDescription(cfg); !strings.Contains(d, "ingestion_id") {
 		t.Errorf("with metadata on it should say how to deduplicate: %q", d)
 	}
@@ -684,7 +684,7 @@ func TestLayoutCreatesWithAutodetect(t *testing.T) {
 	}
 	// No metadata, so no timestamp column to partition on.
 	if loader.TimePartitioning != nil {
-		t.Errorf("nothing to partition on without ExtraMetadata: %+v", loader.TimePartitioning)
+		t.Errorf("nothing to partition on without Metadata: %+v", loader.TimePartitioning)
 	}
 }
 
@@ -701,14 +701,14 @@ func TestLayoutDoesNotInferOverCreateSQL(t *testing.T) {
 
 func TestLayoutPartitionsOnMetadataTimestamp(t *testing.T) {
 	loader, _ := layoutFor(&core.LoadConfig{
-		Format: "ndjson", CreateTable: true, ExtraMetadata: true,
+		Format: "ndjson", CreateTable: true, Metadata: true,
 		PartitionExpiration:    30 * 24 * time.Hour,
 		RequirePartitionFilter: true,
 		ClusterBy:              []string{"provider"},
 	})
 
 	if loader.TimePartitioning == nil {
-		t.Fatal("ExtraMetadata gives a timestamp column, so the table gets partitioned")
+		t.Fatal("Metadata gives a timestamp column, so the table gets partitioned")
 	}
 	if loader.TimePartitioning.Field != "ingestion_loaded_at" {
 		t.Errorf("partition field = %q", loader.TimePartitioning.Field)

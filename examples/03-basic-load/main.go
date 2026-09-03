@@ -1,7 +1,11 @@
 // Command 03-basic-load writes envelopes to BigQuery.
 //
-// The SDK has no opinion about your schema: it writes the payload as-is, and
-// the table must already exist. Create it however suits your data.
+// This is the low-level API: you hand load.New a batch of envelopes you built
+// yourself, provenance included. The two-call API above it (sdk.Extract and
+// sdk.Load) is what a fetcher uses -- see 08-fetcher-minimo.
+//
+// The SDK has no opinion about your columns: it writes each record as you
+// built it, and adds the two metadata fields only because WithMetadata asks.
 package main
 
 import (
@@ -32,7 +36,8 @@ func main() {
 		sdk.WithProjectID(*project),
 		sdk.WithDataset(*dataset),
 		sdk.WithTable(*table),
-		sdk.WithExtraMetadata(true), // adds ingestion_id and ingestion_loaded_at
+		sdk.WithMetadata(true),    // adds ingestion_id and ingestion_loaded_at
+		sdk.WithCreateTable(true), // so this example runs against an empty dataset
 	)
 	if err != nil {
 		log.Fatalf("loader: %v", err)

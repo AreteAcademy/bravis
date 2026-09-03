@@ -60,8 +60,10 @@ func pipeline(url string) sdk.Pipeline {
 		Name:   "proof/entity",
 		Source: sdk.Source{URL: url},
 		Target: sdk.Target{
-			Provider: "proof", Entity: "entity",
-			Key: sdk.Key("id"), When: sdk.Field("id"),
+			Metadata: &sdk.Metadata{
+				Provider: "proof", Entity: "entity",
+				Key: sdk.Key("id"), When: sdk.Field("id"),
+			},
 			Project: "p",
 			// nil: quem decide é o engine, ou ninguém.
 			CreateTable: nil,
@@ -195,7 +197,7 @@ func TestConsumidorLeOTamanhoDoQueFoiExtraido(t *testing.T) {
 	}
 }
 
-// O payload é do cliente. Sem ExtraMetadata o SDK não pede provenance, não lê
+// O payload é do cliente. Sem o bloco Metadata o SDK não pede provenance, não lê
 // campo nenhum do registro, e não escreve nada além do que recebeu.
 func TestConsumidorCarregaSemProvenienciaNenhuma(t *testing.T) {
 	t.Setenv("GOOGLE_PROJECT_ID", "um-projeto")
@@ -213,16 +215,16 @@ func TestConsumidorCarregaSemProvenienciaNenhuma(t *testing.T) {
 	// teste prova é que a validação da fachada deixa passar. Um erro citando
 	// Provider, Entity ou Key seria a regressão.
 	if err != nil {
-		for _, proibido := range []string{"Provider", "Entity", "Target.Key"} {
+		for _, proibido := range []string{"Provider", "Entity", "Key"} {
 			if strings.Contains(err.Error(), proibido) {
-				t.Errorf("o SDK ainda exige %s sem ExtraMetadata: %v", proibido, err)
+				t.Errorf("o SDK ainda exige %s sem o bloco Metadata: %v", proibido, err)
 			}
 		}
 	}
 }
 
 // E com a flag ligada ele cobra, porque aí tem o que construir.
-func TestConsumidorComExtraMetadataPrecisaDeProveniencia(t *testing.T) {
+func TestConsumidorComMetadataPrecisaDeProveniencia(t *testing.T) {
 	t.Setenv("GOOGLE_PROJECT_ID", "um-projeto")
 
 	srv := fonte(t)
@@ -232,9 +234,61 @@ func TestConsumidorComExtraMetadataPrecisaDeProveniencia(t *testing.T) {
 	}
 
 	_, err = sdk.Load(context.Background(), data, sdk.Target{
-		Table: "minha_tabela", ExtraMetadata: true,
+		Table:    "minha_tabela",
+		Metadata: &sdk.Metadata{Entity: "e", Key: sdk.Key("id")},
 	})
-	if err == nil || !strings.Contains(err.Error(), "Provider") {
-		t.Errorf("ExtraMetadata sem Provider deveria falhar nomeando o campo: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "Metadata.Provider") {
+		t.Errorf("um bloco Metadata sem Provider deveria falhar nomeando o campo: %v", err)
 	}
+}
+
+// As colunas vêm do Transform. É o modelo inteiro numa asserção: o que o
+// Schema compõe é o que sai, e o que ele nomeia e não existe é erro.
+func TestConsumidorComponeAsColunasNoTransform(t *testing.T) {
+	srv := fonte(t)
+
+	data, err := sdk.Extract(context.Background(), sdk.Source{URL: srv.URL})
+	if err != nil {
+		t.Fatalf("Extract: %v", err)
+	}
+	data = sdk.Transform(data, sdk.Schema("id"))
+
+	n := 0
+	for env, err := range data.Records {
+		if err != nil {
+			t.Fatalf("registro %d: %v", n, err)
+		}
+		obj, ok := env.Payload.(map[string]any)
+		if !ok {
+			t.Fatalf("registro %d mudou de forma: %T", n, env.Payload)
+		}
+		if len(obj) != 1 {
+			t.Errorf("registro %d tem %d campos, esperado só o declarado: %v", n, len(obj), obj)
+		}
+		n++
+	}
+	if n == 0 {
+		t.Fatal("nenhum registro passou")
+	}
+}
+
+func TestConsumidorVeOSchemaFalharQuandoOCampoSome(t *testing.T) {
+	srv := fonte(t)
+
+	data, err := sdk.Extract(context.Background(), sdk.Source{URL: srv.URL})
+	if err != nil {
+		t.Fatalf("Extract: %v", err)
+	}
+	data = sdk.Transform(data, sdk.Schema("campo_que_a_fonte_parou_de_mandar"))
+
+	for _, err := range data.Records {
+		if err == nil {
+			t.Fatal("um campo declarado e ausente tem de ser erro, não coluna NULL")
+		}
+		if !strings.Contains(err.Error(), "campo_que_a_fonte_parou_de_mandar") {
+			t.Errorf("o erro não nomeia o campo: %v", err)
+		}
+		return
+	}
+	t.Fatal("o fluxo terminou sem erro nenhum")
 }

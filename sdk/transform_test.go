@@ -100,7 +100,7 @@ func TestTransformChainsInOrder(t *testing.T) {
 			}
 			return c*9/5 + 32, nil
 		}),
-		Only("time", "temp_c", "temp_f"),
+		Schema("time", "temp_c", "temp_f"),
 	)
 
 	rows := drain(t, data)
@@ -193,7 +193,7 @@ func TestTransformWithNoFunctionsIsANoop(t *testing.T) {
 	if Transform(data) != data {
 		t.Error("Transform with no functions should hand back the same Data")
 	}
-	if Transform(nil, Only("x")) != nil {
+	if Transform(nil, Schema("x")) != nil {
 		t.Error("Transform(nil) should stay nil")
 	}
 }
@@ -264,7 +264,7 @@ func TestComputeReportsTheFieldOnFailure(t *testing.T) {
 func TestTransformersLeaveNonObjectsAlone(t *testing.T) {
 	// A CSV row is a map[string]string, and a scalar payload is possible too.
 	// Projection helpers pass those through rather than failing.
-	for _, fn := range []Transformer{Only("a"), Without("a"), Rename(map[string]string{"a": "b"})} {
+	for _, fn := range []Transformer{Schema("a"), Without("a"), Rename(map[string]string{"a": "b"})} {
 		got, err := fn("just a string")
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
@@ -281,18 +281,15 @@ func TestTransformFeedsTheKeyAndTimestamp(t *testing.T) {
 	srv := meteoServer(t)
 	defer srv.Close()
 
-	// Target.Key reads the payload after every Transformer has run, so a
+	// Metadata.Key reads the record after every Transformer has run, so a
 	// rename here has to be reflected there.
 	data := Transform(meteoRecords(t, srv),
 		Rename(map[string]string{"time": "observed_at"}),
-		Only("observed_at", "temperature_2m", "latitude", "longitude"),
+		Schema("observed_at", "temperature_2m", "latitude", "longitude"),
 	)
 
 	envelopes, err := collect(data, Target{
-		Provider: "open_meteo", Entity: "hourly",
-		Key:           Key("latitude", "longitude", "observed_at"),
-		When:          Field("observed_at"),
-		ExtraMetadata: true,
+		Metadata: &Metadata{Provider: "open_meteo", Entity: "hourly", Key: Key("latitude", "longitude", "observed_at"), When: Field("observed_at")},
 	})
 	if err != nil {
 		t.Fatalf("collect: %v", err)
@@ -313,17 +310,99 @@ func TestTransformKeyOnARenamedFieldFailsLoudly(t *testing.T) {
 	srv := meteoServer(t)
 	defer srv.Close()
 
-	// Renaming a field that Target.Key still names by its old name must be an
+	// Renaming a field that Metadata.Key still names by its old name must be an
 	// error, not a silent short key -- that would change every ingestion_id.
 	data := Transform(meteoRecords(t, srv), Rename(map[string]string{"time": "observed_at"}))
 
 	_, err := collect(data, Target{
-		Provider: "open_meteo", Entity: "hourly", Key: Key("time"), ExtraMetadata: true,
+		Metadata: &Metadata{Provider: "open_meteo", Entity: "hourly", Key: Key("time")},
 	})
 	if err == nil {
 		t.Fatal("a key naming a field that no longer exists must fail")
 	}
 	if !strings.Contains(err.Error(), "observed_at") {
 		t.Errorf("the error should list what the record actually has: %v", err)
+	}
+}
+
+// --- Schema: the columns are composed here ------------------------------
+
+func TestSchemaComposesExactlyTheNamedFields(t *testing.T) {
+	got, err := Schema("time", "temp")(map[string]any{
+		"time": "2026-01-01T00:00", "temp": 14.1, "generationtime_ms": 0.02, "elevation": 737,
+	})
+	if err != nil {
+		t.Fatalf("Schema: %v", err)
+	}
+
+	obj := got.(map[string]any)
+	if len(obj) != 2 {
+		t.Fatalf("the record has %d fields, expected exactly the 2 named: %v", len(obj), obj)
+	}
+	if obj["time"] != "2026-01-01T00:00" || obj["temp"] != 14.1 {
+		t.Errorf("the values did not survive: %v", obj)
+	}
+}
+
+// The protection half. A field that vanishes is the source changing shape
+// under you, and it must not reach the warehouse as a column that quietly
+// went NULL.
+func TestSchemaRefusesAMissingFieldAndNamesIt(t *testing.T) {
+	_, err := Schema("time", "temperature_celsius")(map[string]any{
+		"time": "2026-01-01T00:00", "temperature_2m": 14.1,
+	})
+	if err == nil {
+		t.Fatal("a field the schema names and the record lacks must be an error")
+	}
+	if !strings.Contains(err.Error(), "temperature_celsius") {
+		t.Errorf("the error does not name the missing field: %v", err)
+	}
+	// And it says what is actually there, so the fix is one read away.
+	if !strings.Contains(err.Error(), "temperature_2m") {
+		t.Errorf("the error does not list what the record has: %v", err)
+	}
+}
+
+// The composing half is not an error: naming four fields is saying which four
+// you want, out loud.
+func TestSchemaDropsWhatItDoesNotName(t *testing.T) {
+	got, err := Schema("a")(map[string]any{"a": 1, "b": 2})
+	if err != nil {
+		t.Fatalf("dropping an unnamed field is the point, not an error: %v", err)
+	}
+	if _, still := got.(map[string]any)["b"]; still {
+		t.Error("an unnamed field survived")
+	}
+}
+
+// A rename before the schema is the ordinary case, and the order has to work.
+func TestSchemaAfterRename(t *testing.T) {
+	fns := []Transformer{
+		Rename(map[string]string{"temperature_2m": "temperature_celsius"}),
+		Schema("time", "temperature_celsius"),
+	}
+
+	var payload any = map[string]any{"time": "t", "temperature_2m": 14.1, "elevation": 737}
+	var err error
+	for _, fn := range fns {
+		if payload, err = fn(payload); err != nil {
+			t.Fatalf("chain: %v", err)
+		}
+	}
+
+	obj := payload.(map[string]any)
+	if obj["temperature_celsius"] != 14.1 || len(obj) != 2 {
+		t.Errorf("the chain did not compose the declared shape: %v", obj)
+	}
+}
+
+// Nothing to name, nothing to do.
+func TestSchemaPassesScalarsThrough(t *testing.T) {
+	got, err := Schema("a")("um texto")
+	if err != nil {
+		t.Fatalf("a scalar record has no fields to name: %v", err)
+	}
+	if got != "um texto" {
+		t.Errorf("the record changed: %v", got)
 	}
 }

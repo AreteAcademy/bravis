@@ -81,7 +81,7 @@ func (l *Loader) createFromSQL(ctx context.Context, table *bigquery.Table) error
 // applyLayout configures a load job that may create the table.
 //
 // Partitioning is the one layout decision the SDK can make on its own, and
-// only with ExtraMetadata: ingestion_loaded_at is the only column it knows
+// only with Metadata: ingestion_loaded_at is the only column it knows
 // exists. An unpartitioned landing table costs a full scan on every MERGE the
 // bronze layer runs -- measured on a consumer, one entity spent 58.96 GiB of
 // MERGE against 0.0 GiB of SELECT.
@@ -102,7 +102,7 @@ func (l *Loader) applyLayout(loader *bigquery.Loader, file *bigquery.FileConfig)
 		file.AutoDetect = true
 	}
 
-	if l.cfg.ExtraMetadata {
+	if l.cfg.Metadata {
 		loader.TimePartitioning = &bigquery.TimePartitioning{
 			Type:                   bigquery.DayPartitioningType,
 			Field:                  metadataLoadedAt,
@@ -145,7 +145,7 @@ func tableDescription(cfg *core.LoadConfig) string {
 	if cfg.Provider != "" && cfg.Entity != "" {
 		who = fmt.Sprintf("%s/%s via the Bravis SDK", cfg.Provider, cfg.Entity)
 	}
-	if cfg.ExtraMetadata {
+	if cfg.Metadata {
 		return fmt.Sprintf("Written by %s since %s. Rows carry ingestion_id; deduplicate "+
 			"on it downstream. The SDK never alters this table.",
 			who, time.Now().UTC().Format("2006-01-02"))

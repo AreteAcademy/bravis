@@ -65,7 +65,7 @@ go run ./09-transform -dry-run
 o nome que você usa, `Compute` para derivar, e uma função sua para o resto —
 com `sdk.SkipRecord` para filtrar.
 
-`Target.Key` e `Target.When` leem o payload **depois** de todo Transformer, então
+`Metadata.Key` e `Metadata.When` leem o registro **depois** de todo Transformer, então
 apontam para o nome novo. Apontar para o antigo é erro listando o que o registro
 tem de fato — e não uma chave curta, que mudaria todo `ingestion_id` em silêncio.
 

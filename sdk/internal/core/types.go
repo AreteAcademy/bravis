@@ -145,18 +145,21 @@ type LoadConfig struct {
 	// to prevent.
 	RequirePartitionFilter bool
 
-	// ExtraMetadata adds two fields to every payload:
+	// Metadata adds exactly two fields to every record:
 	//
 	//	ingestion_id         deterministic UUID v5 over
 	//	                     provider|entity|source_key|record_ts
 	//	ingestion_loaded_at  when the row was written, RFC 3339
 	//
-	// Off by default. The SDK writes your payload as you built it and adds
-	// nothing: what the rows look like is yours to decide, in Transform.
+	// Two columns, and only ever those two. Off by default: the columns are
+	// composed in Transform, and the SDK adds nothing you did not ask for.
 	//
-	// A payload that already has one of those names is an error rather than a
+	// At this level the provenance is already on the Envelope. The facade
+	// takes an sdk.Metadata instead, which is where it gets built.
+	//
+	// A record that already has one of those names is an error rather than a
 	// silent overwrite.
-	ExtraMetadata bool
+	Metadata bool
 
 	// ClusterBy names the columns the created table is clustered on. The SDK
 	// cannot guess: it does not know your payload. Ignored when the table
@@ -396,10 +399,10 @@ func WithRequirePartitionFilter(enabled bool) LoadOption {
 	}
 }
 
-// WithExtraMetadata adds ingestion_id and ingestion_loaded_at to each payload.
-func WithExtraMetadata(enabled bool) LoadOption {
+// WithMetadata adds ingestion_id and ingestion_loaded_at to each record.
+func WithMetadata(enabled bool) LoadOption {
 	return func(cfg *LoadConfig) {
-		cfg.ExtraMetadata = enabled
+		cfg.Metadata = enabled
 	}
 }
 

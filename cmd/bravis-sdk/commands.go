@@ -114,11 +114,11 @@ Examples:
 		ctx := context.Background()
 
 		loader, err := load.New(ctx, &sdk.LoadConfig{
-			ProjectID:     projectID,
-			Dataset:       dataset,
-			Table:         table,
-			Format:        "ndjson",
-			ExtraMetadata: addMetadata,
+			ProjectID: projectID,
+			Dataset:   dataset,
+			Table:     table,
+			Format:    "ndjson",
+			Metadata:  addMetadata,
 		})
 		if err != nil {
 			log.Fatalf("Create loader failed: %v", err)
@@ -213,10 +213,10 @@ Examples:
 		fmt.Fprintf(cmd.OutOrStderr(), "  Metadata: %v\n\n", addMetadata)
 
 		loader, err := load.New(ctx, &sdk.LoadConfig{
-			ProjectID:     projectID,
-			Dataset:       dataset,
-			Table:         table,
-			ExtraMetadata: addMetadata,
+			ProjectID: projectID,
+			Dataset:   dataset,
+			Table:     table,
+			Metadata:  addMetadata,
 		})
 		if err != nil {
 			log.Fatalf("Create loader failed: %v", err)

@@ -50,8 +50,8 @@ var SkipRecord = errors.New("skip record") //nolint:staticcheck // ST1012: contr
 //
 // Provenance is not available here. Provider, Entity, SourceKey and RecordTS
 // are stamped at Load, from Target, after every Transformer has run -- so a
-// Transformer that renames the field Target.Key reads must run before Load
-// sees it, and Target.Key must name the new name.
+// Transformer that renames a field Metadata.Key reads must run before Load
+// sees it, and Metadata.Key must name the new name.
 func Transform(data *Data, fns ...Transformer) *Data {
 	if data == nil || len(fns) == 0 {
 		return data
@@ -114,20 +114,26 @@ func applyAll(fns []Transformer, payload any) (any, bool, error) {
 	return payload, false, nil
 }
 
-// Only keeps just the named fields.
+// Schema declares the record's columns: exactly these fields, and an error
+// naming any that is missing.
 //
-// ParallelArrays copies every scalar outside the block onto each record,
-// which is usually what you want -- latitude and longitude describe the
-// reading. But a response also carries per-request metadata, and Open-Meteo's
-// generationtime_ms is the cautionary case: it changes on every call, so
-// keeping it makes the same reading write a different payload every run.
+// This is where the destination's shape is decided. Put it last in the
+// Transform chain and the answer to "what columns does this table have?" is
+// one line of the fetcher:
 //
-//	sdk.Only("time", "temperature_2m", "latitude", "longitude")
+//	Transform: []sdk.Transformer{
+//		sdk.Rename(map[string]string{"temperature_2m": "temperature_celsius"}),
+//		sdk.Schema("time", "temperature_celsius", "latitude", "longitude"),
+//	}
 //
-// A name that is not in the record is skipped rather than an error: this is a
-// projection. Target.Key is where a missing field has to be loud, because
-// that one decides the row's identity.
-func Only(fields ...string) Transformer {
+// Fields not named are dropped -- that is the composing half, and saying
+// which four you want is saying it out loud. A field that is named and not
+// there is an error, because that one is the source changing shape under you,
+// and it must not reach the warehouse as a column that quietly went NULL.
+//
+// A record that is not a JSON object is passed through untouched: there are
+// no fields to name.
+func Schema(fields ...string) Transformer {
 	keep := make(map[string]bool, len(fields))
 	for _, f := range fields {
 		keep[f] = true
@@ -138,12 +144,23 @@ func Only(fields ...string) Transformer {
 		if !ok {
 			return payload, nil
 		}
+
+		var missing []string
 		out := make(map[string]any, len(fields))
-		for k, v := range obj {
-			if keep[k] {
-				out[k] = v
+		for _, f := range fields {
+			v, present := obj[f]
+			if !present {
+				missing = append(missing, f)
+				continue
 			}
+			out[f] = v
 		}
+
+		if len(missing) > 0 {
+			return nil, fmt.Errorf("the schema names %s, which this record does not have. "+
+				"It has: %s", strings.Join(missing, ", "), availableKeys(obj))
+		}
+
 		return out, nil
 	}
 }

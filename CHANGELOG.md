@@ -8,6 +8,72 @@ A tag de um módulo aninhado leva o prefixo do diretório: `sdk/v0.2.1`.
 
 ---
 
+## [0.15.0] — 2026-09-03
+
+**BREAKING.** As colunas são compostas no `Transform`, e o SDK não inventa
+nenhuma.
+
+### Adicionado
+- **`sdk.Schema(campos...)`** — um `Transformer` que declara as colunas do
+  destino: exatamente esses campos, e erro nomeando qualquer um que falte.
+  É a camada de proteção: um campo que a fonte para de mandar vira erro, não
+  uma coluna que silenciosamente foi para NULL. Colocado por último na cadeia,
+  ele responde numa linha "que colunas essa tabela tem?".
+- **`sdk.Metadata`** — bloco que reúne o que só existe para o `ingestion_id`:
+  `Provider`, `Entity`, `Key` e `When`. Declará-lo é o que pede os dois campos
+  de metadado, e nomeia no ponto de chamada as duas colunas que o SDK
+  acrescenta — nenhuma coluna aparece na tabela sem estar escrita no fetcher.
+
+### Alterado
+- **`Target.ExtraMetadata bool` → `Target.Metadata *Metadata`.** `nil` não
+  acrescenta nada. A regra "proveniência só é exigida com metadado" deixa de
+  ser validação e passa a ser a forma da API: sem o bloco não existe `Key` nem
+  `When` para o SDK chamar. É a garantia no lugar mais forte.
+- `Target.Provider`, `Target.Entity`, `Target.Key` e `Target.When` **saem** do
+  `Target` e passam a viver dentro do `Metadata`. O `Target` volta a ser só
+  destino.
+- `LoadConfig.ExtraMetadata` → `LoadConfig.Metadata`; `WithExtraMetadata` →
+  `WithMetadata`.
+- **`sdk.Only` sai, substituído por `sdk.Schema`.** Mesma assinatura, e a
+  diferença é a que importa: o `Only` descartava em silêncio um campo ausente,
+  que é exatamente o modo de falhar que o resto do SDK combate.
+
+### Corrigido
+- `03-basic-load` rodava e falhava com "table does not exist". Ganhou
+  `WithCreateTable(true)` e foi **executado de verdade** contra o BigQuery: a
+  tabela sai com as 2 colunas do chamador mais exatamente as 2 do metadado, e
+  nenhuma de `provider`, `entity`, `source_key` ou `payload`.
+- O erro de um registro que não é objeto com o bloco ligado começava com
+  maiúscula, contra o ST1005.
+
+### Migração
+
+```go
+// antes
+Target: sdk.Target{
+    Provider: "open_meteo", Entity: "hourly",
+    Key: sdk.Key("latitude", "time"), When: sdk.Field("time"),
+    ExtraMetadata: true,
+}
+
+// depois
+Transform: []sdk.Transformer{
+    sdk.Schema("time", "temperature_2m", "latitude", "longitude"),
+},
+Target: sdk.Target{
+    Table: "vendors_open_meteo_hourlys",
+    Metadata: &sdk.Metadata{
+        Provider: "open_meteo", Entity: "hourly",
+        Key: sdk.Key("latitude", "time"), When: sdk.Field("time"),
+    },
+}
+```
+
+Trocar `sdk.Only` por `sdk.Schema` é textual, mas o comportamento muda: um
+campo nomeado e ausente passa a ser erro.
+
+---
+
 ## [0.14.0] — 2026-09-03
 
 **BREAKING**, e é uma retirada de responsabilidade: o payload é do cliente.
@@ -394,6 +460,7 @@ Primeira versão que compila.
 > versão de `proxy.golang.org`, então ela permanece publicada e quebrada para
 > sempre. Comece pela `v0.1.1`.
 
+[0.15.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.15.0
 [0.14.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.14.0
 [0.13.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.13.0
 [0.12.1]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.12.1

@@ -35,7 +35,7 @@ func main() {
 		},
 
 		Transform: []sdk.Transformer{
-			sdk.Only("time", "temperature_2m", "latitude", "longitude"),
+			sdk.Schema("time", "temperature_2m", "latitude", "longitude"),
 		},
 
 		// Reading the run context is optional. This one uses it to widen the
@@ -50,12 +50,13 @@ func main() {
 		},
 
 		Target: sdk.Target{
-			Provider:      "open_meteo",
-			Entity:        "hourly_temperature",
-			Key:           sdk.Key("latitude", "longitude", "time"),
-			When:          sdk.Field("time"),
-			ExtraMetadata: true,
-			ClusterBy:     []string{"latitude", "longitude"},
+			Metadata: &sdk.Metadata{
+				Provider: "open_meteo",
+				Entity:   "hourly_temperature",
+				Key:      sdk.Key("latitude", "longitude", "time"),
+				When:     sdk.Field("time"),
+			},
+			ClusterBy: []string{"latitude", "longitude"},
 
 			// Left nil on purpose. Inside Bravis the engine decides; outside,
 			// nothing is created. sdk.Bool(false) here would refuse even on a

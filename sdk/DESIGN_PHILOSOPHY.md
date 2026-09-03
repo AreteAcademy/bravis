@@ -59,7 +59,7 @@ You decide:
 
 ## Metadata: Optional, Not Opinionated
 
-When `ExtraMetadata: true`, the SDK adds fields to the `Payload`:
+When a `Metadata` block is declared, the SDK adds two fields to the record:
 
 ```json
 {
@@ -102,7 +102,7 @@ CREATE TABLE landing.raw_data (
 
 Load:
 ```go
-loader.Load(ctx, envelopes...)  // ExtraMetadata: false (default)
+loader.Load(ctx, envelopes...)  // no Metadata block (default)
 ```
 
 Query:
@@ -125,7 +125,7 @@ CREATE TABLE landing.raw_data (
 Load:
 ```go
 loader.Load(ctx, &sdk.LoadConfig{
-  ExtraMetadata: true,
+  Metadata: &sdk.Metadata{...},
   // ...
 })
 ```
@@ -160,7 +160,7 @@ CLUSTER BY ingestion_id;
 Load:
 ```go
 loader.Load(ctx, &sdk.LoadConfig{
-  ExtraMetadata: true,
+  Metadata: &sdk.Metadata{...},
   // ...
 })
 ```
@@ -225,7 +225,7 @@ WHEN NOT MATCHED THEN INSERT (...) VALUES (...);
 
 1. **Create your BigQuery table** with whatever schema makes sense
 2. **Use `Envelope`** to move data through your pipeline
-3. **Add metadata only if you need it** (`ExtraMetadata: true`)
+3. **Add metadata only if you need it** (a `Metadata` block)
 4. **Handle deduplication** in your bronze/silver layer
 
 ## FAQ

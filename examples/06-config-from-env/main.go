@@ -50,7 +50,7 @@ func main() {
 		sdk.WithTable(env("BRAVIS_TABLE", "raw_data")),
 		sdk.WithStagingBucket(env("BRAVIS_STAGING_BUCKET", project+"-bravis-staging")),
 		sdk.WithThresholdForGCS(envInt("BRAVIS_GCS_THRESHOLD", 5000)),
-		sdk.WithExtraMetadata(envBool("BRAVIS_EXTRA_METADATA", false)),
+		sdk.WithMetadata(envBool("BRAVIS_EXTRA_METADATA", false)),
 	)
 	if err != nil {
 		log.Fatalf("loader: %v", err)

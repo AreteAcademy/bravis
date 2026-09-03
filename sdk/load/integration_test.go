@@ -206,7 +206,7 @@ func TestIntegrationMergeDoesNotDouble(t *testing.T) {
 		core.WithProjectID(env.project),
 		core.WithDataset(env.dataset),
 		core.WithTable(name),
-		core.WithExtraMetadata(true),
+		core.WithMetadata(true),
 		core.WithCreateTable(true),
 		core.WithDedup(core.DedupMerge),
 	)
@@ -266,7 +266,7 @@ func TestIntegrationCreatesTableFromData(t *testing.T) {
 		core.WithDataset(env.dataset),
 		core.WithTable(name),
 		core.WithCreateTable(true),
-		core.WithExtraMetadata(true),
+		core.WithMetadata(true),
 		// Um campo que os próprios registros têm: o SDK não impõe coluna
 		// nenhuma desde a v0.9.0, então "provider" não existe mais aqui.
 		core.WithClusterBy("label"),
@@ -367,7 +367,7 @@ func TestIntegrationMergeIntoADifferentColumnOrder(t *testing.T) {
 		core.WithProjectID(env.project),
 		core.WithDataset(env.dataset),
 		core.WithTable(name),
-		core.WithExtraMetadata(true),
+		core.WithMetadata(true),
 		core.WithDedup(core.DedupMerge),
 	)
 	if err != nil {
@@ -441,7 +441,7 @@ func TestIntegrationFirstMergeLoadStillPartitions(t *testing.T) {
 		core.WithProjectID(env.project),
 		core.WithDataset(env.dataset),
 		core.WithTable(name),
-		core.WithExtraMetadata(true),
+		core.WithMetadata(true),
 		core.WithCreateTable(true),
 		core.WithDedup(core.DedupMerge),
 		core.WithClusterBy("label"),
@@ -472,7 +472,7 @@ func TestIntegrationFirstMergeLoadStillPartitions(t *testing.T) {
 // TestIntegrationWritesOnlyTheCallersFields is the contract, checked against
 // the thing that actually decides it.
 //
-// With ExtraMetadata off the SDK adds nothing: the columns in the destination
+// With Metadata off the SDK adds nothing: the columns in the destination
 // are the caller's fields and no others. No provider, no entity, no
 // source_key, no payload wrapper, no ingestion_id -- the row shape is the
 // caller's decision, made in Transform, and the SDK writes it.
@@ -538,7 +538,7 @@ func TestIntegrationWritesOnlyTheCallersFields(t *testing.T) {
 }
 
 // And the other half: with the flag on, exactly two fields are added.
-func TestIntegrationExtraMetadataAddsExactlyTwoFields(t *testing.T) {
+func TestIntegrationMetadataAddsExactlyTwoFields(t *testing.T) {
 	env := requireIntegration(t)
 	ctx := context.Background()
 
@@ -557,7 +557,7 @@ func TestIntegrationExtraMetadataAddsExactlyTwoFields(t *testing.T) {
 		core.WithDataset(env.dataset),
 		core.WithTable(name),
 		core.WithCreateTable(true),
-		core.WithExtraMetadata(true),
+		core.WithMetadata(true),
 	)
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -588,7 +588,7 @@ func TestIntegrationExtraMetadataAddsExactlyTwoFields(t *testing.T) {
 	}
 	for _, forbidden := range []string{"provider", "entity", "source_key", "payload"} {
 		if got[forbidden] {
-			t.Errorf("ExtraMetadata wrote %q; it adds two fields, not six", forbidden)
+			t.Errorf("Metadata wrote %q; it adds two fields, not six", forbidden)
 		}
 	}
 	if len(meta.Schema) != 4 {

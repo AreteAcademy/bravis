@@ -72,7 +72,10 @@ func (p Pipeline) name() string {
 	if p.Name != "" {
 		return p.Name
 	}
-	return fmt.Sprintf("%s/%s", p.Target.Provider, p.Target.Entity)
+	if m := p.Target.Metadata; m != nil && m.Provider != "" {
+		return fmt.Sprintf("%s/%s", m.Provider, m.Entity)
+	}
+	return p.Target.Table
 }
 
 // Run runs a Pipeline as a command: it parses flags, sets up logging,
@@ -202,10 +205,10 @@ func runDryRun(ctx context.Context, p *Pipeline, n int) error {
 			return fmt.Errorf("record %d: %w", i, err)
 		}
 
-		// Without ExtraMetadata there is no ingestion_id to print, because
+		// Without a Metadata block there is no ingestion_id to print, because
 		// the load will not write one. Printing a computed id here would
 		// show a column that never lands.
-		if !p.Target.ExtraMetadata {
+		if p.Target.Metadata == nil {
 			_, _ = fmt.Fprintf(os.Stdout, "%s\n", body)
 			continue
 		}

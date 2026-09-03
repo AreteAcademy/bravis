@@ -116,15 +116,15 @@ func resolveConfig(cfg *core.LoadConfig, opts ...core.LoadOption) (*core.LoadCon
 			"the merge miss the match and write the duplicate it exists to prevent")
 	}
 
-	if c.Dedup == core.DedupMerge && !c.ExtraMetadata {
-		return nil, fmt.Errorf("DedupMerge requires ExtraMetadata: the merge matches rows on " +
-			"ingestion_id, and that column only exists when ExtraMetadata adds it")
+	if c.Dedup == core.DedupMerge && !c.Metadata {
+		return nil, fmt.Errorf("DedupMerge requires Metadata: the merge matches rows on " +
+			"ingestion_id, and that column only exists when Metadata adds it")
 	}
 
-	if (c.PartitionExpiration > 0 || c.RequirePartitionFilter) && !c.ExtraMetadata {
-		return nil, fmt.Errorf("partition options require ExtraMetadata: the table is " +
+	if (c.PartitionExpiration > 0 || c.RequirePartitionFilter) && !c.Metadata {
+		return nil, fmt.Errorf("partition options require Metadata: the table is " +
 			"partitioned on ingestion_loaded_at, and that column only exists when " +
-			"ExtraMetadata adds it")
+			"Metadata adds it")
 	}
 	return &c, nil
 }
@@ -190,7 +190,7 @@ func (l *Loader) Load(ctx context.Context, envelopes ...core.Envelope) (*core.Lo
 		return fail(nil)
 	}
 
-	if l.cfg.ExtraMetadata {
+	if l.cfg.Metadata {
 		// On a copy. `loader.Load(ctx, batch...)` hands us the caller's own
 		// slice -- a variadic call shares the backing array -- so writing the
 		// metadata back into it would alter what they still hold. Loading the
@@ -292,7 +292,7 @@ func (l *Loader) Load(ctx context.Context, envelopes ...core.Envelope) (*core.Lo
 	return result, nil
 }
 
-// The two fields ExtraMetadata adds. Only two: provider, entity and
+// The two fields Metadata adds. Only two: provider, entity and
 // source_key are provenance the SDK uses to build the id, not columns it
 // imposes. What a row looks like is the caller's decision, made in Transform.
 const (
@@ -328,8 +328,8 @@ func (l *Loader) addMetadataToEnvelope(env *core.Envelope) error {
 			return fmt.Errorf("marshal payload: %w", err)
 		}
 		if err := json.Unmarshal(data, &payload); err != nil {
-			return fmt.Errorf("ExtraMetadata adds two fields to the record, so it has to be a "+
-				"JSON object; this one is %s. Wrap it in Transform, or leave ExtraMetadata off",
+			return fmt.Errorf("the Metadata block adds two fields to the record, so it has to "+
+				"be a JSON object; this one is %s. Wrap it in Transform, or drop the block",
 				truncate(data, 80))
 		}
 	}
@@ -341,8 +341,8 @@ func (l *Loader) addMetadataToEnvelope(env *core.Envelope) error {
 		}
 	}
 	if len(clashes) > 0 {
-		return fmt.Errorf("payload already has the field(s) %s, which ExtraMetadata would "+
-			"overwrite. Rename them in Transform, or leave ExtraMetadata off",
+		return fmt.Errorf("payload already has the field(s) %s, which Metadata would "+
+			"overwrite. Rename them in Transform, or leave Metadata off",
 			strings.Join(clashes, ", "))
 	}
 

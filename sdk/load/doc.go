@@ -40,7 +40,7 @@
 // Your payload, as Transform left it. The SDK imposes no columns: what a row
 // looks like is your decision.
 //
-// ExtraMetadata adds two fields and nothing else:
+// Metadata adds two fields and nothing else:
 //
 //   - ingestion_id          deterministic UUID v5 over
 //     provider|entity|source_key|record_ts
@@ -50,7 +50,7 @@
 // not become columns. A payload that already owns one of those two names is
 // an error naming the field, never a silent overwrite.
 //
-// ExtraMetadata is required by DedupMerge, which matches on ingestion_id, and
+// Metadata is required by DedupMerge, which matches on ingestion_id, and
 // by the partition options, which partition on ingestion_loaded_at.
 //
 // # Creating the table
@@ -58,7 +58,7 @@
 // Off by default. With CreateTable the load job creates it on the first run,
 // inferring the schema from the data -- nothing else knows it, since the
 // payload is yours. The SDK still sets what it can: day partitioning on
-// ingestion_loaded_at when ExtraMetadata provides it, and clustering on the
+// ingestion_loaded_at when Metadata provides it, and clustering on the
 // columns you name in ClusterBy.
 //
 // CreateSQL runs your DDL instead, once, and the SDK then checks it produced

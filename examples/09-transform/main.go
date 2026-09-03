@@ -75,12 +75,14 @@ func main() {
 		},
 
 		Target: sdk.Target{
-			Provider: "open_meteo",
-			Entity:   "hourly_temperature",
-			// Key and When read the payload after every Transformer has run,
-			// so they name observed_at, not the source's "time".
-			Key:  sdk.Key("latitude", "longitude", "observed_at"),
-			When: sdk.Field("observed_at"),
+			Metadata: &sdk.Metadata{
+				Provider: "open_meteo",
+				Entity:   "hourly_temperature",
+				// Key and When read the record after every Transformer has
+				// run, so they name observed_at, not the source's "time".
+				Key:  sdk.Key("latitude", "longitude", "observed_at"),
+				When: sdk.Field("observed_at"),
+			},
 		},
 	})
 }

@@ -5,7 +5,7 @@
 // Python fetcher also writes -- you build it, in one Transformer.
 //
 // Only ingestion_id and ingestion_loaded_at come from the SDK, and only
-// because you asked with ExtraMetadata.
+// because you asked with a Metadata block.
 package main
 
 import (
@@ -38,11 +38,11 @@ func main() {
 		},
 
 		Transform: []sdk.Transformer{
-			sdk.Only("time", "temperature_2m", "latitude", "longitude"),
+			sdk.Schema("time", "temperature_2m", "latitude", "longitude"),
 
 			// The contract, built here because it is yours, not the SDK's.
 			// ingestion_id and ingestion_loaded_at arrive on top of this from
-			// ExtraMetadata below.
+			// the Metadata block below.
 			func(payload any) (any, error) {
 				return map[string]any{
 					"provider":   provider,
@@ -54,13 +54,15 @@ func main() {
 		},
 
 		Target: sdk.Target{
-			Provider: provider,
-			Entity:   entity,
-			Key:      sdk.Key("source_key"),
-			When:     sdk.Field("source_key"),
-
-			// The two the SDK adds, and only because we asked.
-			ExtraMetadata: true,
+			// The two columns the SDK adds, named here so they are not a
+			// surprise in the table -- everything else above came from
+			// Transform.
+			Metadata: &sdk.Metadata{
+				Provider: provider,
+				Entity:   entity,
+				Key:      sdk.Key("source_key"),
+				When:     sdk.Field("source_key"),
+			},
 
 			// First run creates the table, inferring the columns from the
 			// rows above. Clustering has to be named: the SDK does not know

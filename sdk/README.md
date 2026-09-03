@@ -17,40 +17,47 @@ Requires Go 1.23 or newer (the SDK streams rows as `iter.Seq2`).
 > not exist, so it fails to build for everyone. The Go module proxy is
 > immutable and cannot be corrected after the fact. Start at `v0.1.1`.
 
-## Two calls
+## Three lines
 
 ```go
 dados, err := sdk.Extract(ctx, sdk.Source{
-	URL:      "https://api.open-meteo.com/v1/forecast?...",
-	Guard:   sdk.RejectIf("error"),
+	URL:    "https://api.open-meteo.com/v1/forecast?...",
+	Guard:  sdk.RejectIf("error"),
 	Expand: sdk.ParallelArrays("hourly", "time", "temperature_2m"),
 })
 
-res, err := sdk.Load(ctx, dados, sdk.Target{Table: "hourly_temperature"})
+// The columns. This is where they are decided, and the only place.
+dados = sdk.Transform(dados, sdk.Schema("time", "temperature_2m", "latitude", "longitude"))
+
+res, err := sdk.Load(ctx, dados, sdk.Target{Table: "hourly_temperatures"})
 ```
 
-**The payload is yours.** The SDK writes the record as `Transform` left it and
-adds nothing — no wrapper column, no provenance columns, no shape it decided
-for you.
+**The columns come from `Transform`.** Whatever shape your transformers
+compose is exactly what is written — no wrapper column, no provenance columns,
+no shape the library decided for you. Read the `Transform` chain and you know
+what the table holds.
 
-The one thing it will add, on request, is two metadata fields. `ingestion_id`
-is built out of provenance, which is why asking for it is what makes
-`Provider`, `Entity` and `Key` necessary:
+The one exception is `Metadata`, and it names what it adds:
 
 ```go
 res, err := sdk.Load(ctx, dados, sdk.Target{
-	Provider:      "open_meteo",
-	Entity:        "hourly_temperature",
-	Key:           sdk.Key("latitude", "longitude", "time"),
-	When:          sdk.Field("time"),
-	ExtraMetadata: true,
+	Table: "hourly_temperatures",
+
+	// Adds exactly two columns: ingestion_id and ingestion_loaded_at.
+	Metadata: &sdk.Metadata{
+		Provider: "open_meteo",
+		Entity:   "hourly_temperature",
+		Key:      sdk.Key("latitude", "longitude", "time"),
+		When:     sdk.Field("time"),
+	},
 })
 ```
 
-With the flag off, `Key` and `When` are never called: the SDK does not read a
-field out of your payload to build a column it is not writing.
+Provenance lives inside that block because that is the only thing it is for:
+those four fields build `ingestion_id`, and they never become columns. Without
+the block the SDK never reads a field out of your record at all.
 
-Everything between those two calls that is not specific to the vendor lives in
+Everything between the two calls that is not specific to the vendor lives in
 the SDK: config, retry, pagination, expansion, table creation, deduplication
 and the result you log.
 
@@ -97,12 +104,12 @@ wrong.
 
 It stays lazy, so a paginated source still does not have to fit in memory.
 
-**Order matters against `Target.Key`.** Provenance is stamped after every
+**Order matters against `Metadata.Key`.** Provenance is read after every
 Transformer has run, so a rename here has to be reflected there:
 
 ```go
 sdk.Transform(data, sdk.Rename(map[string]string{"time": "observed_at"}))
-sdk.Target{Key: sdk.Key("latitude", "longitude", "observed_at")}  // the new name
+sdk.Metadata{Key: sdk.Key("latitude", "longitude", "observed_at")}  // the new name
 ```
 
 Naming the old one is an error listing what the record actually has — not a
@@ -442,15 +449,19 @@ stats := data.Stats()   // read after the stream is drained
 
 ## What gets written
 
-**Your payload, as Transform left it.** The SDK imposes no columns: what a row
-looks like is your decision.
+**The columns you composed in Transform.** The SDK imposes none: what a row
+looks like is decided in the `Transform` chain, and `sdk.Schema` is where you
+say it out loud.
 
 ```go
-sdk.Target{Table: "hourly"}
-// writes exactly the payload -- nothing asked for, nothing added
+Transform: []sdk.Transformer{
+	sdk.Schema("time", "temperature_2m", "latitude", "longitude"),
+},
+Target: sdk.Target{Table: "hourly"},
+// four columns, and the fetcher names all four
 ```
 
-`ExtraMetadata` adds two fields, and nothing else:
+`Metadata` adds two more, and nothing else:
 
 | field | |
 |---|---|
@@ -458,15 +469,14 @@ sdk.Target{Table: "hourly"}
 | `ingestion_loaded_at` | when the row was written, RFC 3339 |
 
 `Provider`, `Entity` and `SourceKey` stay provenance — they build the id, they
-do not become columns. A payload that already owns one of the two names is an
+do not become columns. A record that already owns one of the two names is an
 error naming the field, never a silent overwrite.
 
-Turning the flag on is also what makes `Provider`, `Entity` and `Key`
-necessary, and the only reason the SDK reads your payload at all. With it off
-they are optional and never called.
+Declaring the block is also the only reason the SDK reads your record. Without
+it, `Key` and `When` do not exist to be called.
 
-`ExtraMetadata` is required by `DedupMerge`, which matches on `ingestion_id`,
-and by the partition options, which partition on `ingestion_loaded_at`.
+`Metadata` is required by `DedupMerge`, which matches on `ingestion_id`, and by
+the partition options, which partition on `ingestion_loaded_at`.
 
 ### A row shape of your own
 
@@ -483,7 +493,7 @@ Transform: []sdk.Transformer{
 		}, nil
 	},
 },
-Target: sdk.Target{..., ExtraMetadata: true},
+Target: sdk.Target{..., Metadata: &sdk.Metadata{...}},
 ```
 
 See [`examples/07-own-shape`](../examples/07-own-shape/).
@@ -548,7 +558,7 @@ create_table=true (from the engine: first run of this step)
 The schema is inferred from the data, because nothing else knows it — the
 payload is yours. Two knobs the SDK can still set:
 
-- **Partitioning** by day on `ingestion_loaded_at`, whenever `ExtraMetadata`
+- **Partitioning** by day on `ingestion_loaded_at`, whenever `Metadata`
   gives it that column. Not optional: an unpartitioned landing table costs a
   full scan on every MERGE the bronze layer runs.
 - **Clustering**, on the columns you name. The SDK cannot guess them.
@@ -588,7 +598,7 @@ Or with metadata:
 CREATE TABLE {dataset}.{table} (
   payload JSON NOT NULL
 )
--- With ExtraMetadata these two sit alongside your payload's own fields:
+-- With a Metadata block these two sit alongside your own columns:
 -- - ingestion_id (deterministic UUID v5)
 -- - ingestion_loaded_at (load timestamp)
 ```

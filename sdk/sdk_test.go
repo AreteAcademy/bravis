@@ -209,11 +209,7 @@ func TestExtractExpandeEMapeia(t *testing.T) {
 	}
 
 	target := Target{
-		Provider:      "open_meteo",
-		Entity:        "hourly_temperature",
-		Key:           Key("latitude", "longitude", "time"),
-		When:          Field("time"),
-		ExtraMetadata: true,
+		Metadata: &Metadata{Provider: "open_meteo", Entity: "hourly_temperature", Key: Key("latitude", "longitude", "time"), When: Field("time")},
 	}
 
 	envelopes, err := collect(data, target)
@@ -317,7 +313,7 @@ func TestErroDeFormatoEmChaveAusente(t *testing.T) {
 	// A field that does not exist is a format error, not a source error: the
 	// action is to fix the mapping, not to wait and retry.
 	_, err = collect(data, Target{
-		Provider: "p", Entity: "e", Key: Key("campo_inexistente"), ExtraMetadata: true,
+		Metadata: &Metadata{Provider: "p", Entity: "e", Key: Key("campo_inexistente")},
 	})
 	var formato *FormatError
 	if !errors.As(err, &formato) {
@@ -332,7 +328,7 @@ func TestErroDeFormatoEmChaveAusente(t *testing.T) {
 
 // Provenance is required exactly when the SDK is going to stamp an id, and
 // not otherwise.
-func TestDestinoExigeIdentidadeSomenteComExtraMetadata(t *testing.T) {
+func TestDestinoExigeIdentidadeSomenteComMetadata(t *testing.T) {
 	t.Setenv(EnvProject, "a-project")
 
 	cases := []struct {
@@ -340,9 +336,9 @@ func TestDestinoExigeIdentidadeSomenteComExtraMetadata(t *testing.T) {
 		target   Target
 		expected string
 	}{
-		{"no provider", Target{Entity: "e", Key: Key("id"), ExtraMetadata: true}, "Provider"},
-		{"no entity", Target{Provider: "p", Key: Key("id"), ExtraMetadata: true}, "Entity"},
-		{"no key", Target{Provider: "p", Entity: "e", ExtraMetadata: true}, "Key"},
+		{"no provider", Target{Metadata: &Metadata{Entity: "e", Key: Key("id")}}, "Provider"},
+		{"no entity", Target{Metadata: &Metadata{Provider: "p", Key: Key("id")}}, "Entity"},
+		{"no key", Target{Metadata: &Metadata{Provider: "p", Entity: "e"}}, "Key"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -359,7 +355,7 @@ func TestDestinoExigeIdentidadeSomenteComExtraMetadata(t *testing.T) {
 
 // The other half, and the point of the change: with the flag off none of the
 // three is needed, because the SDK has nothing to build out of them.
-func TestDestinoSemExtraMetadataNaoExigeProveniencia(t *testing.T) {
+func TestDestinoSemMetadataNaoExigeProveniencia(t *testing.T) {
 	t.Setenv(EnvProject, "a-project")
 
 	cfg, _, err := Target{Table: "minha_tabela"}.resolve()
@@ -391,8 +387,8 @@ func TestTargetPrecedenceAndOrigin(t *testing.T) {
 
 	// 1. explicit beats the environment
 	cfg, origins, err := Target{
-		Provider: "acme", Entity: "tx", Key: Key("id"),
-		Project: "explicito",
+		Metadata: &Metadata{Provider: "acme", Entity: "tx", Key: Key("id")},
+		Project:  "explicito",
 	}.resolve()
 	if err != nil {
 		t.Fatal(err)
@@ -423,7 +419,7 @@ func TestTargetPrecedenceAndOrigin(t *testing.T) {
 
 func TestDestinoSemProjetoErra(t *testing.T) {
 	t.Setenv(EnvProject, "")
-	_, _, err := Target{Provider: "p", Entity: "e", Key: Key("id")}.resolve()
+	_, _, err := Target{Metadata: &Metadata{Provider: "p", Entity: "e", Key: Key("id")}}.resolve()
 	if err == nil {
 		t.Fatal("no project and no environment must be an error")
 	}
@@ -437,7 +433,7 @@ func TestTargetDoesNotCreateTablesUnasked(t *testing.T) {
 
 	// Nothing runs DDL against a warehouse without being asked. The zero
 	// value creates nothing; CreateTable is the whole opt-in.
-	cfg, _, err := Target{Provider: "a", Entity: "b", Key: Key("id")}.resolve()
+	cfg, _, err := Target{Metadata: &Metadata{Provider: "a", Entity: "b", Key: Key("id")}}.resolve()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -446,7 +442,7 @@ func TestTargetDoesNotCreateTablesUnasked(t *testing.T) {
 	}
 
 	asked, _, err := Target{
-		Provider: "a", Entity: "b", Key: Key("id"), CreateTable: Bool(true),
+		Metadata: &Metadata{Provider: "a", Entity: "b", Key: Key("id")}, CreateTable: Bool(true),
 	}.resolve()
 	if err != nil {
 		t.Fatal(err)
@@ -460,7 +456,7 @@ func TestTargetCarriesTableOptions(t *testing.T) {
 	t.Setenv(EnvProject, "p")
 
 	cfg, _, err := Target{
-		Provider: "open_meteo", Entity: "hourly", Key: Key("id"),
+		Metadata:               &Metadata{Provider: "open_meteo", Entity: "hourly", Key: Key("id")},
 		CreateTable:            Bool(true),
 		PartitionExpiration:    90 * 24 * time.Hour,
 		RequirePartitionFilter: true,
@@ -504,7 +500,7 @@ func TestSomenteFiltraCamposVolateis(t *testing.T) {
 
 	// Only is a Transformer now: it projects a record, it does not expand a
 	// document, so it belongs between Extract and Load.
-	clean, err := Only("time", "temperature_2m", "latitude")(raw[0])
+	clean, err := Schema("time", "temperature_2m", "latitude")(raw[0])
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -548,7 +544,7 @@ func TestSourceRejectsUnimplementedDriver(t *testing.T) {
 func TestTargetDriverDefaultsToBigQuery(t *testing.T) {
 	t.Setenv(EnvProject, "p")
 
-	cfg, _, err := Target{Provider: "a", Entity: "b", Key: Key("id")}.resolve()
+	cfg, _, err := Target{Metadata: &Metadata{Provider: "a", Entity: "b", Key: Key("id")}}.resolve()
 	if err != nil {
 		t.Fatalf("an empty Driver should default to BigQuery: %v", err)
 	}
@@ -561,7 +557,7 @@ func TestTargetRejectsUnimplementedDriver(t *testing.T) {
 	t.Setenv(EnvProject, "p")
 
 	_, _, err := Target{
-		Provider: "a", Entity: "b", Key: Key("id"), Driver: "postgres",
+		Metadata: &Metadata{Provider: "a", Entity: "b", Key: Key("id")}, Driver: "postgres",
 	}.resolve()
 	if err == nil {
 		t.Fatal("an unimplemented driver must be refused")
@@ -578,8 +574,8 @@ func TestDriverIsNotProvider(t *testing.T) {
 	// data came from. Only Provider feeds ingestion_id -- confusing the two
 	// would silently change every id in the base.
 	cfg, _, err := Target{
-		Provider: "open_meteo", Entity: "hourly", Key: Key("id"),
-		Driver: DriverBigQuery,
+		Metadata: &Metadata{Provider: "open_meteo", Entity: "hourly", Key: Key("id")},
+		Driver:   DriverBigQuery,
 	}.resolve()
 	if err != nil {
 		t.Fatal(err)
@@ -624,7 +620,7 @@ func TestResultCountsPagesWalked(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := collect(data, Target{Provider: "p", Entity: "e", Key: Key("id")}); err != nil {
+	if _, err := collect(data, Target{Metadata: &Metadata{Provider: "p", Entity: "e", Key: Key("id")}}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -660,7 +656,7 @@ func TestResultCountsRetriedAttempts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := collect(data, Target{Provider: "p", Entity: "e", Key: Key("id")}); err != nil {
+	if _, err := collect(data, Target{Metadata: &Metadata{Provider: "p", Entity: "e", Key: Key("id")}}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -685,8 +681,8 @@ func TestTransformKeepsTheCounters(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	data = Transform(data, Only("time", "temperature_2m", "latitude"))
-	if _, err := collect(data, Target{Provider: "p", Entity: "e", Key: Key("time")}); err != nil {
+	data = Transform(data, Schema("time", "temperature_2m", "latitude"))
+	if _, err := collect(data, Target{Metadata: &Metadata{Provider: "p", Entity: "e", Key: Key("time")}}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -791,11 +787,11 @@ func TestEveryCoreOptionIsReachable(t *testing.T) {
 
 // --- the payload is the caller's, not the SDK's -------------------------
 
-// With ExtraMetadata off the SDK has nothing to build out of the payload, so
+// With Metadata off the SDK has nothing to build out of the payload, so
 // it must not read one field out of it. Proved with selectors that fail if
 // they are ever called: a selector that runs is a selector whose failure can
 // sink a load the caller never asked the SDK to inspect.
-func TestSemExtraMetadataOSDKNaoTocaNoPayload(t *testing.T) {
+func TestSemMetadataOSDKNaoTocaNoPayload(t *testing.T) {
 	srv := openMeteoServer(t)
 	defer srv.Close()
 
@@ -807,23 +803,19 @@ func TestSemExtraMetadataOSDKNaoTocaNoPayload(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	chamou := false
-	envelopes, err := collect(data, Target{
-		Table: "qualquer",
-		Key: func(any) (string, error) {
-			chamou = true
-			return "", fmt.Errorf("Key should never run without ExtraMetadata")
-		},
-		When: func(any) (string, error) {
-			chamou = true
-			return "", fmt.Errorf("When should never run without ExtraMetadata")
-		},
-	})
+	// The old design took Key and When on Target, so a load that added no
+	// metadata still ran them over every record. Now they live inside the
+	// Metadata block: without it there are no selectors to run, and no way to
+	// hand the SDK one. The guarantee moved from a validation to the shape of
+	// the API, which is the stronger place for it.
+	envelopes, err := collect(data, Target{Table: "qualquer"})
 	if err != nil {
 		t.Fatalf("collect: %v", err)
 	}
-	if chamou {
-		t.Error("the SDK read the payload for provenance it was not asked to add")
+	for i, e := range envelopes {
+		if e.Provider != "" || e.Entity != "" || e.SourceKey != "" || e.RecordTS != "" {
+			t.Errorf("record %d was stamped with provenance nobody asked for: %+v", i, e)
+		}
 	}
 	if len(envelopes) == 0 {
 		t.Fatal("no records came through")
@@ -836,7 +828,7 @@ func TestSemExtraMetadataOSDKNaoTocaNoPayload(t *testing.T) {
 }
 
 // And what comes out is what went in, field for field.
-func TestSemExtraMetadataOPayloadSaiComoEntrou(t *testing.T) {
+func TestSemMetadataOPayloadSaiComoEntrou(t *testing.T) {
 	srv := openMeteoServer(t)
 	defer srv.Close()
 

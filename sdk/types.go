@@ -88,7 +88,7 @@ var (
 	WithStagingBucket          = core.WithStagingBucket
 	WithFormat                 = core.WithFormat
 	WithThresholdForGCS        = core.WithThresholdForGCS
-	WithExtraMetadata          = core.WithExtraMetadata
+	WithMetadata               = core.WithMetadata
 	WithClusterBy              = core.WithClusterBy
 	WithDriver                 = core.WithDriver
 	WithCreateTable            = core.WithCreateTable

@@ -10,22 +10,14 @@ import (
 
 // Target says where records land.
 //
-// The payload is yours. The SDK writes the record as Transform left it and
-// adds nothing, so the common case is one line:
+// The columns come from Transform: whatever shape your transformers compose
+// is exactly what is written. The SDK adds nothing on its own, so the common
+// case is one line:
 //
-//	sdk.Target{Table: "minha_tabela"}
+//	sdk.Target{Table: "hourly_temperatures"}
 //
-// The only thing it will add, on request, is two metadata fields -- and
-// ingestion_id is built from provenance, so that is when Provider, Entity and
-// Key become necessary:
-//
-//	sdk.Target{
-//		Provider:      "open_meteo",
-//		Entity:        "hourly_temperature",
-//		Key:           sdk.Key("latitude", "longitude", "time"),
-//		When:          sdk.Field("time"),
-//		ExtraMetadata: true,
-//	}
+// The one exception is Metadata, which adds two named columns and is opt-in.
+// See Metadata.
 type Target struct {
 	// Driver selects the destination. Empty means DriverBigQuery, the only
 	// one implemented today.
@@ -34,31 +26,6 @@ type Target struct {
 	// rows, Provider is which vendor the data came from. Provider feeds
 	// ingestion_id; Driver does not.
 	Driver core.Driver
-
-	// Provider and Entity identify the source. They feed ingestion_id and the
-	// default table name, so they are fixed once and not changed after.
-	//
-	// Required only with ExtraMetadata, which is the only thing that consumes
-	// them. Without it they still name the default table, and are optional
-	// when Table is set.
-	Provider string
-	Entity   string
-
-	// Key builds source_key from each payload, and is required only with
-	// ExtraMetadata: without it there is no stable identity, and ingestion_id
-	// would vary between runs.
-	//
-	// With the flag off it is never called. The SDK does not read a field out
-	// of your payload to write a column it is not writing.
-	Key KeySelector
-
-	// When reads the record's own timestamp from the payload, for
-	// ingestion_id. Defaults to Now(), which stamps the run time -- fine for
-	// a source with no timestamp, but it makes ingestion_id vary between
-	// runs, so the same reading will not deduplicate.
-	//
-	// Like Key, never called without ExtraMetadata.
-	When FieldSelector
 
 	// Project, Dataset and Table default from the environment; see the Env
 	// constants. Table defaults to vendors_<provider>_<entity>s.
@@ -112,22 +79,16 @@ type Target struct {
 	// Incompatible with DedupMerge -- see the field on LoadConfig for why.
 	RequirePartitionFilter bool
 
-	// ExtraMetadata adds two fields to every record:
+	// Metadata adds ingestion_id and ingestion_loaded_at, and is the only
+	// thing the SDK writes that Transform did not compose. Nil adds nothing.
 	//
-	//	ingestion_id         deterministic UUID v5 over the provenance
-	//	ingestion_loaded_at  when the row was written, RFC 3339
-	//
-	// Two, and only ever those two. Off by default: the SDK writes your
-	// record as Transform left it and adds nothing, because what a row looks
-	// like is your decision, not the library's.
-	//
-	// Turning it on is what makes Provider, Entity and Key necessary, since
-	// ingestion_id is built out of them -- and what makes the SDK read your
-	// payload at all.
+	// It also carries the provenance those two are built from, so declaring
+	// it is what makes Provider, Entity and Key necessary -- and the only
+	// reason the SDK reads your record at all. See Metadata.
 	//
 	// Required by DedupMerge, which matches on ingestion_id, and by the
 	// partition options, which partition on ingestion_loaded_at.
-	ExtraMetadata bool
+	Metadata *Metadata
 
 	// ClusterBy names the columns a created table is clustered on. The SDK
 	// cannot guess: it does not know your payload.
@@ -137,13 +98,13 @@ type Target struct {
 // defaultTable is the landing naming convention: vendors_<provider>_<entity>s.
 //
 // Empty when either half is missing. Provider and Entity are optional without
-// ExtraMetadata, and "vendors__s" is not a table name -- it is two missing
+// a Metadata block, and "vendors__s" is not a table name -- it is two missing
 // values pretending to be one.
 func (d Target) defaultTable() string {
-	if d.Provider == "" || d.Entity == "" {
+	if d.Metadata == nil || d.Metadata.Provider == "" || d.Metadata.Entity == "" {
 		return ""
 	}
-	return fmt.Sprintf("vendors_%s_%ss", d.Provider, d.Entity)
+	return fmt.Sprintf("vendors_%s_%ss", d.Metadata.Provider, d.Metadata.Entity)
 }
 
 // resolve turns a Target into a LoadConfig, applying the documented
@@ -154,20 +115,13 @@ func (d Target) defaultTable() string {
 // Precedence: what you set explicitly, then what the engine injected, then
 // the environment, then the SDK default, then an error.
 func (d Target) resolveWith(run RunContext) (*core.LoadConfig, map[string]origin, error) {
-	// Provider, Entity and Key exist to build ingestion_id and nothing else,
-	// so they are required exactly when the SDK is going to stamp one. With
-	// ExtraMetadata off the payload is written as you handed it over, and the
-	// SDK has no reason to know how to read it.
-	if d.ExtraMetadata {
-		if d.Provider == "" {
-			return nil, nil, fmt.Errorf("Target.Provider is required with ExtraMetadata: it feeds ingestion_id")
-		}
-		if d.Entity == "" {
-			return nil, nil, fmt.Errorf("Target.Entity is required with ExtraMetadata: it feeds ingestion_id")
-		}
-		if d.Key == nil {
-			return nil, nil, fmt.Errorf("Target.Key is required with ExtraMetadata: without it there is no " +
-				"stable source_key, and ingestion_id would change on every run")
+	// The provenance lives inside Metadata, so it is validated exactly when
+	// there is something to build out of it. Without the block the record is
+	// written as Transform composed it, and the SDK has no reason to know how
+	// to read it.
+	if d.Metadata != nil {
+		if err := d.Metadata.validate(); err != nil {
+			return nil, nil, err
 		}
 	}
 	switch d.Driver {
@@ -186,8 +140,8 @@ func (d Target) resolveWith(run RunContext) (*core.LoadConfig, map[string]origin
 	dataset := resolve(d.Dataset, EnvDataset, "landing")
 	table := resolve(d.Table, "", d.defaultTable())
 	if table.value == "" {
-		return nil, nil, fmt.Errorf("table not set: pass Target.Table, or Provider and Entity " +
-			"to get the default name vendors_<provider>_<entity>s")
+		return nil, nil, fmt.Errorf("table not set: pass Target.Table, or a Metadata block " +
+			"whose Provider and Entity give the default name vendors_<provider>_<entity>s")
 	}
 	bucket := resolve(d.StagingBucket, EnvBucket, projeto.value+"-bravis-staging")
 
@@ -207,14 +161,16 @@ func (d Target) resolveWith(run RunContext) (*core.LoadConfig, map[string]origin
 		ThresholdForGCS:        limite,
 		Format:                 "ndjson",
 		Dedup:                  d.Dedup,
-		ExtraMetadata:          d.ExtraMetadata,
+		Metadata:               d.Metadata != nil,
 		ClusterBy:              d.ClusterBy,
 		CreateTable:            create,
 		CreateSQL:              d.CreateSQL,
 		PartitionExpiration:    d.PartitionExpiration,
 		RequirePartitionFilter: d.RequirePartitionFilter,
-		Provider:               d.Provider,
-		Entity:                 d.Entity,
+	}
+	if d.Metadata != nil {
+		cfg.Provider = d.Metadata.Provider
+		cfg.Entity = d.Metadata.Entity
 	}
 
 	return cfg, map[string]origin{

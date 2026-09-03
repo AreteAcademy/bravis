@@ -104,7 +104,7 @@ func keysOf(args []any) []string {
 
 func TestCreateTableUnsetLetsTheEngineDecide(t *testing.T) {
 	t.Setenv(EnvProject, "p")
-	target := Target{Provider: "a", Entity: "b", Key: Key("id")}
+	target := Target{Metadata: &Metadata{Provider: "a", Entity: "b", Key: Key("id")}}
 
 	// Outside the engine: nothing is created.
 	cfg, origins, err := target.resolveWith(RunContext{Params: map[string]string{}})
@@ -136,7 +136,7 @@ func TestCreateTableParamAsksWithoutFakingAFirstRun(t *testing.T) {
 	// nothing ever ran here.
 	t.Setenv(EnvProject, "p")
 
-	cfg, origins, err := Target{Provider: "a", Entity: "b", Key: Key("id")}.resolveWith(
+	cfg, origins, err := Target{Metadata: &Metadata{Provider: "a", Entity: "b", Key: Key("id")}}.resolveWith(
 		RunContext{Params: map[string]string{ParamCreateTable: "true"}})
 	if err != nil {
 		t.Fatal(err)
@@ -156,7 +156,7 @@ func TestExplicitRefusalBeatsTheEngine(t *testing.T) {
 	t.Setenv(EnvProject, "p")
 
 	cfg, origins, err := Target{
-		Provider: "a", Entity: "b", Key: Key("id"), CreateTable: Bool(false),
+		Metadata: &Metadata{Provider: "a", Entity: "b", Key: Key("id")}, CreateTable: Bool(false),
 	}.resolveWith(RunContext{First: true, Params: map[string]string{ParamCreateTable: "true"}})
 	if err != nil {
 		t.Fatal(err)
@@ -174,7 +174,7 @@ func TestExplicitTrueWorksWithoutTheEngine(t *testing.T) {
 	t.Setenv(EnvProject, "p")
 
 	cfg, _, err := Target{
-		Provider: "a", Entity: "b", Key: Key("id"), CreateTable: Bool(true),
+		Metadata: &Metadata{Provider: "a", Entity: "b", Key: Key("id")}, CreateTable: Bool(true),
 	}.resolveWith(RunContext{Params: map[string]string{}})
 	if err != nil {
 		t.Fatal(err)
