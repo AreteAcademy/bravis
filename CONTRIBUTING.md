@@ -8,7 +8,8 @@ Três módulos Go independentes, cada um com seu `go.mod`:
 |---|---|---|
 | `/` | `github.com/AreteAcademy/bravis` | a engine |
 | `/sdk` | `github.com/AreteAcademy/bravis/sdk` | SDK público, publicado no proxy |
-| `/cmd/bravis` | `github.com/AreteAcademy/bravis/cmd/bravis` | CLI |
+| `/cmd/bravis` | (módulo raiz) | o binário do Bravis: `serve`, `scheduler`, `migrate`, `publish`, `validate`, `backfill` |
+| `/cmd/bravis-sdk` | `github.com/AreteAcademy/bravis/cmd/bravis-sdk` | CLI do SDK: `extract`, `load` |
 | `/examples` | `github.com/AreteAcademy/bravis/examples` | exemplos, com `replace` para `../sdk` |
 
 O SDK tem módulo próprio para manter as dependências mínimas: hoje são três

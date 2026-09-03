@@ -14,20 +14,20 @@ help:
 	@echo "  make clean       - Remove binaries"
 
 build:
-	go build $(LDFLAGS) -o bravis .
-	@echo "✓ Built: ./bravis"
+	go build $(LDFLAGS) -o bravis-sdk-sdk .
+	@echo "✓ Built: ./bravis-sdk"
 
 build-all: build-darwin build-linux build-windows
 	@echo "✓ Built all platforms"
 
 build-darwin:
-	GOOS=darwin GOARCH=amd64 go build $(LDFLAGS) -o bravis-darwin-amd64 .
+	GOOS=darwin GOARCH=amd64 go build $(LDFLAGS) -o bravis-sdk-darwin-amd64 .
 
 build-linux:
-	GOOS=linux GOARCH=amd64 go build $(LDFLAGS) -o bravis-linux-amd64 .
+	GOOS=linux GOARCH=amd64 go build $(LDFLAGS) -o bravis-sdk-linux-amd64 .
 
 build-windows:
-	GOOS=windows GOARCH=amd64 go build $(LDFLAGS) -o bravis-windows-amd64.exe .
+	GOOS=windows GOARCH=amd64 go build $(LDFLAGS) -o bravis-sdk-windows-amd64.exe .
 
 test:
 	go test -v ./...

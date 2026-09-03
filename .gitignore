@@ -8,14 +8,15 @@
 # `brand.example.yaml`; o arquivo real e do cliente, nao do repositorio.
 /brand.yaml
 
-# go.work lets you point cmd/bravis at the local sdk while developing.
-# It stays out of the repo: cmd/bravis/go.mod must require the published
+# go.work lets you point cmd/bravis-sdk at the local sdk while developing.
+# It stays out of the repo: cmd/bravis-sdk/go.mod must require the published
 # SDK, because `go install pkg@version` refuses a module carrying replace
 # directives -- which is exactly how the CLI is meant to be installed.
 go.work
 go.work.sum
 
-# Binários compilados dos comandos. `go build -o bravis` dentro de cmd/bravis
+# Binários compilados dos comandos. `go build -o bravis` dentro de cmd/bravis-sdk
 # deixa um de 30 MB ali, e um deles entrou no repositório na v0.4.1 e seguiu
 # sendo recommitado. Artefato de build não é fonte.
-/cmd/bravis/bravis
+/cmd/bravis-sdk/bravis-sdk
+/bravis

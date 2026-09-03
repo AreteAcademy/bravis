@@ -128,16 +128,24 @@ jobs:
           go build ./...
           echo "✅ Build successful"
 
-      - name: Build the CLI
+      - name: Build the engine
         run: |
-          # cmd/bravis is a published artifact -- the README tells people to
-          # `go install` it -- and nothing here built it. An SDK rename broke
-          # it and CI stayed green, because the CLI pins a released version
-          # and only fails once it is bumped.
-          cd cmd/bravis
+          # cmd/bravis is the Bravis binary itself: serve, scheduler, migrate,
+          # publish, validate, backfill. It lives in the root module, and for
+          # a while nothing built it -- an SDK CLI had been written over its
+          # main.go, and the whole engine became a library with no program.
           go build ./...
           go vet ./...
-          echo "✅ CLI builds"
+          echo "✅ engine builds"
+
+      - name: Build the SDK CLI
+        run: |
+          # Its own module, so it pins a released SDK and only breaks on a
+          # bump. Nothing else would catch it.
+          cd cmd/bravis-sdk
+          go build ./...
+          go vet ./...
+          echo "✅ SDK CLI builds"
 
       - name: Build and test examples
         run: |

@@ -1,4 +1,4 @@
-module github.com/AreteAcademy/bravis/cmd/bravis
+module github.com/AreteAcademy/bravis/cmd/bravis-sdk
 
 go 1.23
 

@@ -1,19 +1,23 @@
-# Bravis CLI
+# Bravis SDK CLI
+
+> Este é o CLI do **SDK** — `extract`, `load` e o pipeline entre os dois. O
+> binário do Bravis (o engine: `serve`, `scheduler`, `migrate`, `publish`) é
+> outro, e vive em [`cmd/bravis`](../bravis-sdk/).
 
 Command-line interface for Bravis SDK. Extract and load data without writing Go code.
 
 ## Installation
 
 ```bash
-go install github.com/AreteAcademy/bravis/cmd/bravis@latest
+go install github.com/AreteAcademy/bravis/cmd/bravis-sdk@latest
 ```
 
 Or from source:
 
 ```bash
-cd cmd/bravis
-go build -o bravis
-./bravis --help
+cd cmd/bravis-sdk
+go build -o bravis-sdk
+./bravis-sdk --help
 ```
 
 To develop the CLI against your local SDK changes, create a `go.work` at the
@@ -32,9 +36,9 @@ go work init ./sdk ./cmd/bravis
 Extract data from HTTP endpoint.
 
 ```bash
-bravis extract https://api.example.com/data.csv
-bravis extract https://api.example.com/data.json --format json --output json
-bravis extract https://api.example.com/data --retries 5 --timeout 60s
+bravis-sdk extract https://api.example.com/data.csv
+bravis-sdk extract https://api.example.com/data.json --format json --output json
+bravis-sdk extract https://api.example.com/data --retries 5 --timeout 60s
 ```
 
 **Flags:**
@@ -49,7 +53,7 @@ bravis extract https://api.example.com/data --retries 5 --timeout 60s
 Load NDJSON data to BigQuery (reads from stdin).
 
 ```bash
-cat data.ndjson | bravis load --project my-project --dataset landing --table raw_data
+cat data.ndjson | bravis-sdk load --project my-project --dataset landing --table raw_data
 ```
 
 **Flags:**
@@ -63,7 +67,7 @@ cat data.ndjson | bravis load --project my-project --dataset landing --table raw
 Extract and load in one pipeline.
 
 ```bash
-bravis run https://api.example.com/data.csv --project my-project
+bravis-sdk run https://api.example.com/data.csv --project my-project
 ```
 
 **Flags:**
@@ -82,8 +86,8 @@ Show version information.
 Chain extract and load:
 
 ```bash
-bravis extract https://api.example.com/data.csv --output json | \
-  bravis load --project my-project --dataset landing --table raw_data
+bravis-sdk extract https://api.example.com/data.csv --output json | \
+  bravis-sdk load --project my-project --dataset landing --table raw_data
 ```
 
 ## Environment Variables
@@ -106,19 +110,19 @@ export BRAVIS_TABLE=raw_data
 ### Simple extract
 
 ```bash
-bravis extract https://api.example.com/data.csv
+bravis-sdk extract https://api.example.com/data.csv
 ```
 
 ### Extract to JSON
 
 ```bash
-bravis extract https://api.example.com/data.csv --output json
+bravis-sdk extract https://api.example.com/data.csv --output json
 ```
 
 ### Full pipeline
 
 ```bash
-bravis run https://api.example.com/data.csv \
+bravis-sdk run https://api.example.com/data.csv \
   --project my-project \
   --dataset landing \
   --table raw_data \
@@ -128,7 +132,7 @@ bravis run https://api.example.com/data.csv \
 ### Test without loading
 
 ```bash
-bravis run https://api.example.com/data.csv \
+bravis-sdk run https://api.example.com/data.csv \
   --project my-project \
   --dry-run
 ```
@@ -146,22 +150,22 @@ bravis run https://api.example.com/data.csv \
 Build locally:
 
 ```bash
-cd cmd/bravis
-go build -o bravis
-./bravis --help
+cd cmd/bravis-sdk
+go build -o bravis-sdk
+./bravis-sdk --help
 ```
 
 Build for distribution:
 
 ```bash
 # macOS
-GOOS=darwin GOARCH=amd64 go build -o bravis-darwin-amd64
+GOOS=darwin GOARCH=amd64 go build -o bravis-sdk-darwin-amd64
 
 # Linux
-GOOS=linux GOARCH=amd64 go build -o bravis-linux-amd64
+GOOS=linux GOARCH=amd64 go build -o bravis-sdk-linux-amd64
 
 # Windows
-GOOS=windows GOARCH=amd64 go build -o bravis-windows-amd64.exe
+GOOS=windows GOARCH=amd64 go build -o bravis-sdk-windows-amd64.exe
 ```
 
 ## License

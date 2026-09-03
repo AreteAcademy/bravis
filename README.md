@@ -31,7 +31,10 @@ BigQuery. Requer Go 1.23+.
 > **Não use a `v0.1.0`.** Ela foi publicada com um `go.mod` quebrado e o proxy
 > do Go é imutável, então não há como corrigi-la. Comece na `v0.1.1`.
 
-CLI: [`cmd/bravis/`](cmd/bravis/) — `go install github.com/AreteAcademy/bravis/cmd/bravis@latest`
+CLI do SDK: [`cmd/bravis-sdk/`](cmd/bravis-sdk/) — `go install github.com/AreteAcademy/bravis/cmd/bravis-sdk@latest`
+
+O binário do Bravis em si (`serve`, `scheduler`, `migrate`, `publish`) é
+[`cmd/bravis/`](cmd/bravis/), construído com `make build`.
 
 **Estado: PHASE 6 concluída.** Workflows em YAML, fila persistente, scheduler com
 cron, backfill, UI server-rendered (Overview com métricas e gráficos, lista de
