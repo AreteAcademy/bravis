@@ -1,7 +1,7 @@
 # SDK — dois defeitos no `load` da `v0.9.1`, e uma decisão de produto
 
-**Aberto em** 2026-09-03 · **Versões analisadas** `sdk/v0.9.0`, `sdk/v0.9.1` ·
-**Alvo** `sdk/v0.9.2`
+**Aberto em** 2026-09-03 · **Versões analisadas** `sdk/v0.9.0`, `sdk/v0.9.1`,
+`sdk/v0.10.0` · **Alvo** `sdk/v0.10.1`
 
 Achados ao migrar o consumidor `zarv-data-pipeline` da `v0.8.0` para a `v0.9.x`.
 A migração foi **revertida**: o consumidor está preso na `v0.8.0` e não sobe
@@ -11,9 +11,20 @@ Cada item traz o arquivo e a linha, o que o código faz, como reproduzir, e como
 provar que ficou certo. O `extract` não é o assunto: subiu sem incidente, e o
 `Driver` explícito nas duas pontas (`DriverHTTP`, `DriverBigQuery`) funciona.
 
-> A `v0.9.1` **não** toca o pacote `load` — `git diff sdk/v0.9.0 sdk/v0.9.1`
-> mexe só em `sdk/types.go` e `sdk/sdk_test.go`. Os dois defeitos abaixo valem
-> para as duas versões.
+> **Nem a `v0.9.1` nem a `v0.10.0` tocam o pacote `load`.** Os diffs mexem só
+> em `sdk/types.go` e `sdk/sdk_test.go` (`v0.9.1`) e em `sdk/{runcontext,target,
+> pipeline,sdk,types}.go` mais o README (`v0.10.0`). Os três defeitos abaixo
+> valem para as três versões, e o item 2 foi reconfirmado rodando a `v0.10.0`
+> contra a landing real do consumidor:
+>
+> ```
+> v0.10.0 + ExtraMetadata -> bronze.vendors_open_meteo_hourly_temperatures
+> Error 400: Value has type FLOAT64 which cannot be inserted into column
+> ingestion_id, which has type STRING
+> ```
+>
+> O que a `v0.10.0` trouxe — `RunContext` e o `CreateTable` tri-estado — é bom e
+> não é o assunto aqui, com uma exceção que **agrava o item 1**: ver §1.1.
 
 ---
 
@@ -71,6 +82,24 @@ não cobre o terceiro.
 | `DedupMerge`, tabela já existente | `rows=0 ignored=24` OK |
 
 `INFORMATION_SCHEMA.COLUMNS` confirma a ausência no caso do meio.
+
+### 1.1 A `v0.10.0` fez este defeito ficar mais fácil de encontrar da pior forma
+
+`CreateTable` passou de `bool` para `*bool` tri-estado, e com `nil` — que é o
+valor de quem **não escreveu o campo** — a decisão passa para o engine:
+
+> `nil` you did not say. Inside Bravis the engine decides: it creates on the
+> step's first successful run, or when the run was dispatched with
+> `create_table=true`.
+
+Antes, cair no item 1 exigia alguém escrever `CreateTable: true`. Agora um
+fetcher que **não menciona** `CreateTable` e usa `DedupMerge` tem a criação
+ligada pelo engine na primeira execução — e essa primeira execução falha com
+404, que é justamente a execução em que ninguém ainda sabe se o pipeline
+funciona.
+
+O tri-estado está certo e o raciocínio dele está bem escrito. O problema é que
+ele amplia o alcance de um caminho que não cria a tabela.
 
 ### Como provar que ficou certo
 
@@ -175,12 +204,24 @@ qual chave está em qual língua.
 
 ## 4. A decisão de produto: quem produz as seis colunas
 
+> **Correção do que eu mesmo escrevi na primeira versão deste documento.** Eu
+> descrevi o modo envelope como opt-in. Ele era o **padrão**, opt-**out**:
+>
+> ```go
+> // v0.8.0, sdk/target.go:127
+> WriteEnvelopeColumns: !d.RawPayload,
+> ```
+>
+> A regressão é maior do que registrei: as seis colunas não deixaram de ser
+> pedíveis, deixaram de ser **alcançáveis** — não há combinação de campos na
+> `v0.10.0` que as produza.
+
 A `v0.9.0` removeu `WriteEnvelopeColumns` / `WithEnvelopeColumns` e o trocou por
 `ExtraMetadata`:
 
 ```
-v0.8.0  sdk/types.go:86   WithEnvelopeColumns = core.WithEnvelopeColumns
-v0.9.1  sdk/types.go:85   WithExtraMetadata   = core.WithExtraMetadata
+v0.8.0   sdk/target.go:127  WriteEnvelopeColumns: !d.RawPayload   <- padrao
+v0.10.0  sdk/target.go:108  ExtraMetadata bool                    <- dois campos
 ```
 
 A documentação nova diz:
@@ -200,9 +241,19 @@ O argumento do §5 continua de pé, e agora com um consumidor real em cima dele:
 `zarv-data-pipeline` tem 24 vendors em Python que leem a landing pela macro
 `metadata_vendor()`, que lê `provider`, `entity` e `payload` **como colunas**.
 
-Reproduzir o contrato em cima da `v0.9.x` exigiria recalcular o `source_key` num
-`Compute`, duplicando a lógica do `Key` — a fragilidade que o contrato existia
-para evitar.
+Reproduzir o contrato em cima da `v0.10.0` não é só trabalhoso, é instável.
+Aninhar o payload e acrescentar `provider` e `entity` num `Compute` é fácil;
+`source_key` exigiria recalcular a lógica do `Key`, e uma diferença de
+formatação de float faria o `ingestion_id` ser calculado a partir de um
+`source_key` diferente do que a coluna declara.
+
+E mesmo pagando esse preço, **o item 2 ainda bloqueia**: a ordem das colunas da
+temporária vem do autodetect, e o `INSERT ROW` é posicional. Não há como um
+consumidor com landing de schema fixo garantir a correspondência.
+
+Por isso o consumidor está preso na `v0.8.0` por causa do **item 2**, não do
+item 4. O item 4 é a decisão de produto; o item 2 é o que impede a migração
+mesmo se a decisão for "aceite o payload plano".
 
 **Recomendação: devolver o modo envelope opt-in**, convivendo com
 `ExtraMetadata`. Se a decisão for mantê-lo fora, ela precisa estar escrita com o
@@ -211,7 +262,7 @@ vendors em Python ou duplicar a chave.
 
 ---
 
-## 5. Critério de pronto para a `v0.9.2`
+## 5. Critério de pronto para a `v0.10.1`
 
 1. `CreateTable` + `DedupMerge` cria o destino, com teste de integração na
    combinação.
