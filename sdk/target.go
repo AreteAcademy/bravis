@@ -2,6 +2,7 @@ package sdk
 
 import (
 	"fmt"
+	"strconv"
 	"time"
 
 	core "github.com/AreteAcademy/bravis/sdk/internal/core"
@@ -62,13 +63,23 @@ type Target struct {
 	Dedup core.Dedup
 
 	// CreateTable lets the SDK create the destination table when it is
-	// absent, with the six-column contract: partitioned by day on
-	// ingestion_loaded_at, clustered by provider and entity, and described
-	// and labelled so it is obvious later what writes there.
+	// absent. It never alters one that already exists.
 	//
-	// Off by default. Nothing runs DDL against your warehouse without being
-	// asked, and it never alters a table that already exists.
-	CreateTable bool
+	// Three states, because two are not enough:
+	//
+	//	nil            you did not say. Inside Bravis the engine decides:
+	//	               it creates on the step's first successful run, or
+	//	               when the run was dispatched with create_table=true.
+	//	               Outside Bravis, nothing is created.
+	//	sdk.Bool(true)  always create when absent
+	//	sdk.Bool(false) never create, and the engine does not override it
+	//
+	// A plain bool cannot carry this: its zero value would mean both "I do
+	// not want a table" and "I said nothing", and the engine would have no
+	// way to tell them apart. An explicit refusal has to win, or the same
+	// code would behave differently inside and outside the engine with
+	// nothing to warn you.
+	CreateTable *bool
 
 	// CreateSQL is your DDL, run instead of the built-in schema. The SDK
 	// still checks afterwards that the table it produced can take the rows
@@ -108,7 +119,12 @@ func (d Target) defaultTable() string {
 
 // resolve turns a Target into a LoadConfig, applying the documented
 // precedence and reporting where each value came from.
-func (d Target) resolve() (*core.LoadConfig, map[string]origin, error) {
+// resolveWith turns a Target into a LoadConfig, applying the documented
+// precedence and reporting where each value came from.
+//
+// Precedence: what you set explicitly, then what the engine injected, then
+// the environment, then the SDK default, then an error.
+func (d Target) resolveWith(run RunContext) (*core.LoadConfig, map[string]origin, error) {
 	if d.Provider == "" {
 		return nil, nil, fmt.Errorf("Target.Provider is required: it feeds ingestion_id")
 	}
@@ -142,6 +158,8 @@ func (d Target) resolve() (*core.LoadConfig, map[string]origin, error) {
 		limite = envInt("BRAVIS_SDK_LIMITE_INLINE", 5000)
 	}
 
+	create, createOrigin := d.resolveCreate(run)
+
 	cfg := &core.LoadConfig{
 		Driver:                 d.Driver,
 		ProjectID:              projeto.value,
@@ -154,7 +172,7 @@ func (d Target) resolve() (*core.LoadConfig, map[string]origin, error) {
 		Dedup:                  d.Dedup,
 		ExtraMetadata:          d.ExtraMetadata,
 		ClusterBy:              d.ClusterBy,
-		CreateTable:            d.CreateTable,
+		CreateTable:            create,
 		CreateSQL:              d.CreateSQL,
 		PartitionExpiration:    d.PartitionExpiration,
 		RequirePartitionFilter: d.RequirePartitionFilter,
@@ -163,11 +181,36 @@ func (d Target) resolve() (*core.LoadConfig, map[string]origin, error) {
 	}
 
 	return cfg, map[string]origin{
-		"projeto": projeto,
-		"dataset": dataset,
-		"table":   table,
-		"bucket":  bucket,
+		"project":      projeto,
+		"dataset":      dataset,
+		"table":        table,
+		"bucket":       bucket,
+		"create_table": createOrigin,
 	}, nil
+}
+
+// resolve is resolveWith for a caller with no engine context.
+func (d Target) resolve() (*core.LoadConfig, map[string]origin, error) {
+	return d.resolveWith(RunContext{Params: map[string]string{}})
+}
+
+// resolveCreate settles the tri-state, and says where the answer came from.
+//
+// "Why did it create the table?" is a question someone will ask at three in
+// the morning, and the log has to answer it without a rebuild.
+func (d Target) resolveCreate(run RunContext) (bool, origin) {
+	if d.CreateTable != nil {
+		return *d.CreateTable, origin{strconv.FormatBool(*d.CreateTable), "explicit"}
+	}
+
+	switch {
+	case run.First:
+		return true, origin{"true", "the engine: first run of this step"}
+	case run.Params[ParamCreateTable] == "true":
+		return true, origin{"true", "the engine: " + ParamCreateTable + "=true"}
+	}
+
+	return false, origin{"false", "default"}
 }
 
 // Result describes what actually happened, end to end. Printing it is

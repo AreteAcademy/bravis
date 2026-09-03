@@ -8,8 +8,10 @@ package execution
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
@@ -30,6 +32,20 @@ type Reporter interface {
 
 // Persistidor grava o estado de cada passo. Opcional: o `bravis run` local nao
 // tem banco, e exigi-lo tornaria a execucao ad-hoc dependente de infraestrutura.
+// Historico responde se um passo ja teve sucesso antes. E o que decide se
+// esta e a PRIMEIRA execucao dele — informacao que o passo nao tem e que so o
+// engine possui.
+//
+// Interface pequena e declarada aqui, no consumidor, e nao no pacote que a
+// implementa.
+//
+// A pergunta e por (workflow, passo), nao por workflow: um workflow com tres
+// fetchers escrevendo em tres tabelas criaria apenas a do primeiro passo se a
+// resposta fosse do workflow inteiro, e as outras duas falhariam em silencio.
+type Historico interface {
+	PassoJaTeveSucesso(ctx context.Context, workflowSlug, nodeID string, exceto uuid.UUID) (bool, error)
+}
+
 type Persistidor interface {
 	IniciarTask(ctx context.Context, runID uuid.UUID, nodeID string, tentativa int) error
 	TerminarTask(ctx context.Context, runID uuid.UUID, nodeID string, tentativa int,
@@ -62,8 +78,20 @@ type Runner struct {
 	RunID   uuid.UUID
 
 	// Params sao os valores desta execucao. Entram no comando do passo por
-	// template; ver execution.Renderizar.
+	// template (ver execution.Renderizar) e no ambiente do passo, para que um
+	// fetcher que use o SDK os enxergue sem receber nada por argumento.
 	Params map[string]string
+
+	// Trigger diz por que este Run existe: schedule, manual ou backfill.
+	Trigger string
+
+	// LogicalDate e o slot que este Run representa. Nulo em disparo manual.
+	LogicalDate *time.Time
+
+	// Historico decide se um passo esta rodando pela primeira vez. Nulo
+	// significa que nao da para saber — e nesse caso o passo recebe
+	// first=false, porque criar tabela sem certeza e pior que nao criar.
+	Historico Historico
 
 	// Vagas limita quantos PASSOS correm ao mesmo tempo — em Kubernetes, quantos
 	// pods existem simultaneamente. Nulo = sem limite.
@@ -302,7 +330,13 @@ const linhasDeContexto = 5
 // desfecho. A saida sobe mesmo em caso de sucesso: um passo que terminou bem
 // mas produziu pouca coisa e um sinal, e so se percebe olhando o log.
 func (r Runner) tentar(ctx context.Context, w wf.Workflow, n wf.Node, tentativa int) (string, error) {
-	exec, tarefa, err := r.montar(w, n, tentativa)
+	// Consultado uma vez por tentativa, e nao dentro de montar, porque montar
+	// nao deve fazer I/O. Um retry do mesmo run nao reabre a primeira
+	// execucao: se a tentativa 1 gravou linha, PassoJaTeveSucesso ja responde
+	// que sim; se falhou, continua sendo a primeira, que e o correto.
+	primeira := r.primeiraExecucao(ctx, w.Slug, n.ID)
+
+	exec, tarefa, err := r.montar(w, n, tentativa, primeira)
 	if err != nil {
 		return "", err
 	}
@@ -363,8 +397,82 @@ func (r Runner) tentar(ctx context.Context, w wf.Workflow, n wf.Node, tentativa 
 	return completa.String(), falha
 }
 
+// Prefixo das variaveis que descrevem ESTA execucao, separado do BRAVIS_SDK_
+// que configura o SDK: um diz o que o SDK faz, o outro o que este disparo e.
+//
+// Nao e canal privado. O processo do passo pode ler o proprio ambiente, e
+// alguem vai ler. O que se promete e que ele NAO PRECISA — nao que nao consiga.
+const (
+	envRunID          = "BRAVIS_RUN_ID"
+	envRunFirst       = "BRAVIS_RUN_FIRST"
+	envRunAttempt     = "BRAVIS_RUN_ATTEMPT"
+	envRunTrigger     = "BRAVIS_RUN_TRIGGER"
+	envRunLogicalDate = "BRAVIS_RUN_LOGICAL_DATE"
+	envRunParams      = "BRAVIS_RUN_PARAMS"
+)
+
+// contextoDoRun monta o que o engine sabe sobre esta execucao e o passo nao.
+//
+// primeira e resolvida antes, pelo chamador, porque exige ida ao banco e
+// montar a task nao deve fazer I/O.
+func (r Runner) contextoDoRun(nodeID string, primeira bool, tentativa int) map[string]string {
+	env := map[string]string{
+		envRunID:      r.RunID.String(),
+		envRunFirst:   strconv.FormatBool(primeira),
+		envRunAttempt: strconv.Itoa(tentativa),
+	}
+
+	if r.Trigger != "" {
+		env[envRunTrigger] = r.Trigger
+	}
+	if r.LogicalDate != nil {
+		env[envRunLogicalDate] = r.LogicalDate.UTC().Format(time.RFC3339)
+	}
+	if len(r.Params) > 0 {
+		// Erro impossivel: map[string]string sempre serializa. Ignorar aqui e
+		// preferivel a devolver um erro que nenhum chamador poderia tratar.
+		if b, err := json.Marshal(r.Params); err == nil {
+			env[envRunParams] = string(b)
+		}
+	}
+
+	return env
+}
+
+// mesclarEnv junta o ambiente do runner com o desta execucao.
+//
+// O do runner ganha em colisao: se alguem definiu BRAVIS_RUN_PARAMS na
+// configuracao, foi porque quis, e o engine nao sobrescreve configuracao
+// explicita.
+func mesclarEnv(base, execucao map[string]string) map[string]string {
+	out := make(map[string]string, len(base)+len(execucao))
+	for k, v := range execucao {
+		out[k] = v
+	}
+	for k, v := range base {
+		out[k] = v
+	}
+	return out
+}
+
+// primeiraExecucao pergunta ao historico se este passo ja teve sucesso.
+//
+// Sem historico configurado a resposta e "nao e a primeira": criar tabela sem
+// certeza e pior que nao criar, e o consumidor sempre pode pedir explicitamente.
+func (r Runner) primeiraExecucao(ctx context.Context, slug, nodeID string) bool {
+	if r.Historico == nil {
+		return false
+	}
+	jaTeve, err := r.Historico.PassoJaTeveSucesso(ctx, slug, nodeID, r.RunID)
+	if err != nil {
+		// Falha de consulta nao pode virar criacao de tabela por engano.
+		return false
+	}
+	return !jaTeve
+}
+
 // montar escolhe o executor e monta a task.
-func (r Runner) montar(w wf.Workflow, n wf.Node, tentativa int) (execution.Executor, execution.TaskExec, error) {
+func (r Runner) montar(w wf.Workflow, n wf.Node, tentativa int, primeira bool) (execution.Executor, execution.TaskExec, error) {
 	imagem := w.ImagemDe(n)
 	recursos := w.RecursosDe(n)
 
@@ -386,7 +494,7 @@ func (r Runner) montar(w wf.Workflow, n wf.Node, tentativa int) (execution.Execu
 		CPUMax:     recursos.CPULimit,
 		MemoriaMax: recursos.MemoryLimit,
 		WorkDir:    r.WorkDir,
-		Env:        r.Env,
+		Env:        mesclarEnv(r.Env, r.contextoDoRun(n.ID, primeira, tentativa)),
 		Timeout:    r.Timeout,
 	}
 

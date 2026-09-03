@@ -155,13 +155,19 @@ func expandStream(source Source, lines iter.Seq2[Envelope, error]) iter.Seq2[Env
 // value came from, creates the landing table when absent, and reports what it
 // actually did.
 func Load(ctx context.Context, data *Data, target Target) (*Result, error) {
+	return loadWith(ctx, data, target, runContextFromEnv())
+}
+
+// loadWith is Load with the engine context already read, so a test can supply
+// one without touching the process environment.
+func loadWith(ctx context.Context, data *Data, target Target, run RunContext) (*Result, error) {
 	start := time.Now()
 
 	if data == nil {
 		return nil, fmt.Errorf("Load got nil data: call Extract first")
 	}
 
-	cfg, origins, err := target.resolve()
+	cfg, origins, err := target.resolveWith(run)
 	if err != nil {
 		return nil, err
 	}

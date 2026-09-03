@@ -42,6 +42,35 @@ func (r *RunRepo) TerminarTask(ctx context.Context, runID uuid.UUID, nodeID stri
 	return err
 }
 
+// PassoJaTeveSucesso responde se este passo, neste workflow, ja terminou bem
+// antes — em qualquer run anterior.
+//
+// E o que decide se a execucao atual e a PRIMEIRA daquele passo, informacao
+// que vai para o ambiente do passo e que o SDK usa para criar a tabela de
+// destino. A alternativa seria o SDK inferir de "a tabela nao existe", e aí
+// alguem apaga a tabela por engano e a proxima execucao se acha a primeira.
+//
+// Por (workflow, passo), nao por workflow: um workflow com tres fetchers
+// escrevendo em tres tabelas criaria apenas a do primeiro passo se a resposta
+// fosse do workflow inteiro.
+//
+// `exceto` e o run corrente, excluido para que a propria tentativa em curso
+// nao conte como sucesso anterior.
+func (r *RunRepo) PassoJaTeveSucesso(ctx context.Context, workflowSlug, nodeID string, exceto uuid.UUID) (bool, error) {
+	var existe bool
+	err := r.pool.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1
+			FROM task_runs t
+			JOIN runs rn ON rn.id = t.run_id
+			WHERE rn.workflow_slug = $1
+			  AND t.node_id = $2
+			  AND t.run_id <> $3
+			  AND t.status = $4
+		)`, workflowSlug, nodeID, exceto, dom.StatusSuccess).Scan(&existe)
+	return existe, err
+}
+
 // EstadoDosNos devolve o estado de cada no na ULTIMA tentativa de cada um.
 //
 // `DISTINCT ON` em vez de max(attempt) num subselect: a tentativa mais recente e

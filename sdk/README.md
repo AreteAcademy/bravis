@@ -400,15 +400,61 @@ Target: sdk.Target{..., ExtraMetadata: true},
 
 See [`examples/07-own-shape`](../examples/07-own-shape/).
 
+## Running inside Bravis
+
+A fetcher does not change to run under the engine. The engine injects
+`BRAVIS_RUN_*` into the step, `sdk.Run` picks it up, and `Pipeline.Run` holds
+what is useful:
+
+| what | from |
+|---|---|
+| `Run.First` | no earlier attempt of this step has succeeded |
+| `Run.Params` | the values this execution was dispatched with; never nil |
+| `Run.ID`, `Attempt`, `Trigger`, `LogicalDate` | which run this is |
+
+Reading it is optional:
+
+```go
+Before: func(ctx context.Context, p *sdk.Pipeline) error {
+	if p.Run.Params["load_full"] == "true" {
+		p.Source.URL += "&full=1"
+	}
+	return nil
+},
+```
+
+Run by hand, every field is zero and nothing behaves differently.
+
+> **This is not a private channel.** The step's process can read its own
+> environment, and someone will. What is promised is that a fetcher does not
+> *have* to — not that it cannot. Secrets do not travel this way; they go
+> through `envFrom.secretRef`, as they always did.
+
 ## Creating the table
 
 Off by default: nothing runs DDL against your warehouse without being asked.
 
 ```go
 sdk.Target{
-	CreateTable: true,          // the load job creates it on the first run
+	CreateTable: sdk.Bool(true),   // always, when the table is absent
 	ClusterBy:   []string{"provider"},
 }
+```
+
+Three states, because two are not enough:
+
+| `CreateTable` | outside Bravis | inside Bravis |
+|---|---|---|
+| `nil` | nothing created | created on the step's first run, or when dispatched with `create_table=true` |
+| `sdk.Bool(true)` | created | created |
+| `sdk.Bool(false)` | nothing created | **nothing created** — an explicit refusal wins |
+
+A plain `bool` cannot carry this: its zero value would mean both "I do not want
+a table" and "I said nothing", and the engine would have no way to tell them
+apart. The log says which of the three answered, and why:
+
+```
+create_table=true (from the engine: first run of this step)
 ```
 
 The schema is inferred from the data, because nothing else knows it — the

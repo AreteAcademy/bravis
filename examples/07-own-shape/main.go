@@ -65,7 +65,7 @@ func main() {
 			// First run creates the table, inferring the columns from the
 			// rows above. Clustering has to be named: the SDK does not know
 			// what is in your payload.
-			CreateTable: true,
+			CreateTable: sdk.Bool(true),
 			ClusterBy:   []string{"provider", "entity"},
 
 			// Re-running the same window is a no-op. Costs one scan of the

@@ -46,6 +46,12 @@ type (
 	Dedup = core.Dedup
 )
 
+// Bool returns a pointer to b, for the tri-state options where nil means
+// "not set" and has to be told apart from false.
+//
+//	Target{CreateTable: sdk.Bool(false)}   // never, not even on a first run
+func Bool(b bool) *bool { return &b }
+
 // Drivers. One of each exists today; an empty Driver takes the default for
 // its side, so nothing has to be set for the common case.
 const (

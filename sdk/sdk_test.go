@@ -352,7 +352,7 @@ func TestDestinoExigeIdentidade(t *testing.T) {
 	}
 }
 
-func TestDestinoPrecedenciaEOrigem(t *testing.T) {
+func TestTargetPrecedenceAndOrigin(t *testing.T) {
 	t.Setenv(EnvProject, "from-the-environment")
 	t.Setenv(EnvDataset, "dataset-from-the-environment")
 
@@ -367,8 +367,8 @@ func TestDestinoPrecedenciaEOrigem(t *testing.T) {
 	if cfg.ProjectID != "explicito" {
 		t.Errorf("explicit must beat the environment: %s", cfg.ProjectID)
 	}
-	if origins["projeto"].from != "explicit" {
-		t.Errorf("origin do projeto = %q", origins["projeto"].from)
+	if origins["project"].from != "explicit" {
+		t.Errorf("project origin = %q", origins["project"].from)
 	}
 
 	// 2. the environment beats the default
@@ -409,11 +409,11 @@ func TestTargetDoesNotCreateTablesUnasked(t *testing.T) {
 		t.Fatal(err)
 	}
 	if cfg.CreateTable {
-		t.Errorf("the zero value must not create a table: %+v", cfg)
+		t.Errorf("nil must not create a table: %+v", cfg)
 	}
 
 	asked, _, err := Target{
-		Provider: "a", Entity: "b", Key: Key("id"), CreateTable: true,
+		Provider: "a", Entity: "b", Key: Key("id"), CreateTable: Bool(true),
 	}.resolve()
 	if err != nil {
 		t.Fatal(err)
@@ -428,7 +428,7 @@ func TestTargetCarriesTableOptions(t *testing.T) {
 
 	cfg, _, err := Target{
 		Provider: "open_meteo", Entity: "hourly", Key: Key("id"),
-		CreateTable:            true,
+		CreateTable:            Bool(true),
 		PartitionExpiration:    90 * 24 * time.Hour,
 		RequirePartitionFilter: true,
 		CreateSQL:              "CREATE TABLE x (a INT64)",

@@ -49,8 +49,22 @@ type Pipeline struct {
 	// that takes parameters of its own.
 	Flags func(*flag.FlagSet)
 
+	// Run is what the Bravis engine knows about this execution: whether it is
+	// the first, the parameters it was dispatched with, which run it is.
+	//
+	// Filled in from the environment before Before runs, and zero when the
+	// fetcher runs by hand. Read it if it helps; ignoring it costs nothing.
+	//
+	//	Before: func(ctx context.Context, p *sdk.Pipeline) error {
+	//		if p.Run.Params["load_full"] == "true" {
+	//			p.Source.URL += "&full=1"
+	//		}
+	//		return nil
+	//	}
+	Run RunContext
+
 	// Before runs after flags are parsed and before the fetch, for a source
-	// whose URL depends on those flags.
+	// whose URL depends on those flags or on Run.
 	Before func(ctx context.Context, p *Pipeline) error
 }
 
@@ -97,6 +111,13 @@ func Execute(ctx context.Context, p *Pipeline, args []string) error {
 	}
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level})))
 
+	// Read before Before, so a hook can act on it.
+	p.Run = runContextFromEnv()
+	if p.Run.fromEngine() {
+		slog.InfoContext(ctx, "running under Bravis",
+			append([]any{"pipeline", p.name()}, p.Run.Args()...)...)
+	}
+
 	if *dataset != "" {
 		p.Target.Dataset = *dataset
 	}
@@ -120,7 +141,7 @@ func Execute(ctx context.Context, p *Pipeline, args []string) error {
 	}
 	data = Transform(data, p.Transform...)
 
-	res, err := Load(ctx, data, p.Target)
+	res, err := loadWith(ctx, data, p.Target, p.Run)
 	if res != nil {
 		slog.Info("loaded", append([]any{"pipeline", p.name()}, res.Args()...)...)
 		for _, line := range res.RowErrors {

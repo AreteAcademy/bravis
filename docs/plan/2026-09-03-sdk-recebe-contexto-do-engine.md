@@ -2,6 +2,18 @@
 
 **Aberto em** 2026-09-03 · **Base** `sdk/v0.9.1` · **Alvo** `sdk/v0.10.0`
 
+> **EXECUTADA em 2026-09-03.** Os dez itens do §9 estão feitos, com prova para
+> cada um. A prova do que o consumidor enxerga vive em `examples/consumer/`,
+> fora do módulo do SDK, e roda no CI.
+>
+> **Uma parte do §7 não pôde ser provada de ponta a ponta:** nada no repositório
+> instancia o `Runner` — a ligação dispatcher → `Runner` é fase não construída,
+> e `Executar` é uma função injetada que ninguém liga ao runner ainda. O lado do
+> runner está implementado e testado isoladamente (o ambiente que ele monta, a
+> pergunta por passo, a precedência em colisão), e o `RunRepo` implementa
+> `Historico` com asserção em tempo de compilação. O que falta é o fio entre os
+> dois, que pertence à fase do dispatcher.
+
 Prompt de execução. O objetivo é o engine conseguir dizer ao SDK coisas que o
 fetcher não sabe — é a primeira execução? quais os parâmetros deste disparo? —
 **sem que o autor do fetcher escreva uma linha para receber isso**.
