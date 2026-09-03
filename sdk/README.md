@@ -149,6 +149,19 @@ stages into a temporary table and MERGEs on `ingestion_id`, so re-running the
 same window is a no-op — at the cost of one scan of the destination per load,
 which is why it is never enabled on your behalf.
 
+The merge names its columns, reconciling the destination's schema against the
+rows before it runs. The rule is asymmetric on purpose:
+
+| situation | what happens |
+|---|---|
+| the rows carry a column the destination lacks | **refused**, naming the column |
+| the destination has a column the rows omit    | fine, it stays NULL |
+| the same name with incompatible types         | **refused**, naming both types |
+
+Dropping a column in silence is the worst way to fail — it disappears and
+nothing says so — so that case stops the load. A destination column the rows do
+not fill is normal, and does not.
+
 ### The table
 
 `CreateTable` lets the load job create it on the first run. Off by default, and
@@ -576,7 +589,6 @@ cfg := &sdk.LoadConfig{
 	StagingBucket:   "my-staging-bucket",
 	ThresholdForGCS: 5000,
 	Format:          "ndjson", // the only format written today; csv and parquet are refused
-	DeleteAfterLoad: true,
 }
 ```
 

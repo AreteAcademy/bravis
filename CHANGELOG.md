@@ -8,6 +8,21 @@ A tag de um módulo aninhado leva o prefixo do diretório: `sdk/v0.2.1`.
 
 ---
 
+## [0.12.1] — 2026-09-03
+
+### Corrigido
+- **O exemplo de `LoadConfig` no README não compilava.** Trazia
+  `DeleteAfterLoad: true`, campo renomeado para `KeepStagedFile` na 0.11.0 —
+  quem copiasse o bloco recebia `unknown field DeleteAfterLoad`. É o README que
+  o pkg.go.dev renderiza, então ele sai numa tag, não num commit solto.
+
+### Adicionado
+- README documenta a reconciliação de colunas do `DedupMerge`, que a 0.12.0
+  introduziu: a carga passa a ser **recusada** quando as linhas trazem coluna
+  que o destino não tem.
+
+---
+
 ## [0.12.0] — 2026-09-03
 
 Conserto do MERGE, a partir do relatório em
@@ -297,6 +312,7 @@ Primeira versão que compila.
 > versão de `proxy.golang.org`, então ela permanece publicada e quebrada para
 > sempre. Comece pela `v0.1.1`.
 
+[0.12.1]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.12.1
 [0.12.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.12.0
 [0.11.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.11.0
 [0.10.1]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.10.1
