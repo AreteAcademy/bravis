@@ -128,6 +128,13 @@
   box-sizing: border-box;
 }
 
+/* O `hidden` do UA vale menos que qualquer seletor de classe, e .install-row /
+   .panel definem `display`. Sem esta linha, os tabpanels fechados continuam
+   na tela. */
+[hidden] {
+  display: none !important;
+}
+
 html {
   scroll-behavior: smooth;
   -webkit-text-size-adjust: 100%;
@@ -135,6 +142,7 @@ html {
 
 body {
   margin: 0;
+  overflow-x: hidden;
   font-family: var(--font-sans);
   font-size: 1rem;
   line-height: 1.65;
@@ -607,6 +615,7 @@ td code {
 }
 
 .install-row pre {
+  font-variant-ligatures: none;
   flex: 1;
   min-width: 0;
   margin: 0;
@@ -657,6 +666,7 @@ td code {
 /* -------------------------------------------------- painel de execucao ---- */
 
 .panel {
+  min-width: 0;
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
   background: var(--code-bg);
@@ -708,6 +718,7 @@ td code {
 }
 
 .run-steps {
+  font-variant-ligatures: none;
   list-style: none;
   margin: 0;
   padding: 0;
@@ -875,6 +886,7 @@ td code {
 }
 
 .stat {
+  min-width: 0;
   padding: clamp(1.5rem, 3vw, 2.25rem) 1.5rem;
   background: var(--bg);
 }
@@ -885,6 +897,7 @@ td code {
   font-weight: 600;
   line-height: 1;
   letter-spacing: -0.02em;
+  font-variant-numeric: lining-nums tabular-nums;
   color: var(--text);
 }
 
@@ -912,15 +925,16 @@ td code {
 
 .card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(255px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(255px, 100%), 1fr));
   gap: 1.25rem;
 }
 
 .card-grid-2 {
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
 }
 
 .card {
+  min-width: 0;
   padding: clamp(1.5rem, 2.6vw, 2rem);
   border: 1px solid var(--line);
   border-radius: var(--r-md);
@@ -973,11 +987,12 @@ td code {
 
 .split {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
   gap: 1.25rem;
 }
 
 .split-panel {
+  min-width: 0;
   padding: clamp(1.6rem, 3vw, 2.25rem);
   border: 1px solid var(--line);
   border-radius: var(--r-md);
@@ -1095,7 +1110,7 @@ tbody td {
 tbody td.is-highlight {
   color: var(--text);
   font-weight: 600;
-  background: var(--gold-wash);
+  background: color-mix(in srgb, var(--gold) 12%, transparent);
 }
 
 /* -------------------------------------------------------- code blocks ---- */
@@ -1116,6 +1131,7 @@ tbody td.is-highlight {
 }
 
 .code {
+  font-variant-ligatures: none;
   margin: 0;
   padding: 1.35rem 1.5rem;
   overflow-x: auto;
@@ -1173,6 +1189,7 @@ tbody td.is-highlight {
 }
 
 .code-aside {
+  min-width: 0;
   display: grid;
   gap: 1.5rem;
   align-content: start;
@@ -1248,6 +1265,11 @@ tbody td.is-highlight {
   stroke-dasharray: 4 4;
 }
 
+.arch-arrow {
+  fill: var(--gold);
+  opacity: 0.7;
+}
+
 .arch-legend {
   display: flex;
   flex-wrap: wrap;
@@ -1268,12 +1290,13 @@ tbody td.is-highlight {
 
 .steps {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(230px, 100%), 1fr));
   gap: 1.25rem;
   counter-reset: step;
 }
 
 .step {
+  min-width: 0;
   position: relative;
   padding: 1.6rem 1.4rem;
   border: 1px solid var(--line);
@@ -1301,6 +1324,7 @@ tbody td.is-highlight {
 }
 
 .step-cmd {
+  font-variant-ligatures: none;
   margin-top: 0.9rem;
   padding: 0.6rem 0.75rem;
   border-radius: var(--r-xs);
@@ -1309,7 +1333,9 @@ tbody td.is-highlight {
   font-family: var(--font-mono);
   font-size: 0.76rem;
   line-height: 1.5;
-  overflow-x: auto;
+  /* "github.com/AreteAcademy/bravis/cmd/bravis@latest" e uma palavra so:
+     sem isto ela transborda o card em vez de quebrar. */
+  overflow-wrap: anywhere;
 }
 
 .step-cmd .t-p {
@@ -1414,6 +1440,14 @@ tbody td.is-highlight {
 
 .cta .eyebrow::before {
   background: var(--code-key);
+}
+
+/* O painel do CTA e escuro nos dois temas, entao o code inline dele nao pode
+   herdar --text (a tinta escura, no tema claro). */
+.cta code {
+  background: rgba(212, 184, 150, 0.14);
+  border-color: var(--code-line);
+  color: var(--code-fg);
 }
 
 .cta .button-primary {
@@ -1525,7 +1559,7 @@ tbody td.is-highlight {
   .code-split,
   .brand-split,
   .section-head-split {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .section-head-split {
@@ -1538,6 +1572,10 @@ tbody td.is-highlight {
 
   .footer-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .arch {
+    padding: 1.25rem;
   }
 }
 
@@ -1602,7 +1640,7 @@ tbody td.is-highlight {
   }
 
   .stats {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .stats-source {
@@ -1610,7 +1648,7 @@ tbody td.is-highlight {
   }
 
   .footer-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 

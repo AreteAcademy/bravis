@@ -1,136 +1,104 @@
-# Bravis Landing Page
+# Landing page do Bravis
 
-Landing page moderna e minimalista para o projeto Bravis.
-
-## Estrutura
+HTML, CSS e JS estáticos. Sem build, sem dependência, sem `node_modules` —
+o que está no diretório é o que vai para o ar.
 
 ```
 site/
-├── index.html          # Página principal
-├── css/
-│   └── styles.css      # Estilos globais
-├── js/
-│   └── main.js         # JavaScript funcionalidade
-└── assets/             # Imagens, fonts, etc
+├── index.html          # a página inteira, uma coluna de âncoras
+├── css/styles.css      # tokens + componentes
+├── js/main.js          # tema, abas, copiar, menu, reveal
+└── assets/favicon.svg  # o grafo do logo, com cor fixa
 ```
 
-## Desenvolvimento Local
+Total servido: ~19 KB gzip (HTML + CSS + JS), fora as duas fontes do Google
+Fonts.
 
-### Servir localmente (Python 3)
+## Rodar
+
 ```bash
-cd site
-python3 -m http.server 8000
+python3 -m http.server 8000   # ou: npx http-server .
 ```
 
-Acesse: `http://localhost:8000`
+## Identidade
 
-### Servir localmente (Node.js)
-```bash
-npx http-server site
-```
+A paleta e a tipografia são as da [Aretê Academy](https://areteacademy.com.br)
+e as mesmas da UI do binário (`web/assets/app.src.css`) — os valores são
+idênticos, não aproximações. Trocar de superfície não deve parecer trocar de
+produto.
+
+| token | claro | escuro |
+|---|---|---|
+| `--bg` | `#f4efe4` | `#1a1512` |
+| `--surface` | `#fffdf8` | `#29221b` |
+| `--text` | `#21180f` | `#f4efe4` |
+| `--muted` | `#6e6254` | `#b3a794` |
+| `--gold` | `#aa8450` | `#d4b896` |
+| `--gold-ink` | `#7d5e35` | `#dcc3a2` |
+
+**`--gold` e `--gold-ink` existem separados por contraste.** O ouro da marca
+(`#aa8450`) rende 2,99:1 sobre o pergaminho: serve para borda, ícone e filete,
+nunca para texto pequeno. Texto em ouro usa `--gold-ink` (5,19:1, AA). Ao mexer
+na paleta, mantenha essa divisão.
+
+Tipografia: **Cormorant Garamond** nos títulos, **Inter** no texto, e a mono do
+sistema no código — a mono não é baixada, o que tira uma requisição do caminho
+crítico.
+
+Os blocos de código são painéis escuros nos **dois** temas, como o
+`.hero-panel` do site do grupo. É um conjunto único de tokens de sintaxe sobre
+um fundo único, em vez de dois esquemas para manter em paralelo.
+
+## Tema
+
+Três estados: `data-theme="light"`, `data-theme="dark"` e nenhum dos dois —
+que segue o `prefers-color-scheme` do sistema. A escolha do visitante vai para
+`localStorage` (`bravis-theme`) e é reaplicada por um script no `<head>`, antes
+da primeira pintura; sem ele, quem escolheu o escuro vê o pergaminho por um
+frame a cada carregamento.
+
+## Armadilhas já encontradas
+
+Ao editar, três coisas que quebram em silêncio:
+
+- **`[hidden]` precisa do `!important`.** O `hidden` do UA stylesheet vale menos
+  que qualquer seletor de classe, e `.install-row`/`.panel` definem `display` —
+  sem a regra, todos os painéis de aba aparecem de uma vez.
+- **Em grid, use `minmax(0, 1fr)`, nunca `1fr`.** `1fr` é `minmax(auto, 1fr)`:
+  o track não encolhe abaixo do min-content do filho, e um `<pre>` de código
+  empurra a página inteira para a rolagem horizontal no celular.
+- **Cormorant usa numerais oldstyle.** Em métrica isso faz o `1` de "1 binário"
+  ler como `I`. Os números do bloco de stats forçam
+  `font-variant-numeric: lining-nums`.
+
+## Acessibilidade
+
+Alvo do Lighthouse CI: performance ≥ 0,9 e acessibilidade ≥ 0,95
+(`.lighthouserc.json`). O que sustenta isso:
+
+- contraste AA em todo texto, incluindo os tokens de sintaxe sobre o painel escuro;
+- abas com o padrão ARIA completo (`role`, `aria-selected`, setas, Home/End);
+- `data-reveal` só esconde quando a classe `.js` confirma que o script rodou —
+  uma falha de JS não apaga a página;
+- `prefers-reduced-motion` desliga animação e rolagem suave;
+- skip link, `<main>`, e ordem de headings sem salto.
 
 ## Deploy
 
-### Vercel (Recomendado)
+`netlify.toml`, `vercel.json` e `Dockerfile` (nginx) já estão no diretório, com
+os redirects `/github`, `/docs`, `/issues` e `/discussions`. A CI
+(`.github/workflows/build-site.yml`) valida, roda Lighthouse no PR e publica a
+imagem no push.
+
 ```bash
-npm i -g vercel
-vercel site/
+vercel .                       # ou: netlify deploy --dir=.
+docker build -t bravis-site .  # o que a CI faz
 ```
-
-### Netlify
-```bash
-npm i -g netlify-cli
-netlify deploy --dir=site
-```
-
-### GitHub Pages
-1. Habilite GitHub Pages nas settings do repo
-2. Configure o branch como `main` e pasta como `site/`
-
-### Docker
-```bash
-docker run -d -p 80:80 -v $(pwd)/site:/usr/share/nginx/html nginx:alpine
-```
-
-## Características
-
-✨ **Design Moderno**
-- Paleta de cores sofisticada (pergaminho + ouro)
-- Tipografia elegante com sistema de escalas
-- Dark mode automático
-- Animações sutis (fade-in, hover effects)
-
-🚀 **Performance**
-- System fonts (sem lag de web fonts)
-- CSS modular e otimizado
-- Minimalista e carregamento rápido
-- Responsivo (mobile-first)
-
-♿ **Acessibilidade**
-- Suporta `prefers-reduced-motion`
-- Focus states visíveis
-- Links com `target="_blank"` e `rel="noopener noreferrer"`
-- Semântica HTML correta
-
-🎯 **SEO**
-- Meta tags descritivas
-- Schema.org pronto para implementação
-- URLs limpas e semânticas
-
-## Personalização
-
-### Cores
-Edite o CSS em `css/styles.css` na seção `:root`:
-
-```css
-:root {
-  --accent: #aa8450;
-  --bg: #f4efe4;
-  --text-primary: #21180f;
-  /* ... */
-}
-```
-
-### Conteúdo
-Edite `index.html` diretamente para atualizar textos, links e seções.
-
-### Fontes
-Atualmente usa:
-- **Serif**: Lora (do Google Fonts)
-- **Sans**: System fonts (Apple, Windows, Linux nativas)
-
-Para adicionar outra fonte, atualize o `<link>` no `<head>`:
-
-```html
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=...">
-```
-
-## Temas
-
-### Light Mode (Padrão)
-Pergaminho (#f4efe4) com ouro (#aa8450)
-
-### Dark Mode (Automático)
-Cinza escuro (#1a1815) com dourado (#d4b896)
-
-O site detecta preferência do SO automaticamente. Use DevTools para testar: 
-- Chrome: `⌘+Shift+P` → "Render" → "Emulate CSS media feature prefers-color-scheme"
 
 ## Analytics
 
-Para adicionar analytics (Plausible, Fathom, Umami):
+Não há nenhum. Para adicionar, uma linha antes de `</body>`:
 
 ```html
-<!-- Em index.html, antes de </body> -->
 <script defer data-domain="bravis.sh" src="https://plausible.io/js/script.js"></script>
 ```
-
-## Links Úteis
-
-- GitHub: https://github.com/AreteAcademy/bravis
-- Docs: https://github.com/AreteAcademy/bravis/tree/main/docs
-- Discussões: https://github.com/AreteAcademy/bravis/discussions
-
-## Licença
-
-MIT
