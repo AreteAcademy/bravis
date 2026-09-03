@@ -177,7 +177,7 @@ jobs:
     name: Verify Publication
     runs-on: ubuntu-latest
     needs: [create-release, notify-pkg-go-dev]
-    timeout-minutes: 10
+    timeout-minutes: 30
 
     steps:
       - name: Set up Go
@@ -189,16 +189,26 @@ jobs:
         env:
           VERSION: ${{ needs.create-release.outputs.version }}
         run: |
+          # The proxy fetches on demand and takes its time: v0.6.0 needed
+          # 5m05, against a budget of exactly 5 minutes. Twenty minutes is not
+          # generosity, it is the observed latency plus room.
+          #
+          # GOSUMDB=off on the probe only. Without it a version the checksum
+          # database has not seen yet sends go list off to git, where the
+          # runner has no credentials, and the real answer -- "the proxy does
+          # not have it yet" -- is buried under an auth error. The consumer
+          # build below runs with verification fully on.
           MODULE="github.com/AreteAcademy/bravis/sdk"
-          for i in $(seq 1 20); do
+          for i in $(seq 1 40); do
             echo "Attempt $i..."
-            if GOPROXY=https://proxy.golang.org go list -m "$MODULE@$VERSION"; then
+            if GOPROXY=https://proxy.golang.org GOSUMDB=off GOFLAGS=-mod=mod \
+                 go list -m "$MODULE@$VERSION" 2>&1; then
               echo "✅ Proxy is serving $MODULE@$VERSION"
               exit 0
             fi
-            sleep 15
+            sleep 30
           done
-          echo "❌ Proxy never served $MODULE@$VERSION"
+          echo "❌ Proxy never served $MODULE@$VERSION after 20 minutes"
           exit 1
 
       - name: Build a real consumer against the published module
