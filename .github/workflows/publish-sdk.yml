@@ -84,12 +84,21 @@ jobs:
             "$MODULE/load"
           )
 
+          // Touches the front door and both lower-level packages, so a rename
+          // that breaks callers fails here rather than after the release.
           func main() {
             _ = load.Loader{}
             env := sdk.Envelope{Provider: "p", Entity: "e", SourceKey: "k"}
             id, err := env.IngestionID()
             fmt.Println(id, err)
-            _, _ = extract.CSV(context.Background(), sdk.Fonte{URL: "http://x"})
+
+            _, _ = extract.CSV(context.Background(), sdk.Source{URL: "http://x"})
+
+            _, _ = sdk.Extract(context.Background(), sdk.Source{
+              URL:    "http://x",
+              Guard:  sdk.RejectIf("error"),
+              Expand: sdk.ArrayAt("results"),
+            })
           }
           EOF
           go mod tidy
@@ -219,12 +228,21 @@ jobs:
             "$MODULE/load"
           )
 
+          // Touches the front door and both lower-level packages, so a rename
+          // that breaks callers fails here rather than after the release.
           func main() {
             _ = load.Loader{}
             env := sdk.Envelope{Provider: "p", Entity: "e", SourceKey: "k"}
             id, err := env.IngestionID()
             fmt.Println(id, err)
-            _, _ = extract.CSV(context.Background(), sdk.Fonte{URL: "http://x"})
+
+            _, _ = extract.CSV(context.Background(), sdk.Source{URL: "http://x"})
+
+            _, _ = sdk.Extract(context.Background(), sdk.Source{
+              URL:    "http://x",
+              Guard:  sdk.RejectIf("error"),
+              Expand: sdk.ArrayAt("results"),
+            })
           }
           EOF
           # go mod tidy, not go get: go get resolves dependencies for the
