@@ -8,10 +8,10 @@ import (
 	"log"
 	"time"
 
-	"github.com/spf13/cobra"
 	"github.com/AreteAcademy/bravis/sdk"
 	"github.com/AreteAcademy/bravis/sdk/extract"
 	"github.com/AreteAcademy/bravis/sdk/load"
+	"github.com/spf13/cobra"
 )
 
 // Extract command
@@ -37,11 +37,11 @@ Examples:
 
 		ctx := context.Background()
 
-		fonte := sdk.Fonte{
-			URL:           url,
-			Timeout:       timeout,
-			TotalTimeout:  totalTimeout,
-			Format:        format,
+		source := sdk.Source{
+			URL:          url,
+			Timeout:      timeout,
+			TotalTimeout: totalTimeout,
+			Format:       sdk.Format(format),
 			RetryConfig: &sdk.RetryConfig{
 				MaxAttempts: maxRetries,
 			},
@@ -52,13 +52,13 @@ Examples:
 
 		switch format {
 		case "csv":
-			lines, err = extract.CSV(ctx, fonte)
+			lines, err = extract.CSV(ctx, source)
 		case "json":
-			lines, err = extract.JSON(ctx, fonte)
+			lines, err = extract.JSON(ctx, source)
 		case "ndjson":
-			lines, err = extract.NDJSON(ctx, fonte)
+			lines, err = extract.NDJSON(ctx, source)
 		default:
-			lines, err = extract.CSV(ctx, fonte)
+			lines, err = extract.CSV(ctx, source)
 		}
 
 		if err != nil {
@@ -175,8 +175,8 @@ Examples:
 		// Extract
 		fmt.Fprintf(cmd.OutOrStderr(), "📥 Extracting from %s...\n", url)
 
-		fonte := sdk.Fonte{URL: url}
-		lines, err := extract.CSV(ctx, fonte)
+		source := sdk.Source{URL: url}
+		lines, err := extract.CSV(ctx, source)
 		if err != nil {
 			log.Fatalf("Extract failed: %v", err)
 		}

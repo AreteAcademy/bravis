@@ -70,8 +70,8 @@ func Execute(ctx context.Context, p *Pipeline, args []string) error {
 	fs := flag.NewFlagSet(p.name(), flag.ContinueOnError)
 
 	var (
-		dryRun  = fs.Bool("dry-run", false, "extrai, mapeia e imprime os primeiros records, sem escrever")
-		sample  = fs.Int("sample", 5, "quantos records o -dry-run imprime")
+		dryRun  = fs.Bool("dry-run", false, "extract, map and print the first records without writing")
+		sample  = fs.Int("sample", 5, "how many records -dry-run prints")
 		dataset = fs.String("dataset", "", "BigQuery dataset (default: "+EnvDataset+", or landing)")
 		table   = fs.String("table", "", "destination table (default: vendors_<provider>_<entity>s)")
 		verbose = fs.Bool("v", false, "log at debug level")
