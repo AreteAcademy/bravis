@@ -56,7 +56,7 @@ cat data.ndjson | bravis load --project my-project --dataset landing --table raw
 - `-p, --project` — GCP project ID (required)
 - `-d, --dataset` — BigQuery dataset (default: landing)
 - `-t, --table` — BigQuery table (default: raw_data)
-- `-m, --metadata` — Add Bravis metadata fields
+- `-m, --metadata` — Add `ingestion_id` and `ingestion_loaded_at` to each row
 
 ### run
 
@@ -70,7 +70,7 @@ bravis run https://api.example.com/data.csv --project my-project
 - `-p, --project` — GCP project ID (required)
 - `-d, --dataset` — BigQuery dataset (default: landing)
 - `-t, --table` — BigQuery table (default: raw_data)
-- `-m, --metadata` — Add Bravis metadata fields
+- `-m, --metadata` — Add `ingestion_id` and `ingestion_loaded_at` to each row
 - `--dry-run` — Extract only, don't load
 
 ### version

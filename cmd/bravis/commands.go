@@ -114,11 +114,11 @@ Examples:
 		ctx := context.Background()
 
 		loader, err := load.New(ctx, &sdk.LoadConfig{
-			ProjectID:   projectID,
-			Dataset:     dataset,
-			Table:       table,
-			Format:      "ndjson",
-			AddMetadata: addMetadata,
+			ProjectID:     projectID,
+			Dataset:       dataset,
+			Table:         table,
+			Format:        "ndjson",
+			ExtraMetadata: addMetadata,
 		})
 		if err != nil {
 			log.Fatalf("Create loader failed: %v", err)
@@ -213,10 +213,10 @@ Examples:
 		fmt.Fprintf(cmd.OutOrStderr(), "  Metadata: %v\n\n", addMetadata)
 
 		loader, err := load.New(ctx, &sdk.LoadConfig{
-			ProjectID:   projectID,
-			Dataset:     dataset,
-			Table:       table,
-			AddMetadata: addMetadata,
+			ProjectID:     projectID,
+			Dataset:       dataset,
+			Table:         table,
+			ExtraMetadata: addMetadata,
 		})
 		if err != nil {
 			log.Fatalf("Create loader failed: %v", err)
@@ -255,12 +255,12 @@ func init() {
 	loadCmd.Flags().StringP("project", "p", "", "GCP project ID (required)")
 	loadCmd.Flags().StringP("dataset", "d", "landing", "BigQuery dataset")
 	loadCmd.Flags().StringP("table", "t", "raw_data", "BigQuery table")
-	loadCmd.Flags().BoolP("metadata", "m", false, "Add Bravis metadata fields")
+	loadCmd.Flags().BoolP("metadata", "m", false, "Add ingestion_id and ingestion_loaded_at to each row")
 
 	// Run flags
 	runCmd.Flags().StringP("project", "p", "", "GCP project ID (required)")
 	runCmd.Flags().StringP("dataset", "d", "landing", "BigQuery dataset")
 	runCmd.Flags().StringP("table", "t", "raw_data", "BigQuery table")
-	runCmd.Flags().BoolP("metadata", "m", false, "Add Bravis metadata fields")
+	runCmd.Flags().BoolP("metadata", "m", false, "Add ingestion_id and ingestion_loaded_at to each row")
 	runCmd.Flags().Bool("dry-run", false, "Extract only, don't load")
 }
