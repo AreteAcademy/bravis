@@ -47,3 +47,7 @@ require (
 )
 
 // Examples are a gate on the working tree, not a consumer of the release:
+
+// Examples are a gate on the working tree, not a consumer of the release:
+// CI builds them against ../sdk so a breaking change shows up here first.
+replace github.com/AreteAcademy/bravis/sdk => ../sdk
