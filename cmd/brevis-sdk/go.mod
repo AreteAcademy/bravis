@@ -3,7 +3,7 @@ module github.com/AreteAcademy/brevis/cmd/brevis-sdk
 go 1.24
 
 require (
-	github.com/AreteAcademy/brevis/sdk v0.24.0
+	github.com/AreteAcademy/brevis/sdk v0.25.0
 	github.com/spf13/cobra v1.10.2
 )
 
