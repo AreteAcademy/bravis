@@ -49,15 +49,19 @@ jobs:
     # não roda.
     services:
       minio:
-        image: bitnami/minio:latest
+        image: minio/minio:latest
         env:
           MINIO_ROOT_USER: bravis
           MINIO_ROOT_PASSWORD: bravis-secret
+          MINIO_ARGS: server /data
         ports:
           - 9000:9000
+        # A imagem oficial precisa do argumento "server", e um service
+        # container do Actions não aceita command -- então o health check
+        # espera a porta responder, e o entrypoint vem por MINIO_ARGS.
         options: >-
-          --health-cmd "curl -f http://localhost:9000/minio/health/live"
-          --health-interval 5s --health-timeout 5s --health-retries 20
+          --health-cmd "curl -f http://localhost:9000/minio/health/live || exit 1"
+          --health-interval 5s --health-timeout 5s --health-retries 30
 
     env:
       # O BigQuery exige credencial, então só roda onde ela existe. O S3 roda

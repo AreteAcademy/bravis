@@ -80,25 +80,57 @@ jobs:
             "fmt"
 
             "$MODULE"
-            "$MODULE/extract"
-            "$MODULE/load"
+            "$MODULE/from"
+            "$MODULE/to"
+            "$MODULE/to/bigquery"
           )
 
-          // Touches the front door and both lower-level packages, so a rename
-          // that breaks callers fails here rather than after the release.
+          // Toca a porta da frente e um driver de cada lado, para que um
+          // rename que quebre quem chama falhe aqui e não depois da release.
+          //
+          // Este programa é a única coisa no repositório escrita do ponto de
+          // vista de quem importa o SDK sem nenhum replace para os testes --
+          // então ele tem de acompanhar a API. Ele ficou parado da v0.17.1 à
+          // v0.23.0 e reprovou oito publicações seguidas sem que ninguém
+          // olhasse: um gate que sempre falha ensina a ignorá-lo, do mesmo
+          // jeito que um que nunca falha.
           func main() {
-            _ = load.Loader{}
             env := sdk.Envelope{Provider: "p", Entity: "e", SourceKey: "k"}
             id, err := env.IngestionID()
             fmt.Println(id, err)
 
-            _, _ = extract.CSV(context.Background(), sdk.Source{URL: "http://x"})
-
-            _, _ = sdk.Extract(context.Background(), sdk.Source{
-              URL:    "http://x",
-              Guard:  sdk.RejectIf("error"),
-              Expand: sdk.ArrayAt("results"),
+            dados, err := sdk.Extract(context.Background(), sdk.Source{
+              From: from.HTTP{
+                URL: "http://x",
+                Records: func(r sdk.Response) ([]any, error) {
+                  doc, err := r.Object()
+                  if err != nil {
+                    return nil, err
+                  }
+                  return sdk.ArrayAt("results")(doc)
+                },
+              },
+              Preview: 5,
             })
+            if err != nil {
+              return
+            }
+
+            dados = sdk.Transform(dados, sdk.Accept("id"), sdk.Rename(map[string]string{"id": "chave"}))
+
+            _, _ = sdk.Load(context.Background(), dados, sdk.Target{
+              To:       bigquery.Table{Dataset: "bronze", Name: "t"},
+              Columns:  []string{"ingestion_id", "ingestion_loaded_at", "chave"},
+              Metadata: &sdk.Metadata{AutoID: true},
+              Dedup:    sdk.DedupNone,
+            })
+
+            // E o outro destino, que não pode arrastar o BigQuery junto.
+            _, _ = sdk.Load(context.Background(), dados, sdk.Target{
+              To: to.Files{Path: "./saida/"},
+            })
+
+            fmt.Println(sdk.LogLevel())
           }
           EOF
           go mod tidy
