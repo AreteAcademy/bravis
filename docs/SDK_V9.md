@@ -509,7 +509,50 @@ sites. Hoje nenhum teste olha a mensagem, e é por isso que dois espaços passar
 
 ---
 
-## 8. Critério de pronto para a `v0.10.1`
+## 8. `Metadata` é documentado como interruptor, e não é um — **v0.23.0**
+
+`metadata.go:11`:
+
+> It is a switch for those two columns, not a place to put data.
+
+**Um interruptor com quatro campos obrigatórios não é um interruptor.** Esta
+frase custou duas rodadas de perguntas de quem consome o SDK — a mesma pergunta,
+duas vezes, depois de uma resposta que repetia a frase:
+
+> "Metadado deve ser ligado ou desligado?"
+
+A pergunta não tem resposta porque a premissa está errada. O bloco é a **receita
+do `ingestion_id`**: os quatro campos são os quatro componentes de
+`uuid_v5(ns, "provider|entity|source_key|record_ts")` (`core/types.go:46`).
+Declarar a receita é o que implica as duas colunas — mas o que se declara é a
+receita, não um interruptor.
+
+E não são dois estados, são **três**, cada um com uma consequência diferente para
+o `DedupMerge`:
+
+| bloco | colunas | `ingestion_id` | `DedupMerge` |
+|---|---|---|---|
+| ausente | nenhuma | — | recusado (`load.go:119`) |
+| `&Metadata{AutoID: true}` | as duas | aleatório | recusado (`load.go:113`) |
+| os quatro campos | as duas | determinístico | possível |
+
+A parte da frase que **acerta** é "not a place to put data": nada escrito no
+bloco vira coluna, e vale dizer isso — o consumidor tem `Provider` e `Entity`
+duas vezes no fetcher, uma aqui para o id e outra no `Transform` para a coluna, e
+sem essa frase pareceria duplicação.
+
+**O conserto é de texto, e é pequeno:** trocar "switch" por o que o bloco é, e
+listar os três estados com o que cada um faz ao `DedupMerge`. Os dois erros de
+`load.go:113` e `:119` já nomeiam o problema em runtime; o que falta é a
+documentação dizer o mesmo antes.
+
+**Como provar:** dar o bloco a alguém que nunca viu o SDK e pedir para explicar
+o que ele faz. Se a pessoa perguntar "isto liga ou desliga alguma coisa?", o
+texto ainda não está certo.
+
+---
+
+## 9. Critério de pronto para a `v0.10.1`
 
 > Os itens 1 e 2 têm spec de execução própria, com implementação e provas:
 > [`plan/2026-09-03-sdk-conserto-do-merge.md`](plan/2026-09-03-sdk-conserto-do-merge.md).
