@@ -149,3 +149,30 @@ func drenar(t *testing.T, s core.Source) {
 		}
 	}
 }
+
+// TestCookieSecurePrefixoNaoSomeEmSilencio: o nome real do cookie do NextAuth
+// comeca com __Secure-, que numa spec de navegador so vale sobre https. Se o
+// jar aplicasse essa regra, o cookie sumiria antes de sair -- e o SDK falharia
+// com 401 sem nunca dizer que descartou a credencial.
+//
+// O jar da stdlib nao aplica a regra do prefixo. Este teste existe para o dia
+// em que isso mudar.
+func TestCookieSecurePrefixoNaoSomeEmSilencio(t *testing.T) {
+	var visto string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		visto = r.Header.Get("Cookie")
+		_, _ = fmt.Fprint(w, `{"ok":1}`)
+	}))
+	defer srv.Close()
+
+	drenar(t, core.Source{URL: srv.URL, Auth: &core.Credential{
+		Value: func(context.Context) (string, error) {
+			return "__Secure-authjs.session-token=abc==", nil
+		},
+		Apply: core.AsCookie,
+	}})
+
+	if visto == "" {
+		t.Fatal("o cookie __Secure- sumiu antes de chegar ao servidor")
+	}
+}
