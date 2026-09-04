@@ -8,6 +8,70 @@ A tag de um módulo aninhado leva o prefixo do diretório: `sdk/v0.2.1`.
 
 ---
 
+## [0.20.0] — 2026-09-04
+
+Fase 1 de [`docs/plan/2026-09-04-sdk-drivers-mvp.md`](docs/plan/2026-09-04-sdk-drivers-mvp.md):
+arquivos, nos dois lados. Primeiro driver depois da costura.
+
+### Adicionado
+- **`from.Files` e `to.Files`** — leem e escrevem NDJSON, CSV, JSON e XML em
+  disco, S3 ou GCS. O esquema do caminho diz o backend: `./entrada/*.csv`,
+  `s3://bucket/dia=1/*.ndjson.gz`, `gs://bucket/landing/`.
+- **`store/s3` e `store/gcs`** — os backends de object storage, cada um no seu
+  pacote. Também servem MinIO, R2 e Ceph, por `BaseEndpoint`.
+- `docker-compose.drivers.yml`, com MinIO, Postgres e MySQL para os testes de
+  integração dos drivers.
+- `examples/11-arquivos`, que roda de primeira e sem nuvem nenhuma.
+
+### O backend é um valor, e esse é o ponto
+Um driver de arquivos que importasse os três backends faria quem lê **CSV
+local** compilar a AWS e o Google — contradizendo a regra que a fase 0 comprou.
+Então `core.Store` é passado de fora:
+
+```go
+from.Files{Path: "./entrada/*.csv"}                          // nada extra
+from.Files{Path: "s3://b/x/*.ndjson", Store: s3.New(client)} // só a AWS
+```
+
+```
+o que se importa                 pacotes   AWS   Google
+sdk                                  190   não   não
+sdk + from     (inclui Files)        194   não   não
+sdk + from + store/s3                265   sim   não
+sdk + from + store/gcs               392   não   sim
+```
+
+Ler um CSV local custa **194 pacotes e zero SDK de nuvem**. Os testes de poda
+em `examples/consumer/pruning_test.go` afirmam isso, com os controles.
+
+### Alterado
+- **O preview sobe para `internal/core`.** `ReadOptions.Preview` promete a
+  tabela a todo driver, e só o HTTP honrava — seria campo morto no `from.Files`.
+- **O metadado e o `CheckColumns` sobem para `internal/core`.** Dois writers não
+  podem ter cópias do que calcula o `ingestion_id`: uma linha escrita em
+  arquivo e a mesma linha no BigQuery têm de carregar o mesmo id. Era trabalho
+  previsto para a fase 2 e chegou aqui porque o segundo destino o exigiu.
+
+### Comportamento que vale a pena saber
+- **Ordem de leitura é contrato.** Os arquivos são lidos ordenados, sempre; sem
+  isso um `Key` posicional mudaria o `ingestion_id` entre execuções. Provado
+  com um teste que roda cinco vezes, e outro contra o MinIO.
+- **Escrita é atômica.** Temporário e rename em disco, um PUT só no objeto.
+  Ninguém lê meio arquivo.
+- **Um lote é um objeto.** Uma segunda carga não sobrescreve a primeira: um
+  diretório não tem noção de "as mesmas linhas de novo".
+- `to.Files` **recusa** `Dedup` — um diretório não tem chave para casar — e
+  recusa Parquet, que traria o Arrow para quem só queria um arquivo.
+- `.gz` pela extensão, e um `.gz` que não é gzip falha nomeando o arquivo em vez
+  de virar "JSON inválido" três camadas adiante.
+
+### Verificação
+Integração de verdade contra MinIO (round-trip, ordem, gzip e **paginação com
+1005 objetos**, porque uma listagem truncada que reporta sucesso parece só um
+dia pequeno) e contra o bucket GCS real. Doze de BigQuery seguem passando.
+
+---
+
 ## [0.19.0] — 2026-09-04
 
 **BREAKING.** A costura para os drivers: fase 0 de
@@ -748,6 +812,7 @@ Primeira versão que compila.
 > versão de `proxy.golang.org`, então ela permanece publicada e quebrada para
 > sempre. Comece pela `v0.1.1`.
 
+[0.20.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.20.0
 [0.19.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.19.0
 [0.18.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.18.0
 [0.17.1]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.17.1

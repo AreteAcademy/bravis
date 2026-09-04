@@ -34,11 +34,7 @@ func TestQuemNaoUsaBigQueryNaoCompilaBigQuery(t *testing.T) {
 
 	for _, c := range casos {
 		t.Run(c.nome, func(t *testing.T) {
-			out, err := exec.Command("go", append([]string{"list", "-deps"}, c.pacotes...)...).Output()
-			if err != nil {
-				t.Fatalf("go list: %v", err)
-			}
-			carrega := strings.Contains(string(out), "cloud.google.com/go/bigquery")
+			carrega := strings.Contains(deps(t, c.pacotes...), "cloud.google.com/go/bigquery")
 
 			if c.proibido && carrega {
 				t.Error("o BigQuery entrou no grafo de quem não o importou")
@@ -49,4 +45,51 @@ func TestQuemNaoUsaBigQueryNaoCompilaBigQuery(t *testing.T) {
 			}
 		})
 	}
+}
+
+// O mesmo raciocínio para os backends de object storage. from.Files serve
+// disco, S3 e GCS, mas o backend é um valor -- então ler um CSV local não
+// compila a AWS nem o Google. Com os três num pacote só, compilaria.
+func TestQuemLeArquivoLocalNaoCompilaNuvem(t *testing.T) {
+	casos := []struct {
+		nome     string
+		pacotes  []string
+		procura  string
+		esperado bool
+	}{
+		{"from sozinho não traz a AWS", []string{
+			"github.com/AreteAcademy/bravis/sdk/from"}, "aws-sdk-go", false},
+		{"from sozinho não traz o Google", []string{
+			"github.com/AreteAcademy/bravis/sdk/from"}, "cloud.google.com", false},
+
+		// Os controles: quem pede o backend recebe o backend.
+		{"store/s3 traz a AWS", []string{
+			"github.com/AreteAcademy/bravis/sdk/store/s3"}, "aws-sdk-go", true},
+		{"store/gcs traz o Google", []string{
+			"github.com/AreteAcademy/bravis/sdk/store/gcs"}, "cloud.google.com", true},
+		{"store/s3 não traz o Google", []string{
+			"github.com/AreteAcademy/bravis/sdk/store/s3"}, "cloud.google.com", false},
+	}
+
+	for _, c := range casos {
+		t.Run(c.nome, func(t *testing.T) {
+			carrega := strings.Contains(deps(t, c.pacotes...), c.procura)
+			if carrega != c.esperado {
+				t.Errorf("carrega %q = %v, esperado %v", c.procura, carrega, c.esperado)
+			}
+		})
+	}
+}
+
+// deps roda no módulo do sdk, que é quem declara essas dependências. Rodar
+// daqui só resolveria o que o módulo examples já importa.
+func deps(t *testing.T, pacotes ...string) string {
+	t.Helper()
+	cmd := exec.Command("go", append([]string{"list", "-deps"}, pacotes...)...)
+	cmd.Dir = "../../sdk"
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("go list: %v", err)
+	}
+	return string(out)
 }

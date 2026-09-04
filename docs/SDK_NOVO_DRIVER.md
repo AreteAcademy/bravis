@@ -1,9 +1,11 @@
 # SDK — como acrescentar um driver
 
-**Vale para** `sdk/v0.19.0` · **Atualizado em** 2026-09-04
+**Vale para** `sdk/v0.20.0` · **Atualizado em** 2026-09-04
 
-O roteiro das fases 1 a 4 de
-[`plan/2026-09-04-sdk-drivers-mvp.md`](plan/2026-09-04-sdk-drivers-mvp.md).
+O roteiro das fases 2 a 4 de
+[`plan/2026-09-04-sdk-drivers-mvp.md`](plan/2026-09-04-sdk-drivers-mvp.md). A
+fase 1 (Files) já saiu, na `v0.20.0`, e serve de modelo: leia `sdk/from/files.go`
+e `sdk/to/files.go` ao lado deste documento.
 Para o mapa, veja [`SDK_ARQUITETURA.md`](SDK_ARQUITETURA.md); para as decisões
 que este roteiro pressupõe, [`SDK_DECISOES.md`](SDK_DECISOES.md).
 
@@ -47,7 +49,7 @@ O mesmo nome nos dois pacotes é de propósito: `from.Postgres` tem `Query`,
 
 ---
 
-## 2. As sete regras
+## 2. As oito regras
 
 ### 2.1 A raiz não pode importar o seu pacote
 
@@ -59,7 +61,16 @@ Acrescente o seu caso lá, com o controle: quem importa o seu pacote *tem* de
 receber a sua dependência, senão o teste passaria com um driver que não carrega
 nada.
 
-### 2.2 Streaming, sempre
+### 2.2 O backend de nuvem também é um valor
+
+Se `from.Files` importasse S3 e GCS, ler um CSV local compilaria os dois. Por
+isso `core.Store` é passado em vez de escolhido dentro do driver, e mora em
+`store/s3` e `store/gcs`.
+
+Vale para qualquer driver que fale com mais de um backend: **o que varia vira
+valor, e o valor mora no seu próprio pacote.**
+
+### 2.3 Streaming, sempre
 
 `Read` devolve um `iter.Seq2` que **produz sob demanda**. Um driver que
 materializa a origem inteira antes de devolver põe um export de 5 GB na
@@ -69,7 +80,7 @@ Escreva o teste que falha se você bufferizar — o do HTTP é
 `extract.TestBodyStreamsFully`, e ele existe porque essa regressão já aconteceu:
 um `cancelAttempt()` cedo demais truncava o corpo, e nenhum teste via.
 
-### 2.3 Nada de inferir tipo
+### 2.4 Nada de inferir tipo
 
 O SDK não adivinha o tipo de uma coluna. No BigQuery a `v0.16.0` resolve isso
 delegando a inferência ao próprio BigQuery — carrega numa tabela descartável com
@@ -83,7 +94,7 @@ Um `CreateTable: true` sem `CreateSQL` num destino SQL é **erro nomeando a
 limitação**, e a mensagem lista as colunas que o lote traz, para o DDL sair de
 uma leitura. Não é uma lacuna a preencher depois com inferência: é a decisão.
 
-### 2.4 Opção que o driver não suporta é erro, não silêncio
+### 2.5 Opção que o driver não suporta é erro, não silêncio
 
 `Dedup` num destino de arquivos, `ClusterBy` no Postgres, `RateLimiter` numa
 origem de disco: erro nomeando a opção e o driver.
@@ -92,7 +103,7 @@ origem de disco: erro nomeando a opção e o driver.
 escrita e nunca lida, então é recusada nomeando os campos. Um campo aceito e
 ignorado é o defeito que este SDK mais achou em si mesmo.
 
-### 2.5 SQL gerado é função pura
+### 2.6 SQL gerado é função pura
 
 Monte o SQL fora do método que precisa de conexão:
 
@@ -109,7 +120,7 @@ dentro de um método com cliente.
 E **crase ou aspas em todo identificador**: `full`, `range` e `comment` são
 reservadas e aparecem em coluna de consumidor de verdade.
 
-### 2.6 A reconciliação é assimétrica
+### 2.7 A reconciliação é assimétrica
 
 Ao casar o registro com o destino, use a mesma regra que o `reconcile` já usa:
 
@@ -125,7 +136,7 @@ fica NULL é legítima numa landing.
 Na fase 2 o `reconcile` sobe de `sdk/load` para `internal/core` e passa a servir
 os três destinos SQL.
 
-### 2.7 Não altere nem apague nada
+### 2.8 Não altere nem apague nada
 
 Vale para todos os drivers o princípio escrito no godoc de `load.prepareTable`: um loader que sabe
 fazer `ALTER` sabe apagar história. Divergência é erro, não migração. E não crie
@@ -189,11 +200,14 @@ vira string de bytes.
 Ligue os containers com `docker-compose.drivers.yml` e trave por variável de
 ambiente, como os testes do BigQuery já são:
 
-| serviço | serve a |
-|---|---|
-| `postgres:17-alpine` | `from.Postgres`, `to.Postgres` |
-| `mysql:8` | `from.MySQL`, `to.MySQL` |
-| `minio/minio` | `s3://` de `Files` e o staging do Redshift |
+| serviço | serve a | variável |
+|---|---|---|
+| `postgres:17-alpine` | `from.Postgres`, `to.Postgres` | `BRAVIS_IT_PG_DSN` |
+| `mysql:8` | `from.MySQL`, `to.MySQL` | `BRAVIS_IT_MYSQL_DSN` |
+| `minio/minio` | `s3://` de `Files` e o staging do Redshift | `BRAVIS_IT_S3_ENDPOINT` |
+
+O compose já existe: `docker-compose.drivers.yml`, na raiz. O MinIO já é usado
+pelos testes do `Files`.
 
 GCS não tem emulador bom; `gs://` vai contra o bucket real que a suíte do
 BigQuery já usa.
@@ -220,6 +234,7 @@ antes de dar por bom. Esta é a regra que mais achou defeito neste projeto.
 
 - [ ] `Read`/`Write` e `Describe` implementados
 - [ ] a raiz continua sem importar o pacote — teste de poda com o controle
+- [ ] backend que varia mora no próprio pacote, passado como valor
 - [ ] streaming provado por um teste que falharia sem ele
 - [ ] tipos mapeados por tabela escrita, com teste por linha
 - [ ] `CreateTable` sem inferência: tabela existente ou `CreateSQL`

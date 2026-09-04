@@ -1,6 +1,6 @@
 # SDK — a arquitetura como ela é
 
-**Vale para** `sdk/v0.19.0` · **Atualizado em** 2026-09-04
+**Vale para** `sdk/v0.20.0` · **Atualizado em** 2026-09-04
 
 Este é o mapa. Para *por que* cada peça é assim, veja
 [`SDK_DECISOES.md`](SDK_DECISOES.md); para *como acrescentar um driver*, veja
@@ -62,9 +62,10 @@ sdk/
 ├── internal/core/        o contrato: Envelope, Reader, Writer, ReadOptions,
 │                         WriteOptions, Response, Reading, Stats, Dedup,
 │                         LoadConfig, Origin, Reject
-├── from/                 as origens: HTTP  (Postgres, MySQL, Files a caminho)
-├── to/                   os destinos: BigQuery  (Postgres, MySQL, Redshift,
-│                         Files a caminho)
+├── from/                 as origens: HTTP, Files  (Postgres e MySQL a caminho)
+├── to/                   os destinos: BigQuery, Files  (Postgres, MySQL e
+│                         Redshift a caminho)
+├── store/                os backends de object storage: s3, gcs
 ├── extract/              a implementação HTTP: retry, paginação, decoders,
 │                         preview
 └── load/                 a implementação BigQuery: staging, MERGE, criação
@@ -79,6 +80,7 @@ sustenta tudo o mais, e ela é medida — veja §6.
 | `sdk` → `internal/core` | só |
 | `from/*` → `internal/core`, `extract` | |
 | `to/*` → `internal/core`, `load` | |
+| `store/*` → nada do SDK | só o cliente da nuvem |
 | `extract`, `load` → `internal/core` | |
 
 Nenhuma seta aponta de volta para `sdk`. Um driver não consegue importar a
@@ -122,8 +124,10 @@ type Writer interface {
 ### O que é do driver
 
 Tudo o mais. `from.HTTP` tem URL, headers, retry, `RateLimiter`, paginação,
-`Format` e `Records`. `to.BigQuery` tem projeto, dataset, tabela, staging em
-GCS, `ClusterBy`, particionamento e `CreateSQL`. **Nenhum desses campos aparece
+`Format` e `Records`; `from.Files` tem caminho, formato e `Store`.
+`to.BigQuery` tem projeto, dataset, tabela, staging em GCS, `ClusterBy`,
+particionamento e `CreateSQL`; `to.Files` tem caminho, `PartitionBy` e
+`Compress`. **Nenhum desses campos aparece
 num driver que não os tem** — é essa a diferença entre um tipo por driver e uma
 struct de união.
 
@@ -190,11 +194,13 @@ forma de um consumidor não pagar por um driver é não importar o pacote dele.
 
 Medido na `v0.19.0`:
 
-| o que se importa | pacotes | binário | BigQuery |
+| o que se importa | pacotes | AWS | Google |
 |---|---|---|---|
-| `sdk` | 190 | — | não |
-| `sdk` + `from` | 194 | — | não |
-| `sdk` + `to` | 456 | — | sim |
+| `sdk` | 190 | não | não |
+| `sdk` + `from` | 194 | não | não |
+| `sdk` + `to` | 456 | não | sim |
+| `sdk` + `from` + `store/s3` | 265 | sim | não |
+| `sdk` + `from` + `store/gcs` | 392 | não | sim |
 
 Um fetcher HTTP de verdade — com o `main`, `fmt` e o resto — sai em **197
 pacotes e 9,1 MB**, medido contra a `v0.19.0` publicada.
@@ -252,6 +258,9 @@ sem falhar a execução.
 | `Transform` e compositores | `sdk/transform.go`, `sdk/expand.go` |
 | o `ingestion_id` | `sdk/internal/core/types.go` (`IngestionID`) |
 | a reconciliação de colunas | `sdk/load/columns.go`, `sdk/load/merge_sql.go` |
-| o preview | `sdk/extract/preview.go` |
+| o preview | `sdk/internal/core/preview.go` |
+| o metadado e o `CheckColumns` | `sdk/internal/core/metadata.go` |
+| os backends de nuvem | `sdk/store/s3`, `sdk/store/gcs` |
 | os testes contra o BigQuery real | `sdk/load/integration_test.go` |
+| os testes contra MinIO e GCS | `sdk/from/integration_test.go` |
 | as provas de consumidor | `examples/consumer/` |

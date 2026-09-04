@@ -868,7 +868,7 @@ func TestRecordsComDataKeyERecusado(t *testing.T) {
 	if err == nil {
 		t.Fatal("Records junto de DataKey deixaria o DataKey sem efeito")
 	}
-	for _, want := range []string{"Records", "DataKey", "results"} {
+	for _, want := range []string{"Reading", "DataKey", "results"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("o erro não menciona %q: %v", want, err)
 		}

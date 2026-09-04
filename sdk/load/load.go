@@ -189,28 +189,18 @@ func (l *Loader) Load(ctx context.Context, envelopes ...core.Envelope) (*core.Lo
 		return fail(nil)
 	}
 
-	if l.cfg.Metadata {
-		// On a copy. `loader.Load(ctx, batch...)` hands us the caller's own
-		// slice -- a variadic call shares the backing array -- so writing the
-		// metadata back into it would alter what they still hold. Loading the
-		// same batch twice then failed on the second try with "payload
-		// already has ingestion_id", which is exactly what a retry does, and
-		// exactly what DedupMerge exists to handle.
-		stamped := make([]core.Envelope, len(envelopes))
-		copy(stamped, envelopes)
-		for i := range stamped {
-			if err := l.addMetadataToEnvelope(&stamped[i]); err != nil {
-				return fail(fmt.Errorf("add metadata: %w", err))
-			}
-		}
-		envelopes = stamped
+	envelopes, err := core.StampMetadata(envelopes, core.WriteOptions{
+		Metadata: l.cfg.Metadata, AutoID: l.cfg.AutoID,
+	})
+	if err != nil {
+		return fail(fmt.Errorf("add metadata: %w", err))
 	}
 
 	// The row is complete now: Transform composed it and Metadata stamped it.
 	// Checking here is what lets a declared ingestion_id be legitimate, which
 	// it could never be inside the Transform chain -- that runs before the
 	// two metadata fields exist.
-	if err := checkColumns(l.cfg.Columns, envelopes); err != nil {
+	if err := core.CheckColumns(l.cfg.Columns, envelopes); err != nil {
 		return fail(err)
 	}
 

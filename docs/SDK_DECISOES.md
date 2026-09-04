@@ -1,6 +1,6 @@
 # SDK — as decisões, e o que cada uma custou
 
-**Vale para** `sdk/v0.19.0` · **Atualizado em** 2026-09-04
+**Vale para** `sdk/v0.20.0` · **Atualizado em** 2026-09-04
 
 Cada linha aqui já foi decidida ao contrário uma vez. Este documento existe
 para que a próxima sessão não desfaça uma lição paga — e para que, quando
@@ -85,6 +85,13 @@ na `v0.19.0`, junto com `DriverHTTP` e `DriverBigQuery`, porque ninguém os lia.
    morto.
 3. **Erro de compilação.** Não existe mais campo onde escrever um driver que não
    existe.
+
+**O mesmo raciocínio desceu um nível na `v0.20.0`.** `from.Files` serve disco,
+S3 e GCS, e você escolheu "um driver só, o esquema do caminho decide". Se ele
+importasse os três backends, ler um CSV local compilaria a AWS **e** o Google —
+contradizendo a razão 1. Então o backend virou valor também: `core.Store`,
+passado de fora, morando em `store/s3` e `store/gcs`. Um driver, três
+backends, e quem lê disco paga 194 pacotes.
 
 **Consequência assumida:** `Records` voltou para `from.HTTP` na `v0.19.0`,
 desfazendo parte da `v0.18.0`. Lá ele subira para `Pipeline` porque `Source` era

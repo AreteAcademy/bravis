@@ -66,9 +66,9 @@ func fetch(ctx context.Context, source core.Source, records core.Reading) (iter.
 	// Records set the decoder never sees the body DataKey unwrapped -- so
 	// DataKey would sit there doing nothing, which is worse than an error.
 	if records != nil && source.DataKey != "" {
-		return nil, fmt.Errorf("Pipeline.Records and Source.DataKey both say where the records are, and " +
-			"Records wins -- DataKey would be ignored. Read the field inside Records " +
-			"instead: sdk.ArrayAt(\"" + source.DataKey + "\")(doc)")
+		return nil, fmt.Errorf("the Reading and Source.DataKey both say where the records are, "+
+			"and the Reading wins -- DataKey would be ignored. Read the field inside it "+
+			"instead: sdk.ArrayAt(%q)(doc)", source.DataKey)
 	}
 
 	if source.Method == "" {
@@ -155,7 +155,7 @@ func fetch(ctx context.Context, source core.Source, records core.Reading) (iter.
 				"duration", elapsed,
 			}
 			if pages > 0 {
-				args = append(args, "per_page", roundDuration(elapsed/time.Duration(pages)))
+				args = append(args, "per_page", core.RoundDuration(elapsed/time.Duration(pages)))
 			}
 			slog.InfoContext(ctxTotal, "extract complete", args...)
 
@@ -164,7 +164,7 @@ func fetch(ctx context.Context, source core.Source, records core.Reading) (iter.
 				if w == nil {
 					w = os.Stderr
 				}
-				_, _ = io.WriteString(w, renderPreview(sample, source.PreviewBytes, previewStats{
+				_, _ = io.WriteString(w, core.RenderPreview(sample, source.PreviewBytes, core.PreviewStats{
 					Rows: rows, Pages: pages, Bytes: read, Duration: elapsed,
 				}))
 			}

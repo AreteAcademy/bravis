@@ -54,19 +54,22 @@ res, err := sdk.Load(ctx, dados, sdk.Target{
 
 **The driver is a value, not a setting.** `from.HTTP` carries everything an
 HTTP source needs — URL, headers, retry, pagination, and what a response
-means. `from.Postgres` will carry a DSN and a query. Neither has to make room
-for the other's fields, so no source struct collects forty options of which any
-one driver reads six.
+means. `from.Files` carries a path and a format. Neither has to make room for
+the other's fields, so no source struct collects forty options of which any one
+driver reads six.
 
 It also decides what you compile. Go prunes dependencies by package imported,
-never by field used, so a fetcher that writes to Postgres never builds the
-BigQuery client:
+never by field used:
 
-| what you import | packages | BigQuery |
-|---|---|---|
-| `sdk` | 190 | no |
-| `sdk` + `from` | 194 | no |
-| `sdk` + `to` | 456 | yes |
+| what you import | packages | AWS | Google |
+|---|---|---|---|
+| `sdk` | 190 | no | no |
+| `sdk` + `from` | 194 | no | no |
+| `sdk` + `to` | 456 | no | yes |
+| `sdk` + `from` + `store/s3` | 265 | yes | no |
+| `sdk` + `from` + `store/gcs` | 392 | no | yes |
+
+Reading local CSV costs 194 packages and no cloud SDK at all.
 
 `Source` and `Target` hold what every driver honours: the preview and counters
 on one side, the declared columns, metadata and deduplication on the other.
@@ -79,6 +82,48 @@ in the declaration too.
 Everything between the two calls that is not specific to the vendor lives in
 the SDK: config, retry, pagination, table creation, deduplication and the
 result you log.
+
+## Sources and destinations
+
+| read from | |
+|---|---|
+| `from.HTTP` | an API: retry, rate limiting, three pagination strategies, and `Records` |
+| `from.Files` | files on disk, S3 or GCS: NDJSON, CSV, JSON, XML, `.gz` |
+
+| write to | |
+|---|---|
+| `to.BigQuery` | a table: GCS staging, `MERGE`, typed creation, partitioning, clustering |
+| `to.Files` | files on disk, S3 or GCS: NDJSON or CSV, partitioned, compressed |
+
+### Files, and the three backends
+
+One driver, three backends. The scheme in `Path` says which:
+
+```go
+from.Files{Path: "./entrada/*.csv", Format: sdk.FormatCSV}
+from.Files{Path: "s3://bucket/dia=2026-09-04/*.ndjson.gz", Store: s3.New(client)}
+to.Files{Path: "gs://bucket/landing/", PartitionBy: "ingestion_loaded_at", Store: gcs.New(client)}
+```
+
+**The backend is passed in, not chosen inside `Files`** — that is what keeps a
+fetcher reading local CSV from compiling the AWS SDK and the Google one. A path
+whose scheme the `Store` does not serve is an error naming both, not a
+confusing 404.
+
+Files are read in **sorted order, always**. Two runs over the same prefix
+produce the same sequence, which a positional `Key` depends on: without it the
+`ingestion_id` of a record would change between runs. `.gz` is handled by
+extension, and a `.gz` that is not gzip fails naming the file rather than as an
+"invalid JSON" three layers down.
+
+Writing is **atomic**: a temporary file and a rename on disk, a single PUT in
+object storage. Nobody ever reads half a file. A batch becomes one object, so a
+second load does not overwrite the first — a directory has no notion of "the
+same rows again", and what to do about duplicates is decided downstream.
+
+`to.Files` refuses what a directory cannot do, naming the option:
+`Dedup` has no key to match on, and Parquet would bring Arrow along for a
+fetcher that only wanted a file.
 
 ## Transform
 

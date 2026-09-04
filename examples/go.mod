@@ -1,6 +1,6 @@
 module github.com/AreteAcademy/bravis/examples
 
-go 1.23
+go 1.24
 
 require github.com/AreteAcademy/bravis/sdk v0.10.0
 

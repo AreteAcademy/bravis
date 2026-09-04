@@ -7,12 +7,12 @@
 ## SDK
 
 Comece por aqui. Estes três descrevem o SDK como ele está hoje
-(`sdk/v0.19.0`) e respondem perguntas diferentes:
+(`sdk/v0.20.0`) e respondem perguntas diferentes:
 
 | documento | responde |
 |---|---|
 | [`SDK_ARQUITETURA.md`](SDK_ARQUITETURA.md) | **o quê e onde** — as quatro perguntas de um fetcher, o mapa dos pacotes, as duas interfaces, por onde um registro passa |
-| [`SDK_NOVO_DRIVER.md`](SDK_NOVO_DRIVER.md) | **como** — o roteiro para acrescentar Postgres, MySQL, Files e Redshift, com as sete regras e o checklist |
+| [`SDK_NOVO_DRIVER.md`](SDK_NOVO_DRIVER.md) | **como** — o roteiro para acrescentar Postgres, MySQL e Redshift, com as oito regras e o checklist |
 | [`SDK_DECISOES.md`](SDK_DECISOES.md) | **por quê** — cada decisão, o que se tentou antes e o que aquilo custou |
 
 A referência da API é o [godoc](https://pkg.go.dev/github.com/AreteAcademy/bravis/sdk)
@@ -41,7 +41,7 @@ de fato saiu — **não** como descrição do estado atual.
 | [`2026-09-03-sdk-schema-declarado.md`](plan/2026-09-03-sdk-schema-declarado.md) | **parcial** — veja §13 de `SDK_DECISOES.md` |
 | [`2026-09-03-sdk-validacao-do-consumidor.md`](plan/2026-09-03-sdk-validacao-do-consumidor.md) | `v0.17.0` |
 | [`2026-09-04-sdk-uma-declaracao-de-colunas.md`](plan/2026-09-04-sdk-uma-declaracao-de-colunas.md) | `v0.18.0` |
-| [`2026-09-04-sdk-drivers-mvp.md`](plan/2026-09-04-sdk-drivers-mvp.md) | fase 0 = `v0.19.0`; **fases 1–5 em aberto** |
+| [`2026-09-04-sdk-drivers-mvp.md`](plan/2026-09-04-sdk-drivers-mvp.md) | fase 0 = `v0.19.0`, fase 1 = `v0.20.0`; **fases 2–5 em aberto** |
 
 `phases/` é do **engine**, não do SDK: as fases de construção do orquestrador.
 

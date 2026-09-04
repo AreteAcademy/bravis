@@ -1,4 +1,4 @@
-package extract
+package core
 
 import (
 	"bytes"
@@ -11,7 +11,11 @@ import (
 )
 
 // The preview exists to answer "what did I actually just pull?" without a
-// debugger and without draining the stream into a variable. It is the shape
+// debugger and without draining the stream into a variable.
+//
+// It lives here, not in a driver, because ReadOptions offers it to every
+// source -- and an option a driver ignores is the defect this SDK keeps
+// finding in itself. It is the shape
 // of the data, printed the way a dataframe prints its head.
 //
 // It is rendered to a writer rather than through slog on purpose: slog's
@@ -33,24 +37,24 @@ const (
 	maxCellWidth = 40
 )
 
-// previewStats is what the footer reports: the totals the sample came from.
-type previewStats struct {
+// PreviewStats is what the footer reports: the totals the sample came from.
+type PreviewStats struct {
 	Rows     int
 	Pages    int
 	Bytes    int64
 	Duration time.Duration
 }
 
-// renderPreview lays the sampled records out as a table with a footer, in the
+// RenderPreview lays the sampled records out as a table with a footer, in the
 // spirit of a dataframe's head().
 //
 // Pure: no clock, no network, no logger. The string it returns is the whole
 // of what gets printed, which is what makes it assertable in a test.
-func renderPreview(sample []any, budget int, st previewStats) string {
+func RenderPreview(sample []any, budget int, st PreviewStats) string {
 	if len(sample) == 0 {
 		return fmt.Sprintf("[no rows · %d %s · %s in %s]\n",
 			st.Pages, plural(st.Pages, "page", "pages"),
-			humanBytes(st.Bytes), roundDuration(st.Duration))
+			humanBytes(st.Bytes), RoundDuration(st.Duration))
 	}
 	if budget <= 0 {
 		budget = defaultPreviewBytes
@@ -126,7 +130,7 @@ func renderPreview(sample []any, budget int, st previewStats) string {
 	return b.String() + "\n" + footer(rowsShown, len(cols), hiddenCols, st) + "\n"
 }
 
-func footer(shown, cols, hiddenCols int, st previewStats) string {
+func footer(shown, cols, hiddenCols int, st PreviewStats) string {
 	var parts []string
 
 	if shown < st.Rows {
@@ -142,10 +146,10 @@ func footer(shown, cols, hiddenCols int, st previewStats) string {
 	parts = append(parts, c)
 	parts = append(parts, humanBytes(st.Bytes))
 	parts = append(parts, fmt.Sprintf("%d %s in %s",
-		st.Pages, plural(st.Pages, "page", "pages"), roundDuration(st.Duration)))
+		st.Pages, plural(st.Pages, "page", "pages"), RoundDuration(st.Duration)))
 
 	if st.Pages > 1 {
-		parts = append(parts, fmt.Sprintf("%s/page", roundDuration(st.Duration/time.Duration(st.Pages))))
+		parts = append(parts, fmt.Sprintf("%s/page", RoundDuration(st.Duration/time.Duration(st.Pages))))
 	}
 
 	return "[" + strings.Join(parts, " · ") + "]"
@@ -262,10 +266,10 @@ func humanBytes(n int64) string {
 	return fmt.Sprintf("%.1f %cB", float64(n)/float64(div), "kMGTP"[exp])
 }
 
-// roundDuration keeps a duration readable at whatever scale it lands on.
+// RoundDuration keeps a duration readable at whatever scale it lands on.
 // Rounding everything to milliseconds turns a fast extract into "0s", which
 // reads as "not measured" rather than "quick".
-func roundDuration(d time.Duration) time.Duration {
+func RoundDuration(d time.Duration) time.Duration {
 	switch {
 	case d >= time.Second:
 		return d.Round(10 * time.Millisecond)
