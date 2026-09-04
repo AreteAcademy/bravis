@@ -240,3 +240,40 @@ func TestAuthNaoMutaOHeaderDoCaller(t *testing.T) {
 		t.Errorf("o segredo ficou no header do caller: %v", h)
 	}
 }
+
+// TestRefreshTentaDeNovo: as páginas têm três tentativas; a renovação tinha
+// uma. Uma queda de rede na renovação matava a execução inteira enquanto a
+// mesma queda no endpoint de dados custava um retry.
+func TestRefreshTentaDeNovo(t *testing.T) {
+	var tentativas atomic.Int32
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/auth", func(w http.ResponseWriter, _ *http.Request) {
+		if tentativas.Add(1) < 3 {
+			http.Error(w, "indisponivel", http.StatusServiceUnavailable)
+			return
+		}
+		_, _ = fmt.Fprint(w, `{"ok":1}`)
+	})
+	mux.HandleFunc("/dados", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = fmt.Fprint(w, `{"ok":1}`)
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	drenar(t, core.Source{
+		URL: srv.URL + "/dados",
+		RetryConfig: &core.RetryConfig{
+			MaxAttempts: 3, InitialBackoff: time.Millisecond, MaxBackoff: time.Millisecond,
+		},
+		Auth: &core.Credential{
+			Value:   func(context.Context) (string, error) { return "t", nil },
+			Apply:   core.AsBearer,
+			Refresh: &core.Refresh{URL: srv.URL + "/auth"},
+		},
+	})
+
+	if n := tentativas.Load(); n != 3 {
+		t.Errorf("a renovacao tentou %d vezes, esperado 3", n)
+	}
+}

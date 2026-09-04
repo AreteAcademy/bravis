@@ -8,6 +8,30 @@ A tag de um módulo aninhado leva o prefixo do diretório: `sdk/v0.2.1`.
 
 ---
 
+## [0.27.2] — 2026-09-04
+
+### Corrigido
+
+**Pânico no primeiro retry, com um `RetryConfig` próprio.** `rand.Int63n` entra
+em pânico com argumento não-positivo, então um `RetryConfig{MaxAttempts: 5}` e
+mais nada — que é uma coisa perfeitamente razoável de se escrever — derrubava o
+processo assim que a fonte devolvia 500. Não ter jitter é uma escolha, não um
+erro. Achado escrevendo o teste de retry da renovação, e é anterior a ela.
+
+**`MaxBackoff` zerado truncava todo backoff para zero**, ou seja: retry imediato
+em loop contra uma API que acabou de responder 429.
+
+**A renovação tem as mesmas tentativas que as páginas.** Uma queda de rede no
+endpoint de renovação matava a execução inteira, enquanto a mesma queda no
+endpoint de dados custava um retry. Mesmo `RetryConfig`, mesmo backoff, mesma
+leitura de `Retry-After`.
+
+**O lint entrou no gate de publicação**, que rodava `go test` e mais nada — foi
+por isso que a `v0.26.0` e a `v0.27.0` saíram com `errcheck` vermelho nos testes.
+Uma release é imutável; o momento de descobrir é antes da tag.
+
+---
+
 ## [0.27.0] — 2026-09-04
 
 O quarto ponto do `2026-09-04-sdk-http-autenticacao.md`, e o maior: `from.HTTP`

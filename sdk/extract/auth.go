@@ -46,6 +46,63 @@ func authenticate(ctx context.Context, source *core.Source) error {
 	return nil
 }
 
+// renewRequest makes the refresh call, with the same retries the pages get.
+//
+// Without them the walk is lopsided: a blip on the data endpoint costs a
+// retry and a blip on the renewal costs the whole run. Same RetryConfig, same
+// backoff, same reading of Retry-After.
+func renewRequest(ctx context.Context, client *http.Client, source core.Source, method, rawURL string) ([]byte, error) {
+	fail := func(format string, a ...any) ([]byte, error) {
+		return nil, fmt.Errorf("refresh "+redactURL(rawURL)+": "+format, a...)
+	}
+
+	attempts := 1
+	if source.RetryConfig != nil && source.RetryConfig.MaxAttempts > 0 {
+		attempts = source.RetryConfig.MaxAttempts
+	}
+
+	for attempt := 0; attempt < attempts; attempt++ {
+		req, err := http.NewRequestWithContext(ctx, method, rawURL, nil)
+		if err != nil {
+			return fail("%w", err)
+		}
+		req.Header = http.Header(source.Header).Clone()
+		// Same rule as the pages: the jar is where cookies come from.
+		req.Header.Del("Cookie")
+
+		resp, err := client.Do(req)
+		if err != nil {
+			if shouldRetry(err) && attempt < attempts-1 {
+				time.Sleep(calculateBackoff(attempt, source.RetryConfig))
+				continue
+			}
+			return fail("after %d attempt(s): %w", attempt+1, err)
+		}
+
+		body, readErr := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		_ = resp.Body.Close()
+
+		if resp.StatusCode >= 200 && resp.StatusCode <= 299 {
+			if readErr != nil {
+				return fail("read response: %w", readErr)
+			}
+			return body, nil
+		}
+
+		if shouldRetryStatus(resp.StatusCode) && attempt < attempts-1 {
+			time.Sleep(retryAfter(resp, attempt, source.RetryConfig))
+			continue
+		}
+
+		// A refresh that fails is not a warning to move past: every page
+		// after it would go out with a credential the API just refused, and
+		// the run would fail anyway -- later, and blaming the data endpoint.
+		return fail("http %d: %s", resp.StatusCode, string(body))
+	}
+
+	return fail("out of attempts")
+}
+
 // renew calls the refresh endpoint before the first page.
 //
 // It shares the walk's client, so a Set-Cookie in the response lands in the
@@ -59,30 +116,9 @@ func renew(ctx context.Context, client *http.Client, source core.Source, stats *
 		method = "GET"
 	}
 
-	req, err := http.NewRequestWithContext(ctx, method, r.URL, nil)
+	body, err := renewRequest(ctx, client, source, method, r.URL)
 	if err != nil {
-		return fmt.Errorf("refresh %s: %w", redactURL(r.URL), err)
-	}
-	req.Header = http.Header(source.Header).Clone()
-	// Same rule as the pages: the jar is where cookies come from.
-	req.Header.Del("Cookie")
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("refresh %s: %w", redactURL(r.URL), err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if err != nil {
-		return fmt.Errorf("refresh %s: read response: %w", redactURL(r.URL), err)
-	}
-
-	// A refresh that fails is not a warning to move past: every page after it
-	// would go out with a credential the API just refused, and the run would
-	// fail anyway -- later, and blaming the data endpoint.
-	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		return fmt.Errorf("refresh %s: http %d: %s", redactURL(r.URL), resp.StatusCode, string(body))
+		return err
 	}
 
 	if r.ExpiresAt == nil {

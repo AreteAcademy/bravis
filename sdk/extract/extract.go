@@ -716,12 +716,19 @@ func shouldRetryStatus(status int) bool {
 
 func calculateBackoff(attempt int, cfg *core.RetryConfig) time.Duration {
 	backoff := time.Duration(math.Pow(2, float64(attempt))) * cfg.InitialBackoff
-	if backoff > cfg.MaxBackoff {
+	if cfg.MaxBackoff > 0 && backoff > cfg.MaxBackoff {
 		backoff = cfg.MaxBackoff
 	}
 
-	jitter := time.Duration(rand.Int63n(int64(float64(backoff) * cfg.JitterFraction)))
-	return backoff + jitter
+	// rand.Int63n panics on a non-positive argument, so a RetryConfig with no
+	// JitterFraction -- RetryConfig{MaxAttempts: 5} and nothing else, which is
+	// a reasonable thing to write -- used to crash the process on the first
+	// retry. No jitter is a choice, not an error.
+	span := int64(float64(backoff) * cfg.JitterFraction)
+	if span <= 0 {
+		return backoff
+	}
+	return backoff + time.Duration(rand.Int63n(span))
 }
 
 // Redact strips secrets out of a URL, for logs and errors. Exported so a
