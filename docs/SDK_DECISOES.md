@@ -241,7 +241,49 @@ Consequências práticas:
 
 ---
 
-## 13. Onde a discussão continua
+## 13. Credencial: um aviso vale mais que um armazém
+
+O SDK **não guarda credencial nenhuma**. Nem em disco, nem no warehouse, nem
+num store abstraído.
+
+A tentação era grande e tinha caso de uso: um fornecedor sem login programático,
+cujo cookie um humano cola no navegador e cuja expiração desliza. O consumidor
+tinha resolvido guardando o cookie numa tabela do `bronze` — onze cópias de uma
+credencial **pessoal**, legíveis por qualquer `dataViewer` do dataset. O dataset
+foi liberado para ver dado de fornecedor, e quem concedeu esse acesso não sabia
+que ele passou a incluir isso.
+
+A alternativa aparente era o SDK oferecer um store decente. Não é o que ele faz,
+por uma medição:
+
+```
+1. GET /auth/session com o token guardado -> Set-Cookie com um token NOVO
+2. GET /dados com o token ANTIGO          -> HTTP 200
+```
+
+**O token antigo sobrevive à rotação.** Cada um vale a própria janela, contada
+de quando foi emitido. Então não guardar nada funciona, e o custo é conhecido e
+único: alguém recola a credencial uma vez por janela, em vez de nunca.
+
+Trocar "nunca recolar" por "recolar por mês" só é honesto se a pessoa souber
+**quando** — senão a pipeline morre calada no dia 31, com um 401 que não diz que
+a causa é validade. É isso que o `Refresh.ExpiresAt` + `WarnAfter` entregam no
+lugar do armazenamento, e vale mais: **um store adia o problema; um aviso o
+resolve.**
+
+E o aviso não é só um `slog.Warn`. Ele vai também em `Stats.CredentialExpiry` e
+sobe até a linha do pipeline, porque uma linha de log numa pipeline horária é
+exatamente o tipo de coisa que ninguém lê — e um aviso invisível é a mesma morte
+silenciosa com passos a mais. Vale a §6 deste documento: uma verificação que não
+pode falhar é pior que nenhuma, e um aviso que ninguém vê é primo disso.
+
+O que fica em memória, e só em memória, é o `TTL`: o cache de um login para uma
+API que limita a frequência de autenticação. Sob trava — não por cerimônia: sem
+ela, N goroutines fazem N logins, que é exatamente o que essas APIs bloqueiam.
+
+---
+
+## 14. Onde a discussão continua
 
 Três invariantes que o consumidor pediu em
 [`plan/2026-09-03-sdk-schema-declarado.md`](plan/2026-09-03-sdk-schema-declarado.md)

@@ -2,6 +2,11 @@
 
 **Escrito em** 2026-09-04 · **Base** `sdk/v0.25.1` · **Alvo** `sdk/v0.26.0`
 
+> **EXECUTADO.** Os quatro pontos entregues em 2026-09-04, nesta ordem: §3.4 e
+> §3.3 e §3.2 na `sdk/v0.26.0`, §3.1 na `sdk/v0.27.0`. Os três pequenos
+> primeiro porque o §3.4 já estava machucando o consumidor. Três desvios do que
+> está escrito abaixo, todos anotados na seção 6.
+
 Pedido de quem consome o SDK:
 
 > Olhando para essa implementação do gabriel, o que podemos levar como
@@ -311,3 +316,45 @@ nisso — `Columns` diz "add them to Columns, or drop them in Transform"; o
 
 Reescreva o `gabriel` com a `v0.26.0` e conte as linhas que sobraram falando de
 sessão, cookie ou BigQuery. Se sobrar alguma, ela é a próxima a mudar de lado.
+
+---
+
+## 6. O que saiu diferente do que está escrito acima
+
+Três desvios, e o motivo de cada um.
+
+**`ExpiresAt` e `WarnAfter` ficaram dentro de `Refresh`**, não do `Credential`
+como o exemplo da §3.1 desenha. Os dois leem a resposta da renovação: fora do
+`Refresh` seriam campos que alguém escreve e que não fazem nada quando não há
+renovação — a classe 3.4 do `SDK_CONSUMIDOR.md`. Dentro dele, a combinação
+inválida some do tipo.
+
+**`AsBearer` e `AsCookie` são `var`, não `func`.** Declaradas como função elas
+precisariam de um parâmetro `http.Header` para ter o tipo *idêntico* que Go
+exige numa atribuição a `Applier` — e a assinatura que lê melhor,
+`map[string][]string`, não compilaria no ponto de uso. É a mesma armadilha do
+`KeySelector`, e é por isso que o `consumer-check.sh` passou a usar `Auth`: só
+um consumidor de fora do módulo pega esse tipo de coisa.
+
+**A trava não era cerimônia.** A análise deste plano dizia que "renovação
+serializada, teste com concorrência" podia ser critério sem uso real, já que um
+pipeline é um processo. Errado: no instante em que o `TTL` existe, tirar a trava
+faz 20 goroutines produzirem 20 logins e uma corrida de dados — que é
+exatamente o que a API do `ana` bloqueia. O teste está em
+`extract/auth_test.go:TestTTLCacheiaOLogin`, e foi verificado revertendo a
+trava.
+
+E uma coisa a mais, que o plano não pedia: **o aviso de validade não é só um
+log**. Ele também vai em `Stats.CredentialExpiry` e sobe até a linha do
+pipeline. Um `slog.Warn` numa pipeline horária é uma linha que ninguém lê, e
+este projeto já perdeu tempo com a classe "telemetria que ninguém confere" —
+um aviso invisível é a morte silenciosa da §3.1 com passos a mais.
+
+### O que o §3.4 revelou de passagem
+
+O erro do staging não era só ruim: ele ficou **comum** por causa do rename da
+`v0.25.0`, que eu fiz. Eu anunciei a mudança do bucket padrão no CHANGELOG e
+não mexi na mensagem que ela tornaria frequente. O primeiro teste que escrevi
+para o conserto provava a função e não o ponto de uso — revertendo a chamada,
+ele passava verde. O que vale é o `TestLoadViaGCSUsaStagingError`, que sobe um
+GCS falso e reproduz a mensagem antiga inteira.
