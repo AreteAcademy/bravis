@@ -8,6 +8,21 @@ A tag de um módulo aninhado leva o prefixo do diretório: `sdk/v0.2.1`.
 
 ---
 
+## [0.21.1] — 2026-09-04
+
+### Corrigido
+- **O mínimo do Go tinha subido de 1.23 para 1.24, em silêncio.** O `go get` do
+  AWS SDK na `v0.20.0` levou o `go.mod` junto, enquanto o README seguia
+  prometendo 1.23 — e a `v0.4.x` baixou esse piso de propósito, porque
+  "restringia quem podia consumir sem dar nada em troca".
+
+  As dependências da AWS foram fixadas em versões que aceitam 1.23
+  (`service/s3 v1.79.0`, `aws-sdk-go-v2 v1.36.3`, `smithy-go v1.22.2`), e o
+  piso voltou. Achado pela CI, que confere `go mod tidy` — os testes e o lint
+  passavam.
+
+---
+
 ## [0.21.0] — 2026-09-04
 
 **BREAKING**, e é o conserto de um defeito que a `v0.20.0` publicou.
@@ -853,6 +868,7 @@ Primeira versão que compila.
 > versão de `proxy.golang.org`, então ela permanece publicada e quebrada para
 > sempre. Comece pela `v0.1.1`.
 
+[0.21.1]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.21.1
 [0.21.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.21.0
 [0.20.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.20.0
 [0.19.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.19.0
