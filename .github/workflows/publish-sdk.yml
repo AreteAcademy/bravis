@@ -116,13 +116,20 @@ jobs:
               return
             }
 
-            dados = sdk.Transform(dados, sdk.Accept("id"), sdk.Rename(map[string]string{"id": "chave"}))
+            dados = sdk.Transform(dados,
+              sdk.Accept("id"),
+              sdk.Rename(map[string]string{"id": "chave"}),
+              sdk.Compute("provider", func(map[string]any) (any, error) { return "p", nil }),
+              sdk.Compute("entity", func(map[string]any) (any, error) { return "e", nil }),
+              sdk.Compute("source_key", func(r map[string]any) (any, error) { return sdk.Key("chave")(r) }),
+              sdk.IngestionID("provider", "entity", "source_key", "chave"),
+              sdk.IngestionLoadedAt(),
+            )
 
             _, _ = sdk.Load(context.Background(), dados, sdk.Target{
-              To:       bigquery.Table{Dataset: "bronze", Name: "t"},
-              Columns:  []string{"ingestion_id", "ingestion_loaded_at", "chave"},
-              Metadata: &sdk.Metadata{AutoID: true},
-              Dedup:    sdk.DedupNone,
+              To:      bigquery.Table{Dataset: "bronze", Name: "t"},
+              Columns: []string{"ingestion_id", "ingestion_loaded_at", "provider", "entity", "source_key", "chave"},
+              Dedup:   sdk.DedupNone,
             })
 
             // E o outro destino, que não pode arrastar o BigQuery junto.
