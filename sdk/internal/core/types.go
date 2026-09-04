@@ -161,6 +161,17 @@ type LoadConfig struct {
 	// silent overwrite.
 	Metadata bool
 
+	// AutoID makes ingestion_id a fresh random UUID per row instead of the
+	// deterministic one built from provenance.
+	//
+	// It buys a row identifier without asking you to say what identifies a
+	// record at the source. What it costs is idempotency: the same reading
+	// loaded twice gets two different ids, so nothing downstream can tell the
+	// copies apart. DedupMerge is refused alongside it for that reason -- a
+	// merge on a random id matches nothing and would write the duplicate it
+	// exists to prevent.
+	AutoID bool
+
 	// ClusterBy names the columns the created table is clustered on. The SDK
 	// cannot guess: it does not know your payload. Ignored when the table
 	// already exists.
@@ -403,6 +414,14 @@ func WithRequirePartitionFilter(enabled bool) LoadOption {
 func WithMetadata(enabled bool) LoadOption {
 	return func(cfg *LoadConfig) {
 		cfg.Metadata = enabled
+	}
+}
+
+// WithAutoID makes ingestion_id a random UUID instead of the deterministic
+// one. See LoadConfig.AutoID.
+func WithAutoID(enabled bool) LoadOption {
+	return func(cfg *LoadConfig) {
+		cfg.AutoID = enabled
 	}
 }
 

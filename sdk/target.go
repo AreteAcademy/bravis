@@ -162,6 +162,7 @@ func (d Target) resolveWith(run RunContext) (*core.LoadConfig, map[string]origin
 		Format:                 "ndjson",
 		Dedup:                  d.Dedup,
 		Metadata:               d.Metadata != nil,
+		AutoID:                 d.Metadata != nil && d.Metadata.AutoID,
 		ClusterBy:              d.ClusterBy,
 		CreateTable:            create,
 		CreateSQL:              d.CreateSQL,

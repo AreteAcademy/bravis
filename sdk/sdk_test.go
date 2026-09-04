@@ -859,3 +859,65 @@ func TestSemMetadataOPayloadSaiComoEntrou(t *testing.T) {
 		}
 	}
 }
+
+// --- AutoID -------------------------------------------------------------
+
+// AutoID is the whole declaration: nothing about the record goes into the id,
+// so nothing about the record has to be described.
+func TestAutoIDSozinhoBasta(t *testing.T) {
+	t.Setenv(EnvProject, "um-projeto")
+
+	cfg, _, err := Target{
+		Table:    "minha_tabela",
+		Metadata: &Metadata{AutoID: true},
+	}.resolve()
+	if err != nil {
+		t.Fatalf("AutoID não deveria pedir mais nada: %v", err)
+	}
+	if !cfg.Metadata || !cfg.AutoID {
+		t.Errorf("as flags não chegaram ao load: Metadata=%v AutoID=%v", cfg.Metadata, cfg.AutoID)
+	}
+}
+
+// A field that is set and never read is the defect this SDK keeps finding in
+// itself, so AutoID refuses provenance rather than ignoring it.
+func TestAutoIDRecusaProvenienciaQueNaoSeriaLida(t *testing.T) {
+	t.Setenv(EnvProject, "um-projeto")
+
+	_, _, err := Target{
+		Table:    "t",
+		Metadata: &Metadata{AutoID: true, Provider: "acme", Key: Key("id")},
+	}.resolve()
+	if err == nil {
+		t.Fatal("Provider e Key com AutoID não são lidos; aceitar isso é mentir sobre o id")
+	}
+	for _, want := range []string{"Provider", "Key", "AutoID"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("o erro não menciona %q: %v", want, err)
+		}
+	}
+}
+
+// With AutoID nothing is read out of the record, so collect must not stamp
+// provenance either.
+func TestAutoIDNaoCarimbaProveniencia(t *testing.T) {
+	srv := openMeteoServer(t)
+	defer srv.Close()
+
+	data, err := Extract(context.Background(), Source{
+		URL: srv.URL, Expand: ParallelArrays("hourly", "time", "temperature_2m"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	envelopes, err := collect(data, Target{Table: "t", Metadata: &Metadata{AutoID: true}})
+	if err != nil {
+		t.Fatalf("collect: %v", err)
+	}
+	for i, e := range envelopes {
+		if e.SourceKey != "" || e.RecordTS != "" {
+			t.Errorf("registro %d ganhou proveniência que o id não usa: %+v", i, e)
+		}
+	}
+}

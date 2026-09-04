@@ -292,3 +292,27 @@ func TestConsumidorVeOSchemaFalharQuandoOCampoSome(t *testing.T) {
 	}
 	t.Fatal("o fluxo terminou sem erro nenhum")
 }
+
+// AutoID é a declaração inteira: nada do registro entra no id, então nada do
+// registro precisa ser descrito.
+func TestConsumidorUsaAutoIDSozinho(t *testing.T) {
+	t.Setenv("GOOGLE_PROJECT_ID", "um-projeto")
+
+	srv := fonte(t)
+	data, err := sdk.Extract(context.Background(), sdk.Source{URL: srv.URL})
+	if err != nil {
+		t.Fatalf("Extract: %v", err)
+	}
+
+	_, err = sdk.Load(context.Background(), data, sdk.Target{
+		Table:    "minha_tabela",
+		Metadata: &sdk.Metadata{AutoID: true},
+	})
+	if err != nil {
+		for _, proibido := range []string{"Provider", "Entity", "Key"} {
+			if strings.Contains(err.Error(), proibido) {
+				t.Errorf("AutoID ainda exige %s: %v", proibido, err)
+			}
+		}
+	}
+}

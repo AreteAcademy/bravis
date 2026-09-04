@@ -54,9 +54,10 @@ func main() {
 		},
 
 		Target: sdk.Target{
-			// The two columns the SDK adds, named here so they are not a
-			// surprise in the table -- everything else above came from
-			// Transform.
+			// The two columns the SDK adds -- ingestion_id STRING NOT
+			// NULL and ingestion_loaded_at TIMESTAMP NOT NULL -- named here
+			// so they are not a surprise in the table. Everything else above
+			// came from Transform.
 			Metadata: &sdk.Metadata{
 				Provider: provider,
 				Entity:   entity,

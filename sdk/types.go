@@ -89,6 +89,7 @@ var (
 	WithFormat                 = core.WithFormat
 	WithThresholdForGCS        = core.WithThresholdForGCS
 	WithMetadata               = core.WithMetadata
+	WithAutoID                 = core.WithAutoID
 	WithClusterBy              = core.WithClusterBy
 	WithDriver                 = core.WithDriver
 	WithCreateTable            = core.WithCreateTable

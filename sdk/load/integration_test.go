@@ -595,3 +595,145 @@ func TestIntegrationMetadataAddsExactlyTwoFields(t *testing.T) {
 		t.Errorf("the table has %d columns, expected the caller's 2 plus exactly 2", len(meta.Schema))
 	}
 }
+
+// TestIntegrationMetadataColumnsAreNotNull is the DDL, checked against the
+// thing that issues it.
+//
+// Autodetect infers both columns as NULLABLE, and BigQuery refuses to tighten
+// a NULLABLE column afterwards -- so this only passes if the SDK declares the
+// two itself at creation.
+func TestIntegrationMetadataColumnsAreNotNull(t *testing.T) {
+	env := requireIntegration(t)
+	ctx := context.Background()
+
+	client, err := bigquery.NewClient(ctx, env.project)
+	if err != nil {
+		t.Fatalf("bigquery client: %v", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	name := fmt.Sprintf("it_notnull_%d", time.Now().UnixNano())
+	table := client.Dataset(env.dataset).Table(name)
+	t.Cleanup(func() { _ = table.Delete(context.Background()) })
+
+	loader, err := New(ctx, nil,
+		core.WithProjectID(env.project),
+		core.WithDataset(env.dataset),
+		core.WithTable(name),
+		core.WithCreateTable(true),
+		core.WithMetadata(true),
+		core.WithClusterBy("sku"),
+	)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	batch := []core.Envelope{{
+		Provider: "acme", Entity: "widgets", SourceKey: "k-1",
+		RecordTS: "2026-01-01T00:00:00Z",
+		Payload:  map[string]any{"sku": "W-1", "quantidade": 3},
+	}}
+	if _, err := loader.Load(ctx, batch...); err != nil {
+		t.Fatalf("load: %v", err)
+	}
+
+	meta, err := table.Metadata(ctx)
+	if err != nil {
+		t.Fatalf("reading metadata: %v", err)
+	}
+
+	byName := map[string]*bigquery.FieldSchema{}
+	for _, f := range meta.Schema {
+		byName[f.Name] = f
+	}
+
+	if f := byName["ingestion_id"]; f == nil || f.Type != bigquery.StringFieldType || !f.Required {
+		t.Errorf("ingestion_id is not STRING NOT NULL: %+v", f)
+	}
+	if f := byName["ingestion_loaded_at"]; f == nil || f.Type != bigquery.TimestampFieldType || !f.Required {
+		t.Errorf("ingestion_loaded_at is not TIMESTAMP NOT NULL: %+v", f)
+	}
+	// The caller's columns stay the caller's: typed by BigQuery, nullable.
+	for _, n := range []string{"sku", "quantidade"} {
+		if f := byName[n]; f == nil || f.Required {
+			t.Errorf("the SDK changed the caller's column %q: %+v", n, f)
+		}
+	}
+	if meta.TimePartitioning == nil || meta.TimePartitioning.Field != "ingestion_loaded_at" {
+		t.Errorf("partitioning did not survive the typed create: %+v", meta.TimePartitioning)
+	}
+	if meta.Clustering == nil || len(meta.Clustering.Fields) != 1 || meta.Clustering.Fields[0] != "sku" {
+		t.Errorf("clustering did not survive the typed create: %+v", meta.Clustering)
+	}
+
+	// And a second load still lands, against the fixed schema.
+	if _, err := loader.Load(ctx, core.Envelope{
+		Provider: "acme", Entity: "widgets", SourceKey: "k-2",
+		RecordTS: "2026-01-02T00:00:00Z",
+		Payload:  map[string]any{"sku": "W-2", "quantidade": 9},
+	}); err != nil {
+		t.Fatalf("second load into the typed table: %v", err)
+	}
+	if got := countRows(ctx, t, client, env, name); got != 2 {
+		t.Errorf("the table has %d rows, expected 2", got)
+	}
+}
+
+// AutoID gives a row id without asking what identifies a record at the
+// source, and the column is still NOT NULL.
+func TestIntegrationAutoIDWritesARandomID(t *testing.T) {
+	env := requireIntegration(t)
+	ctx := context.Background()
+
+	client, err := bigquery.NewClient(ctx, env.project)
+	if err != nil {
+		t.Fatalf("bigquery client: %v", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	name := fmt.Sprintf("it_autoid_%d", time.Now().UnixNano())
+	table := client.Dataset(env.dataset).Table(name)
+	t.Cleanup(func() { _ = table.Delete(context.Background()) })
+
+	loader, err := New(ctx, nil,
+		core.WithProjectID(env.project),
+		core.WithDataset(env.dataset),
+		core.WithTable(name),
+		core.WithCreateTable(true),
+		core.WithMetadata(true),
+		core.WithAutoID(true),
+	)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	// No provenance at all: AutoID does not read it.
+	batch := []core.Envelope{
+		{Payload: map[string]any{"sku": "W-1"}},
+		{Payload: map[string]any{"sku": "W-2"}},
+	}
+	if _, err := loader.Load(ctx, batch...); err != nil {
+		t.Fatalf("load: %v", err)
+	}
+
+	q := client.Query(fmt.Sprintf(
+		"SELECT COUNT(DISTINCT ingestion_id) AS n FROM `%s.%s.%s`", env.project, env.dataset, name))
+	it, err := q.Read(ctx)
+	if err != nil {
+		t.Fatalf("query: %v", err)
+	}
+	var row struct{ N int64 }
+	if err := it.Next(&row); err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if row.N != 2 {
+		t.Errorf("%d distinct ids for 2 rows; AutoID must give each row its own", row.N)
+	}
+
+	meta, _ := table.Metadata(ctx)
+	for _, f := range meta.Schema {
+		if f.Name == "ingestion_id" && !f.Required {
+			t.Error("ingestion_id is nullable even with AutoID")
+		}
+	}
+}

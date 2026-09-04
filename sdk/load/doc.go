@@ -40,24 +40,35 @@
 // Your payload, as Transform left it. The SDK imposes no columns: what a row
 // looks like is your decision.
 //
-// Metadata adds two fields and nothing else:
+// Metadata adds two columns and nothing else, declared NOT NULL:
 //
-//   - ingestion_id          deterministic UUID v5 over
-//     provider|entity|source_key|record_ts
-//   - ingestion_loaded_at   when the row was written, RFC 3339
+//	ingestion_id        STRING    NOT NULL
+//	ingestion_loaded_at TIMESTAMP NOT NULL
+//
+// The id is a deterministic UUID v5 over provider|entity|source_key|record_ts,
+// so a re-run writes the same id for the same record. AutoID makes it a fresh
+// random UUID instead, which gives up that guarantee -- see LoadConfig.AutoID.
 //
 // Provider, Entity and SourceKey stay provenance: they build the id, they do
-// not become columns. A payload that already owns one of those two names is
-// an error naming the field, never a silent overwrite.
+// not become columns. A record that already owns one of those two names is an
+// error naming the field, never a silent overwrite.
 //
 // Metadata is required by DedupMerge, which matches on ingestion_id, and
 // by the partition options, which partition on ingestion_loaded_at.
 //
 // # Creating the table
 //
-// Off by default. With CreateTable the load job creates it on the first run,
-// inferring the schema from the data -- nothing else knows it, since the
-// payload is yours. The SDK still sets what it can: day partitioning on
+// Off by default. With CreateTable the table is created on the first run and
+// the columns come from the data, because nothing else knows them.
+//
+// With Metadata the SDK creates the table itself, so it can declare its own
+// two columns NOT NULL -- autodetect infers them nullable, and BigQuery will
+// not tighten a column afterwards. Your columns are still typed by BigQuery,
+// from a schema it infers over the batch: the SDK infers no type of its own.
+// That costs one extra load job, on the run that creates the table and never
+// again.
+//
+// Either way the SDK sets what it can: day partitioning on
 // ingestion_loaded_at when Metadata provides it, and clustering on the
 // columns you name in ClusterBy.
 //

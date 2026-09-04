@@ -8,6 +8,49 @@ A tag de um módulo aninhado leva o prefixo do diretório: `sdk/v0.2.1`.
 
 ---
 
+## [0.16.0] — 2026-09-03
+
+### Adicionado
+- **`Metadata.AutoID`** — `ingestion_id` vira um UUID aleatório por linha, e
+  isso é a declaração inteira: nada do registro entra no id, então nada do
+  registro precisa ser descrito. `Metadata: &sdk.Metadata{AutoID: true}` e
+  pronto.
+
+  O que ele abre mão é idempotência: a mesma leitura carregada duas vezes
+  ganha ids diferentes. Por isso `DedupMerge` é **recusado** junto — um merge
+  sobre id aleatório não casa com nada e escreveria exatamente as duplicatas
+  que ele existe para evitar. E `Provider`/`Entity`/`Key`/`When` junto de
+  `AutoID` também são recusados, nomeando os campos: seriam escritos e nunca
+  lidos, que é o defeito que este SDK vive achando em si mesmo.
+
+### Alterado
+- **As duas colunas de metadado passam a ser declaradas**, em vez de
+  inferidas:
+
+  ```sql
+  ingestion_id        STRING    NOT NULL,
+  ingestion_loaded_at TIMESTAMP NOT NULL
+  ```
+
+  Autodetect infere as duas como `NULLABLE`, e o BigQuery **recusa** apertar
+  uma coluna depois — verificado contra o BigQuery real antes de escolher a
+  implementação (`Field ingestion_loaded_at has changed mode from REQUIRED to
+  NULLABLE`). Então, com `Metadata`, o SDK cria a tabela ele mesmo.
+
+  As colunas do cliente continuam tipadas **pelo BigQuery**: o schema sai de
+  uma carga com autodetect numa tabela descartável, e o SDK sobrepõe só as
+  duas que são dele. Adivinhar que um `float64` do `encoding/json` significa
+  `FLOAT64` colocaria a inferência de volta pela porta dos fundos, justo nas
+  colunas menos indicadas para isso. Custa um job a mais, na execução que cria
+  a tabela e nunca mais.
+
+- Partição e clusterização passam a ser definidas na criação da tabela, não no
+  job de carga, porque é lá que a tabela nasce agora.
+- Documentação: `Metadata` é um **interruptor para essas duas colunas, não um
+  lugar para pôr dado**. Nada escrito no bloco vira coluna.
+
+---
+
 ## [0.15.0] — 2026-09-03
 
 **BREAKING.** As colunas são compostas no `Transform`, e o SDK não inventa
@@ -460,6 +503,7 @@ Primeira versão que compila.
 > versão de `proxy.golang.org`, então ela permanece publicada e quebrada para
 > sempre. Comece pela `v0.1.1`.
 
+[0.16.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.16.0
 [0.15.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.15.0
 [0.14.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.14.0
 [0.13.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.13.0

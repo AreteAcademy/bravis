@@ -232,7 +232,9 @@ func loadWith(ctx context.Context, data *Data, target Target, run RunContext) (*
 // request, adds two fields.
 func collect(data *Data, target Target) ([]Envelope, error) {
 	meta := target.Metadata
-	if meta == nil {
+	// AutoID puts nothing from the record into the id, so there is nothing to
+	// collect -- same as having no Metadata block at all.
+	if meta == nil || meta.AutoID {
 		var envelopes []Envelope
 		for env, err := range data.Records {
 			if err != nil {

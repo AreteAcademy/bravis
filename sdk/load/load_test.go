@@ -11,6 +11,7 @@ import (
 
 	"cloud.google.com/go/bigquery"
 	core "github.com/AreteAcademy/bravis/sdk/internal/core"
+	"github.com/google/uuid"
 )
 
 // --- resolveConfig --------------------------------------------------------
@@ -699,28 +700,72 @@ func TestLayoutDoesNotInferOverCreateSQL(t *testing.T) {
 	}
 }
 
-func TestLayoutPartitionsOnMetadataTimestamp(t *testing.T) {
-	loader, _ := layoutFor(&core.LoadConfig{
+// The layout now lives on the created table, not on the load job: with
+// metadata the SDK creates the destination itself, so the job must not carry
+// a schema of its own.
+func TestLayoutOnTheJobIsOffWhenTheSDKCreatesTheTable(t *testing.T) {
+	loader, file := layoutFor(&core.LoadConfig{
+		Format: "ndjson", CreateTable: true, Metadata: true,
+	})
+
+	if file.AutoDetect {
+		t.Error("autodetect against a table the SDK already created relaxes its NOT NULL columns")
+	}
+	if loader.CreateDisposition != bigquery.CreateNever {
+		t.Errorf("CreateDisposition = %q; the table was created before the job",
+			loader.CreateDisposition)
+	}
+}
+
+func TestTypedTableDeclaresTheMetadataColumnsNotNull(t *testing.T) {
+	inferred := bigquery.Schema{
+		{Name: "quantidade", Type: bigquery.IntegerFieldType},
+		{Name: "ingestion_loaded_at", Type: bigquery.TimestampFieldType},
+		{Name: "sku", Type: bigquery.StringFieldType},
+		{Name: "ingestion_id", Type: bigquery.StringFieldType},
+	}
+
+	meta := typedTable(&core.LoadConfig{
 		Format: "ndjson", CreateTable: true, Metadata: true,
 		PartitionExpiration:    30 * 24 * time.Hour,
 		RequirePartitionFilter: true,
-		ClusterBy:              []string{"provider"},
-	})
+		ClusterBy:              []string{"sku"},
+	}, inferred)
 
-	if loader.TimePartitioning == nil {
-		t.Fatal("Metadata gives a timestamp column, so the table gets partitioned")
+	byName := map[string]*bigquery.FieldSchema{}
+	for _, f := range meta.Schema {
+		byName[f.Name] = f
 	}
-	if loader.TimePartitioning.Field != "ingestion_loaded_at" {
-		t.Errorf("partition field = %q", loader.TimePartitioning.Field)
+
+	// The two the SDK owns, exactly as declared.
+	if f := byName["ingestion_id"]; f == nil || f.Type != bigquery.StringFieldType || !f.Required {
+		t.Errorf("ingestion_id is not STRING NOT NULL: %+v", f)
 	}
-	if loader.TimePartitioning.Expiration != 30*24*time.Hour {
-		t.Errorf("expiration = %v", loader.TimePartitioning.Expiration)
+	if f := byName["ingestion_loaded_at"]; f == nil || f.Type != bigquery.TimestampFieldType || !f.Required {
+		t.Errorf("ingestion_loaded_at is not TIMESTAMP NOT NULL: %+v", f)
 	}
-	if !loader.TimePartitioning.RequirePartitionFilter {
-		t.Error("RequirePartitionFilter did not reach the job")
+
+	// The caller's, untouched -- the SDK infers no type of its own.
+	for _, name := range []string{"quantidade", "sku"} {
+		if f := byName[name]; f == nil || f.Required {
+			t.Errorf("the SDK changed the caller's column %q: %+v", name, f)
+		}
 	}
-	if loader.Clustering == nil || loader.Clustering.Fields[0] != "provider" {
-		t.Errorf("clustering = %+v", loader.Clustering)
+	if len(meta.Schema) != 4 {
+		t.Errorf("the schema has %d columns, expected the 4 that came in", len(meta.Schema))
+	}
+
+	if meta.TimePartitioning == nil || meta.TimePartitioning.Field != "ingestion_loaded_at" {
+		t.Fatalf("partitioning did not reach the table: %+v", meta.TimePartitioning)
+	}
+	if meta.TimePartitioning.Expiration != 30*24*time.Hour {
+		t.Errorf("expiration = %v", meta.TimePartitioning.Expiration)
+	}
+	if !meta.TimePartitioning.RequirePartitionFilter {
+		t.Error("RequirePartitionFilter did not reach the table")
+	}
+	if meta.Clustering == nil || meta.Clustering.Fields[0] != "sku" {
+		t.Errorf("clustering did not reach the table: %+v", meta.Clustering)
 	}
 }
 
@@ -803,5 +848,59 @@ func TestStagedFileIsDeletedByDefault(t *testing.T) {
 	if cfg.KeepStagedFile {
 		t.Error("the zero value must clean up: a bucket filling with files nobody " +
 			"looks at is a bill nobody reviews")
+	}
+}
+
+// A merge on a random id matches nothing, so it would write exactly the
+// duplicates it exists to prevent. Refused rather than surprising.
+func TestAutoIDComDedupMergeERecusado(t *testing.T) {
+	_, err := resolveConfig(&core.LoadConfig{
+		ProjectID: "p", Dataset: "d", Table: "t", Format: "ndjson",
+		Metadata: true, AutoID: true, Dedup: core.DedupMerge,
+	})
+	if err == nil {
+		t.Fatal("DedupMerge com AutoID nunca casa e duplica tudo; tem de ser recusado")
+	}
+	for _, want := range []string{"DedupMerge", "AutoID"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("o erro não nomeia %q: %v", want, err)
+		}
+	}
+}
+
+func TestAutoIDGeraIDsDiferentesParaOMesmoRegistro(t *testing.T) {
+	l := &Loader{cfg: &core.LoadConfig{Metadata: true, AutoID: true}}
+
+	env := core.Envelope{Payload: map[string]any{"a": 1}}
+	primeiro, err := l.ingestionID(&env)
+	if err != nil {
+		t.Fatalf("ingestionID: %v", err)
+	}
+	segundo, err := l.ingestionID(&env)
+	if err != nil {
+		t.Fatalf("ingestionID: %v", err)
+	}
+	if primeiro == segundo {
+		t.Error("AutoID gera um id novo por linha; dois iguais significam que não é aleatório")
+	}
+	if _, err := uuid.Parse(primeiro); err != nil {
+		t.Errorf("o id não é um UUID: %q", primeiro)
+	}
+}
+
+// E sem AutoID continua determinístico, que é o que torna um re-run seguro.
+func TestSemAutoIDOIDContinuaDeterministico(t *testing.T) {
+	l := &Loader{cfg: &core.LoadConfig{Metadata: true}}
+
+	env := core.Envelope{
+		Provider: "p", Entity: "e", SourceKey: "k", RecordTS: "2026-01-01T00:00:00Z",
+	}
+	primeiro, err := l.ingestionID(&env)
+	if err != nil {
+		t.Fatalf("ingestionID: %v", err)
+	}
+	segundo, _ := l.ingestionID(&env)
+	if primeiro != segundo {
+		t.Errorf("o id determinístico mudou entre chamadas: %s != %s", primeiro, segundo)
 	}
 }

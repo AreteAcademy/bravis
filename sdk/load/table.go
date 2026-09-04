@@ -1,9 +1,11 @@
 package load
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"regexp"
 	"strings"
 	"time"
@@ -25,7 +27,7 @@ import (
 //
 // It never alters a table that already exists. A loader that can ALTER or
 // DROP is a loader that can erase history.
-func (l *Loader) prepareTable(ctx context.Context, table *bigquery.Table) (bool, error) {
+func (l *Loader) prepareTable(ctx context.Context, table *bigquery.Table, data []byte) (bool, error) {
 	_, err := table.Metadata(ctx)
 	if err == nil {
 		return true, nil
@@ -39,12 +41,31 @@ func (l *Loader) prepareTable(ctx context.Context, table *bigquery.Table) (bool,
 			"create it, or create it yourself", nameOf(table))
 	}
 
-	if l.cfg.CreateSQL == "" {
-		// The load job creates it, inferring the schema from the data.
+	if l.cfg.CreateSQL != "" {
+		return false, l.createFromSQL(ctx, table)
+	}
+
+	// Without metadata there are no SDK columns to type, so the load job
+	// creates the table by inferring every column from the data.
+	if !l.cfg.Metadata {
 		return false, nil
 	}
 
-	return false, l.createFromSQL(ctx, table)
+	// With metadata, two of the columns are the SDK's, and they have a
+	// declared shape:
+	//
+	//	ingestion_id         STRING    NOT NULL
+	//	ingestion_loaded_at  TIMESTAMP NOT NULL
+	//
+	// Autodetect cannot produce that -- it infers both as NULLABLE, and
+	// BigQuery refuses to tighten a NULLABLE column afterwards. So the table
+	// is created here instead, from a schema BigQuery itself inferred over
+	// the caller's columns, with the SDK's two overridden.
+	//
+	// The SDK still infers no type of its own. Guessing that a float64 out of
+	// encoding/json means FLOAT64 would put the inference back through a side
+	// door, on the columns least suited to it.
+	return false, l.createTyped(ctx, table, data)
 }
 
 // createFromSQL runs the caller's DDL and confirms it produced the table the
@@ -93,23 +114,18 @@ func (l *Loader) applyLayout(loader *bigquery.Loader, file *bigquery.FileConfig)
 		return
 	}
 
+	// The load job creates the table only when nobody else did. CreateSQL and
+	// the typed-metadata path both create it first, and pointing autodetect
+	// at a table that already has a schema is how a REQUIRED column gets
+	// relaxed back to NULLABLE -- BigQuery refuses outright, which is the
+	// good outcome, but it refuses the whole load.
+	if l.cfg.CreateSQL != "" || l.cfg.Metadata {
+		loader.CreateDisposition = bigquery.CreateNever
+		return
+	}
+
 	loader.CreateDisposition = bigquery.CreateIfNeeded
-
-	// Only when the SDK is inventing the table. With CreateSQL the caller
-	// already said what the columns are, and inferring over that would be
-	// second-guessing them.
-	if l.cfg.CreateSQL == "" {
-		file.AutoDetect = true
-	}
-
-	if l.cfg.Metadata {
-		loader.TimePartitioning = &bigquery.TimePartitioning{
-			Type:                   bigquery.DayPartitioningType,
-			Field:                  metadataLoadedAt,
-			Expiration:             l.cfg.PartitionExpiration,
-			RequirePartitionFilter: l.cfg.RequirePartitionFilter,
-		}
-	}
+	file.AutoDetect = true
 
 	if len(l.cfg.ClusterBy) > 0 {
 		loader.Clustering = &bigquery.Clustering{Fields: l.cfg.ClusterBy}
@@ -198,4 +214,121 @@ func isNotFound(err error) bool {
 		return apiErr.Code == 404
 	}
 	return false
+}
+
+// The declared shape of the two columns the SDK writes. Everything else in
+// the table is the caller's, and its types come from BigQuery.
+var metadataSchema = map[string]*bigquery.FieldSchema{
+	metadataID:       {Name: metadataID, Type: bigquery.StringFieldType, Required: true},
+	metadataLoadedAt: {Name: metadataLoadedAt, Type: bigquery.TimestampFieldType, Required: true},
+}
+
+// createTyped creates the destination with ingestion_id and
+// ingestion_loaded_at declared NOT NULL, and the caller's columns typed by
+// BigQuery.
+//
+// It costs one extra load job, on the run that creates the table and never
+// again. The alternative was to guess the caller's types in Go, which is the
+// one thing this SDK will not do.
+func (l *Loader) createTyped(ctx context.Context, table *bigquery.Table, data []byte) error {
+	inferred, err := l.inferSchema(ctx, data)
+	if err != nil {
+		return err
+	}
+
+	meta := typedTable(l.cfg, inferred)
+
+	if err := table.Create(ctx, meta); err != nil {
+		// Two loads racing to create the same table is normal, and the loser
+		// wants the table, not the error.
+		if isConflict(err) {
+			return nil
+		}
+		return fmt.Errorf("creating %s: %w", nameOf(table), err)
+	}
+
+	return nil
+}
+
+// typedTable is the destination's declaration: the caller's columns as
+// BigQuery typed them, with the SDK's two overridden to their declared shape,
+// plus the layout.
+//
+// Pure, so a test can read the schema this produces without a BigQuery
+// client -- which is where the NOT NULL either survives or quietly does not.
+func typedTable(cfg *core.LoadConfig, inferred bigquery.Schema) *bigquery.TableMetadata {
+	schema := make(bigquery.Schema, 0, len(inferred))
+	for _, f := range inferred {
+		if own, mine := metadataSchema[f.Name]; mine {
+			schema = append(schema, own)
+			continue
+		}
+		schema = append(schema, f)
+	}
+
+	meta := &bigquery.TableMetadata{
+		Schema:      schema,
+		Description: tableDescription(cfg),
+		Labels:      tableLabels(cfg),
+		TimePartitioning: &bigquery.TimePartitioning{
+			Type:                   bigquery.DayPartitioningType,
+			Field:                  metadataLoadedAt,
+			Expiration:             cfg.PartitionExpiration,
+			RequirePartitionFilter: cfg.RequirePartitionFilter,
+		},
+	}
+	if len(cfg.ClusterBy) > 0 {
+		meta.Clustering = &bigquery.Clustering{Fields: cfg.ClusterBy}
+	}
+	return meta
+}
+
+// inferSchema asks BigQuery what the caller's columns are, by loading the
+// batch into a throwaway table with autodetect on.
+func (l *Loader) inferSchema(ctx context.Context, data []byte) (bigquery.Schema, error) {
+	format, err := sourceFormat(l.cfg.Format)
+	if err != nil {
+		return nil, err
+	}
+
+	tmp := l.bq.Dataset(l.cfg.Dataset).Table(fmt.Sprintf("_bravis_schema_%d", time.Now().UnixNano()))
+	// The expiration matters: an interrupted run must not leave a table
+	// behind forever.
+	if err := tmp.Create(ctx, &bigquery.TableMetadata{
+		ExpirationTime: time.Now().Add(6 * time.Hour),
+	}); err != nil {
+		return nil, fmt.Errorf("creating the schema probe table: %w", err)
+	}
+	defer func() {
+		if err := tmp.Delete(context.WithoutCancel(ctx)); err != nil {
+			// Not fatal: the expiration collects it.
+			_ = err
+		}
+	}()
+
+	source := bigquery.NewReaderSource(bytes.NewReader(data))
+	source.SourceFormat = format
+	source.AutoDetect = true
+
+	if rows, err := runLoadJob(ctx, tmp.LoaderFrom(source)); err != nil {
+		return nil, fmt.Errorf("inferring the schema: %w%s", err, firstRow(rows))
+	}
+
+	md, err := tmp.Metadata(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("reading the inferred schema: %w", err)
+	}
+	return md.Schema, nil
+}
+
+func firstRow(rows []string) string {
+	if len(rows) == 0 {
+		return ""
+	}
+	return ": " + rows[0]
+}
+
+func isConflict(err error) bool {
+	var apiErr *googleapi.Error
+	return errors.As(err, &apiErr) && apiErr.Code == http.StatusConflict
 }

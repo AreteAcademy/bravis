@@ -463,17 +463,50 @@ Target: sdk.Target{Table: "hourly"},
 
 `Metadata` adds two more, and nothing else:
 
-| field | |
-|---|---|
-| `ingestion_id` | deterministic UUID v5 over `provider\|entity\|source_key\|record_ts` |
-| `ingestion_loaded_at` | when the row was written, RFC 3339 |
+```sql
+ingestion_id        STRING    NOT NULL,
+ingestion_loaded_at TIMESTAMP NOT NULL
+```
 
-`Provider`, `Entity` and `SourceKey` stay provenance — they build the id, they
-do not become columns. A record that already owns one of the two names is an
-error naming the field, never a silent overwrite.
+It is a **switch for those two columns, not a place to put data.** Nothing you
+write in the block becomes a column: `Provider`, `Entity`, `Key` and `When` are
+read to build the id and are never written. A record that already owns one of
+the two names is an error naming the field, never a silent overwrite.
 
 Declaring the block is also the only reason the SDK reads your record. Without
 it, `Key` and `When` do not exist to be called.
+
+### Two kinds of id
+
+```go
+Metadata: &sdk.Metadata{AutoID: true}
+```
+
+`AutoID` makes `ingestion_id` a fresh random UUID per row. That is the whole
+declaration — nothing about the record goes into the id, so nothing about the
+record has to be described. What it gives up is idempotency: the same reading
+loaded twice gets two different ids, and `DedupMerge` is refused alongside it,
+because a merge on a random id matches nothing and would write the duplicates
+it exists to prevent.
+
+```go
+Metadata: &sdk.Metadata{
+	Provider: "open_meteo",
+	Entity:   "hourly_temperature",
+	Key:      sdk.Key("latitude", "longitude", "time"),
+	When:     sdk.Field("time"),
+}
+```
+
+Without `AutoID` the id is deterministic — a UUID v5 over
+`provider|entity|source_key|record_ts` — so the same record always gets the
+same id, which is what makes a re-run safe. Setting both is an error: with
+`AutoID` those four fields would be written and never read.
+
+Because the two columns are `NOT NULL`, the SDK creates the table itself when
+`Metadata` is on. Autodetect infers them as nullable, and BigQuery will not
+tighten a column afterwards. Your own columns are still typed by BigQuery from
+the data — the SDK infers no type of its own.
 
 `Metadata` is required by `DedupMerge`, which matches on `ingestion_id`, and by
 the partition options, which partition on `ingestion_loaded_at`.

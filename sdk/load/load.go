@@ -13,6 +13,7 @@ import (
 	"cloud.google.com/go/bigquery"
 	"cloud.google.com/go/storage"
 	core "github.com/AreteAcademy/bravis/sdk/internal/core"
+	"github.com/google/uuid"
 )
 
 // Loader writes Envelopes to BigQuery as generic JSON.
@@ -116,6 +117,12 @@ func resolveConfig(cfg *core.LoadConfig, opts ...core.LoadOption) (*core.LoadCon
 			"the merge miss the match and write the duplicate it exists to prevent")
 	}
 
+	if c.Dedup == core.DedupMerge && c.AutoID {
+		return nil, fmt.Errorf("DedupMerge and AutoID cannot both apply: the merge matches rows " +
+			"on ingestion_id, and AutoID makes a fresh one every load -- nothing would ever " +
+			"match, so every re-run would write the duplicates the merge exists to prevent")
+	}
+
 	if c.Dedup == core.DedupMerge && !c.Metadata {
 		return nil, fmt.Errorf("DedupMerge requires Metadata: the merge matches rows on " +
 			"ingestion_id, and that column only exists when Metadata adds it")
@@ -209,12 +216,15 @@ func (l *Loader) Load(ctx context.Context, envelopes ...core.Envelope) (*core.Lo
 
 	table := l.bq.Dataset(l.cfg.Dataset).Table(l.cfg.Table)
 
-	existed, err := l.prepareTable(ctx, table)
+	// Encoded before the table is prepared: creating a table with the
+	// metadata columns typed needs the rows, because BigQuery infers the
+	// caller's own columns from them.
+	data, err := l.encodeRows(envelopes)
 	if err != nil {
 		return fail(err)
 	}
 
-	data, err := l.encodeRows(envelopes)
+	existed, err := l.prepareTable(ctx, table, data)
 	if err != nil {
 		return fail(err)
 	}
@@ -302,13 +312,29 @@ const (
 
 var metadataFields = []string{metadataID, metadataLoadedAt}
 
+// ingestionID is the one place that decides which id a row gets.
+//
+// Deterministic by default, so a re-run writes the same id for the same
+// record and DedupMerge can recognise it. Random with AutoID, which is a row
+// identifier and nothing more -- see LoadConfig.AutoID for what that gives up.
+func (l *Loader) ingestionID(env *core.Envelope) (string, error) {
+	if l.cfg.AutoID {
+		id, err := uuid.NewRandom()
+		if err != nil {
+			return "", fmt.Errorf("generating a random ingestion_id: %w", err)
+		}
+		return id.String(), nil
+	}
+	return env.IngestionID()
+}
+
 // addMetadataToEnvelope merges the two metadata fields into the payload.
 //
 // They carry no prefix, so a payload that already owns one of those names is
 // an error naming the field. Silently replacing a vendor's value with ours is
 // the worse failure: it is invisible.
 func (l *Loader) addMetadataToEnvelope(env *core.Envelope) error {
-	id, err := env.IngestionID()
+	id, err := l.ingestionID(env)
 	if err != nil {
 		return err
 	}
