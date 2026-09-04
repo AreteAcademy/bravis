@@ -282,7 +282,12 @@ qual chave está em qual língua.
 
 ---
 
-## 4. A decisão de produto: quem produz as seis colunas — **ABERTO, e agora é o único bloqueio**
+## 4. A decisão de produto: quem produz as seis colunas — **RESOLVIDO na v0.15.0**
+
+> Conserto: `sdk.Schema` (hoje `sdk.Accept`) como Transformer e o bloco
+> `Metadata` nomeando as duas colunas no ponto de chamada; a declaração completa
+> chegou na `v0.18.0` como `Target.Columns`. O consumidor compõe as seis colunas
+> explicitamente, e os `ingestion_id` bateram com os das cargas anteriores.
 
 > **Correção do que eu mesmo escrevi na primeira versão deste documento.** Eu
 > descrevi o modo envelope como opt-in. Ele era o **padrão**, opt-**out**:
@@ -342,7 +347,15 @@ vendors em Python ou duplicar a chave.
 
 ---
 
-## 5. `Source.Preview` amostra do lado errado do `Expand` — **v0.13.0**
+## 5. `Source.Preview` amostra do lado errado do `Expand` — **RESOLVIDO na v0.19.0**
+
+> Resolvido de lado: ao mover o `Records` para dentro do driver, o fatiamento
+> passou a acontecer **dentro** do `extract` (`from/http.go:72` →
+> `extract.JSON(ctx, source, h.Records)`), e o embrulho do preview
+> (`extract/extract.go:131`) passou a ver os registros já fatiados.
+>
+> Verificado no consumidor: o rodapé agora diz `3 of 24 rows` e a linha seguinte
+> diz `24 records`. Os dois números concordam, o que era o defeito.
 
 O preview da `v0.13.0` é útil e o desenho está certo em quase tudo: a amostra é
 colhida enquanto os registros passam, sai também quando a fonte morre no meio, e
