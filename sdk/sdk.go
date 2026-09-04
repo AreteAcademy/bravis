@@ -132,6 +132,7 @@ func loadWith(ctx context.Context, data *Data, target Target, run RunContext) (*
 		res.Pages = data.stats.Pages
 		res.Attempts = data.stats.Attempts
 		res.ExtractBytes = data.stats.Bytes
+		res.CredentialExpiry = data.stats.CredentialExpiry
 	}
 
 	if len(envelopes) == 0 {

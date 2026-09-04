@@ -55,8 +55,10 @@ nada.** Um token rotacionado não invalida o anterior, então o custo é alguém
 recolar a credencial uma vez por janela; `ExpiresAt` e `WarnAfter` existem para
 que essa pessoa saiba antes, e não no dia 31 com um 401.
 
-O aviso vai no log **e** em `Stats.CredentialExpiry`, que sobe até a linha do
-pipeline. Um aviso que ninguém lê é a mesma morte silenciosa com passos a mais.
+O aviso vai no log **e** em `Result.CredentialExpiry` — que é o que a linha do
+pipeline imprime, e o que um engine consegue escalar. Um aviso que só existe no
+log é a mesma morte silenciosa com passos a mais. A chave só aparece quando há
+validade: uma chave sempre zerada em toda linha ensina quem lê a pular ela.
 
 Uma renovação que falha **para a execução**. Seguir mandaria todas as páginas
 com uma credencial que a API acabou de recusar, e o erro voltaria culpando o

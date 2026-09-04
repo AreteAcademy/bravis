@@ -96,6 +96,15 @@ type Result struct {
 	Table        string     // the destination written to
 	LoadTime     time.Duration
 
+	// CredentialExpiry is when the source credential stops working, when the
+	// source renews one that says so. Zero otherwise.
+	//
+	// It is on Result and not only in a log line because the credential this
+	// tracks is renewed by a human: whoever runs this pipeline is the one who
+	// has to act, and a warning that only exists in the logs is how the
+	// silent death happens in the first place.
+	CredentialExpiry time.Time
+
 	// Diagnostics the destination reported per row, when it refused any.
 	RowErrors []string
 
@@ -104,7 +113,7 @@ type Result struct {
 
 // Args renders the result as slog key-value pairs.
 func (r *Result) Args() []any {
-	return []any{
+	args := []any{
 		"records", r.Records,
 		"lines", r.Rows,
 		"ignored", r.Ignored,
@@ -121,6 +130,15 @@ func (r *Result) Args() []any {
 		"load", r.LoadTime,
 		"duracao", r.Duration,
 	}
+	// Only when there is one: a key that is always the zero time on every
+	// line teaches people to skip it, and then it is invisible on the one
+	// line that matters.
+	if !r.CredentialExpiry.IsZero() {
+		args = append(args,
+			"credential_expires", r.CredentialExpiry.Format(time.RFC3339),
+			"credential_left", core.RoundDuration(time.Until(r.CredentialExpiry)))
+	}
+	return args
 }
 
 func (r *Result) String() string {
