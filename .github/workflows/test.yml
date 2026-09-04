@@ -151,7 +151,7 @@ jobs:
           echo "✅ go mod tidy OK"
 
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v8
+        uses: golangci/golangci-lint-action@v9
         with:
           version: v2.13.2
           working-directory: sdk

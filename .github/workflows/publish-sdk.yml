@@ -58,7 +58,7 @@ jobs:
       # publicou duas versões antes de alguém olhar o test.yml. Uma release
       # é imutável; o momento de descobrir é aqui.
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v8
+        uses: golangci/golangci-lint-action@v9
         with:
           version: v2.13.2
           working-directory: sdk
