@@ -23,9 +23,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/AreteAcademy/bravis/sdk"
-	"github.com/AreteAcademy/bravis/sdk/from"
-	"github.com/AreteAcademy/bravis/sdk/to/bigquery"
+	"github.com/AreteAcademy/brevis/sdk"
+	"github.com/AreteAcademy/brevis/sdk/from"
+	"github.com/AreteAcademy/brevis/sdk/to/bigquery"
 )
 
 func main() {

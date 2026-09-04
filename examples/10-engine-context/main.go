@@ -1,28 +1,28 @@
 // Command 10-engine-context is a fetcher that creates its table on the first
-// run inside Bravis, and never mentions that it does.
+// run inside Brevis, and never mentions that it does.
 //
 // There is no flag for it, no argument, no environment read. The engine
-// injects BRAVIS_RUN_* into the step; the SDK picks it up; Target.CreateTable
+// injects BREVIS_RUN_* into the step; the SDK picks it up; Target.CreateTable
 // stays nil and lets it decide.
 //
 // Run by hand, none of that exists and nothing is created:
 //
 //	go run ./10-engine-context -dry-run
 //
-// Run by Bravis on the step's first successful execution, the table is
+// Run by Brevis on the step's first successful execution, the table is
 // created. To force it without pretending nothing ever ran -- the table was
 // dropped by mistake -- dispatch with create_table=true:
 //
-//	bravis run wf.yaml --param create_table=true
+//	brevis run wf.yaml --param create_table=true
 package main
 
 import (
 	"context"
 	"log/slog"
 
-	"github.com/AreteAcademy/bravis/sdk"
-	"github.com/AreteAcademy/bravis/sdk/from"
-	"github.com/AreteAcademy/bravis/sdk/to/bigquery"
+	"github.com/AreteAcademy/brevis/sdk"
+	"github.com/AreteAcademy/brevis/sdk/from"
+	"github.com/AreteAcademy/brevis/sdk/to/bigquery"
 )
 
 func main() {
@@ -73,7 +73,7 @@ func main() {
 			To: bigquery.Table{
 				ClusterBy: []string{"latitude", "longitude"},
 
-				// Left nil on purpose. Inside Bravis the engine decides; outside,
+				// Left nil on purpose. Inside Brevis the engine decides; outside,
 				// nothing is created. sdk.Bool(false) here would refuse even on a
 				// first run, and the engine would not override it.
 				CreateTable: nil,

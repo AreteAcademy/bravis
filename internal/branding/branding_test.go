@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/AreteAcademy/bravis/internal/branding"
+	"github.com/AreteAcademy/brevis/internal/branding"
 )
 
 func escrever(t *testing.T, conteudo string) string {
@@ -26,7 +26,7 @@ func TestArquivoAusenteUsaOPadrao(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ausencia virou erro: %v", err)
 	}
-	if m.Titulo != "Bravis" {
+	if m.Titulo != "Brevis" {
 		t.Errorf("titulo = %q", m.Titulo)
 	}
 	if m.CSS() != "" {
@@ -105,7 +105,7 @@ func TestYamlQuebradoVoltaAoPadrao(t *testing.T) {
 	if err == nil {
 		t.Error("yaml invalido deveria ser reportado")
 	}
-	if m.Titulo != "Bravis" {
+	if m.Titulo != "Brevis" {
 		t.Errorf("erro deveria devolver o padrao utilizavel, veio %q", m.Titulo)
 	}
 }
@@ -129,7 +129,7 @@ func TestFrasePreservaAsLinhas(t *testing.T) {
 // Sem marca no contexto — um teste que renderiza direto, um caminho que nao
 // passou pelo render — a tela precisa ter nome mesmo assim.
 func TestContextoSemMarcaDevolveOPadrao(t *testing.T) {
-	if branding.De(context.Background()).Titulo != "Bravis" {
+	if branding.De(context.Background()).Titulo != "Brevis" {
 		t.Error("contexto vazio deveria devolver o padrao")
 	}
 	ctx := branding.EmContexto(context.Background(), branding.Marca{Titulo: "Acme"})
@@ -140,14 +140,14 @@ func TestContextoSemMarcaDevolveOPadrao(t *testing.T) {
 
 // A atribuicao nao e configuravel: nao existe campo de YAML capaz de removê-la.
 func TestAtribuicaoNaoVemDaConfiguracao(t *testing.T) {
-	if branding.Atribuicao != "Powered by Bravis" {
+	if branding.Atribuicao != "Powered by Brevis" {
 		t.Errorf("atribuicao = %q", branding.Atribuicao)
 	}
 	m, err := branding.Carregar(escrever(t, "titulo: Acme\natribuicao: Powered by Acme\npowered_by: \"\"\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if branding.Atribuicao != "Powered by Bravis" || m.Titulo != "Acme" {
+	if branding.Atribuicao != "Powered by Brevis" || m.Titulo != "Acme" {
 		t.Error("um campo no YAML nao pode substituir a atribuicao")
 	}
 }

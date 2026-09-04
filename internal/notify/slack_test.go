@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/AreteAcademy/bravis/internal/notify"
+	"github.com/AreteAcademy/brevis/internal/notify"
 )
 
 func capturar(t *testing.T, status int, resposta string) (*notify.Slack, *string) {
@@ -35,7 +35,7 @@ func alerta() notify.Alerta {
 		Status: "failed", Trigger: "schedule", Tentativas: 3, LogicalDate: &quando,
 		Erro:    "nivel 1: step \"run\": saiu com codigo 2\nDatabase Error in model x",
 		Tags:    []string{"zarv", "id", "dbt"},
-		URLBase: "https://bravis.zarv.net",
+		URLBase: "https://brevis.zarv.net",
 	}
 }
 
@@ -64,7 +64,7 @@ func TestMensagemTemOContextoDaFalha(t *testing.T) {
 		"FAILED",                        // status
 		"schedule",                      // origem
 		"saiu com codigo 2",             // a causa
-		"bravis.zarv.net/runs/1f2e3d4c", // link direto
+		"brevis.zarv.net/runs/1f2e3d4c", // link direto
 		"01/09/2026 01:00",              // data logica no fuso local
 	} {
 		if !strings.Contains(corpo, esperado) {

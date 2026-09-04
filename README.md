@@ -1,10 +1,10 @@
-# Bravis
+# Brevis
 
-[![Test & Lint](https://github.com/AreteAcademy/bravis/actions/workflows/test.yml/badge.svg?branch=master)](https://github.com/AreteAcademy/bravis/actions/workflows/test.yml)
-[![Code Quality](https://github.com/AreteAcademy/bravis/actions/workflows/quality.yml/badge.svg?branch=master)](https://github.com/AreteAcademy/bravis/actions/workflows/quality.yml)
-[![Go Reference](https://pkg.go.dev/badge/github.com/AreteAcademy/bravis/sdk.svg)](https://pkg.go.dev/github.com/AreteAcademy/bravis/sdk)
-[![Go Report Card](https://goreportcard.com/badge/github.com/AreteAcademy/bravis/sdk)](https://goreportcard.com/report/github.com/AreteAcademy/bravis/sdk)
-[![SDK](https://img.shields.io/github/v/tag/AreteAcademy/bravis?filter=sdk/*&label=sdk&color=aa8450)](https://github.com/AreteAcademy/bravis/releases)
+[![Test & Lint](https://github.com/AreteAcademy/brevis/actions/workflows/test.yml/badge.svg?branch=master)](https://github.com/AreteAcademy/brevis/actions/workflows/test.yml)
+[![Code Quality](https://github.com/AreteAcademy/brevis/actions/workflows/quality.yml/badge.svg?branch=master)](https://github.com/AreteAcademy/brevis/actions/workflows/quality.yml)
+[![Go Reference](https://pkg.go.dev/badge/github.com/AreteAcademy/brevis/sdk.svg)](https://pkg.go.dev/github.com/AreteAcademy/brevis/sdk)
+[![Go Report Card](https://goreportcard.com/badge/github.com/AreteAcademy/brevis/sdk)](https://goreportcard.com/report/github.com/AreteAcademy/brevis/sdk)
+[![SDK](https://img.shields.io/github/v/tag/AreteAcademy/brevis?filter=sdk/*&label=sdk&color=aa8450)](https://github.com/AreteAcademy/brevis/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-aa8450.svg)](LICENSE)
 
 Engine de transformação e orquestração de dados, em Go. Substitui o par
@@ -12,18 +12,19 @@ Kestra/Leoflow (orquestração) e o dbt (transformação) por um binário único
 execução em pod no Kubernetes.
 
 Arquitetura e faseamento: [`docs/plan.md`](docs/plan.md).
+Referência da linha de comando: [`docs/COMANDOS.md`](docs/COMANDOS.md).
 Relatórios por fase: [`docs/phases/`](docs/phases/).
 
 ## SDK
 
 ```bash
-go get github.com/AreteAcademy/bravis/sdk@latest
+go get github.com/AreteAcademy/brevis/sdk@latest
 ```
 
 Extração HTTP com retry, timeout, guard e paginação; carga em lote para o
 BigQuery. Requer Go 1.23+.
 
-- Referência da API: [pkg.go.dev](https://pkg.go.dev/github.com/AreteAcademy/bravis/sdk)
+- Referência da API: [pkg.go.dev](https://pkg.go.dev/github.com/AreteAcademy/brevis/sdk)
 - Guia e decisões de desenho: [`docs/SDK.md`](docs/SDK.md) · [`sdk/README.md`](sdk/README.md)
 - Exemplos executáveis: [`examples/`](examples/)
 - Histórico de versões: [`CHANGELOG.md`](CHANGELOG.md)
@@ -31,10 +32,10 @@ BigQuery. Requer Go 1.23+.
 > **Não use a `v0.1.0`.** Ela foi publicada com um `go.mod` quebrado e o proxy
 > do Go é imutável, então não há como corrigi-la. Comece na `v0.1.1`.
 
-CLI do SDK: [`cmd/bravis-sdk/`](cmd/bravis-sdk/) — `go install github.com/AreteAcademy/bravis/cmd/bravis-sdk@latest`
+CLI do SDK: [`cmd/brevis-sdk/`](cmd/brevis-sdk/) — `go install github.com/AreteAcademy/brevis/cmd/brevis-sdk@latest`
 
-O binário do Bravis em si (`serve`, `scheduler`, `migrate`, `publish`) é
-[`cmd/bravis/`](cmd/bravis/), construído com `make build`.
+O binário do Brevis em si (`serve`, `scheduler`, `migrate`, `publish`) é
+[`cmd/brevis/`](cmd/brevis/), construído com `make build`.
 
 **Estado: PHASE 6 concluída.** Workflows em YAML, fila persistente, scheduler com
 cron, backfill, UI server-rendered (Overview com métricas e gráficos, lista de
@@ -46,22 +47,25 @@ pergaminho, ouro e serifa. Fontes e bundles são servidos do próprio binário �
 UI funciona sem saída para a internet.
 
 **Marca branca**: título, subtítulo, frase e paleta saem de um YAML
-(`brand.example.yaml` → `brand.yaml`, ou `BRAVIS_BRAND_FILE`). As cores
+(`brand.example.yaml` → `brand.yaml`, ou `BREVIS_BRAND_FILE`). As cores
 sobrescrevem as variáveis CSS em tempo de execução, então trocar o tema não
-recompila nada. O rodapé "Powered by Bravis" não vem da configuração — vem do
+recompila nada. O rodapé "Powered by Brevis" não vem da configuração — vem do
 código.
 
 ```bash
-bravis validate examples/            # valida sem banco, serve na CI
-bravis run examples/hello.yaml       # executa agora, na propria instancia
+brevis validate examples/            # valida sem banco, serve na CI
+brevis run examples/hello.yaml       # executa agora, na propria instancia
 
-bravis publish examples/hello.yaml   # grava workflow e agenda no banco
-bravis scheduler --concurrency 5     # materializa slots e executa
-bravis backfill diario --from 2026-01-01 --to 2026-01-31
+brevis publish examples/hello.yaml   # grava workflow e agenda no banco
+brevis scheduler --concurrency 5     # materializa slots e executa
+brevis backfill diario --from 2026-01-01 --to 2026-01-31
 ```
 
 O scheduler **cria** runs; a fila os **executa**. Os dois laços são independentes:
 um pode cair sem afetar o outro.
+
+Os dez subcomandos, com flags, variáveis de ambiente, endpoints e alvos do
+Makefile: [`docs/COMANDOS.md`](docs/COMANDOS.md).
 
 Em Kubernetes, **cada passo vira um pod** com a imagem declarada no YAML — não há
 worker genérico esperando trabalho, é o trabalho que traz o seu runtime. O mesmo
@@ -89,8 +93,8 @@ steps:
 ```
 
 ```bash
-bravis run wf.yaml --param load_full=true
-bravis backfill diario --from 2026-01-01 --to 2026-01-31 --param load_full=true
+brevis run wf.yaml --param load_full=true
+brevis backfill diario --from 2026-01-01 --to 2026-01-31 --param load_full=true
 ```
 
 Na UI, um workflow com params ganha formulário no lugar do botão simples.
@@ -109,7 +113,7 @@ vieram do plano e mostram o formato, chamando `python`, `docker.run` e
 
 ```bash
 docker login -u daniel3843
-make image-push            # daniel3843/bravis:<VERSION> e :<VERSION>-worker
+make image-push            # daniel3843/brevis:<VERSION> e :<VERSION>-worker
 ```
 
 Duas imagens do mesmo binário: `:<versao>` é a API em distroless (não executa
@@ -135,11 +139,11 @@ make build   # binario em bin/
 
 | variável | padrão | |
 |---|---|---|
-| `BRAVIS_DATABASE_URL` | — | **obrigatória** |
-| `BRAVIS_ENV` | `local` | `local` usa log em texto; o resto, JSON |
-| `BRAVIS_HTTP_ADDR` | `:8080` | |
-| `BRAVIS_LOG_LEVEL` | `info` | |
-| `BRAVIS_SHUTDOWN_TIMEOUT_SECONDS` | `15` | |
+| `BREVIS_DATABASE_URL` | — | **obrigatória** |
+| `BREVIS_ENV` | `local` | `local` usa log em texto; o resto, JSON |
+| `BREVIS_HTTP_ADDR` | `:8080` | |
+| `BREVIS_LOG_LEVEL` | `info` | |
+| `BREVIS_SHUTDOWN_TIMEOUT_SECONDS` | `15` | |
 
 ## Endpoints
 
@@ -155,7 +159,7 @@ balanceador.
 ## Migrations
 
 ```bash
-bravis migrate up|down|status
+brevis migrate up|down|status
 ```
 
 Embutidas no binário e aplicadas por subcomando próprio — o `serve` nunca altera

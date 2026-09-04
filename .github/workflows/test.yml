@@ -48,9 +48,9 @@ jobs:
     # quatro defeitos numa execução. Um teste atrás de variável é um teste que
     # não roda.
     env:
-      BRAVIS_IT_S3_ENDPOINT: http://localhost:9000
-      BRAVIS_IT_S3_KEY: bravis
-      BRAVIS_IT_S3_SECRET: bravis-secret
+      BREVIS_IT_S3_ENDPOINT: http://localhost:9000
+      BREVIS_IT_S3_KEY: brevis
+      BREVIS_IT_S3_SECRET: brevis-secret
       GCP_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS }}
 
     steps:
@@ -68,8 +68,8 @@ jobs:
       - name: Start MinIO
         run: |
           docker run -d --name minio -p 9000:9000 \
-            -e MINIO_ROOT_USER=bravis \
-            -e MINIO_ROOT_PASSWORD=bravis-secret \
+            -e MINIO_ROOT_USER=brevis \
+            -e MINIO_ROOT_PASSWORD=brevis-secret \
             minio/minio:latest server /data
 
           for i in $(seq 1 40); do
@@ -99,9 +99,9 @@ jobs:
       - name: Integration - BigQuery and GCS
         if: env.GCP_CREDENTIALS != ''
         env:
-          BRAVIS_IT_PROJECT: ${{ vars.BRAVIS_IT_PROJECT }}
-          BRAVIS_IT_DATASET: ${{ vars.BRAVIS_IT_DATASET }}
-          BRAVIS_IT_BUCKET: ${{ vars.BRAVIS_IT_BUCKET }}
+          BREVIS_IT_PROJECT: ${{ vars.BREVIS_IT_PROJECT }}
+          BREVIS_IT_DATASET: ${{ vars.BREVIS_IT_DATASET }}
+          BREVIS_IT_BUCKET: ${{ vars.BREVIS_IT_BUCKET }}
         run: |
           cd sdk
           go test -v -timeout 20m -run Integration ./load/... ./from/...
@@ -110,8 +110,8 @@ jobs:
         if: env.GCP_CREDENTIALS == ''
         run: |
           echo "::warning::A integração do BigQuery não rodou: falta o secret"
-          echo "::warning::GCP_CREDENTIALS e as variáveis BRAVIS_IT_PROJECT,"
-          echo "::warning::BRAVIS_IT_DATASET e BRAVIS_IT_BUCKET. Dezessete"
+          echo "::warning::GCP_CREDENTIALS e as variáveis BREVIS_IT_PROJECT,"
+          echo "::warning::BREVIS_IT_DATASET e BREVIS_IT_BUCKET. Dezessete"
           echo "::warning::testes ficaram em SKIP."
 
   lint:
@@ -205,7 +205,7 @@ jobs:
 
       - name: Build the engine
         run: |
-          # cmd/bravis is the Bravis binary itself: serve, scheduler, migrate,
+          # cmd/brevis is the Brevis binary itself: serve, scheduler, migrate,
           # publish, validate, backfill. It lives in the root module, and for
           # a while nothing built it -- an SDK CLI had been written over its
           # main.go, and the whole engine became a library with no program.
@@ -217,7 +217,7 @@ jobs:
         run: |
           # Its own module, so it pins a released SDK and only breaks on a
           # bump. Nothing else would catch it.
-          cd cmd/bravis-sdk
+          cd cmd/brevis-sdk
           go build ./...
           go vet ./...
           echo "✅ SDK CLI builds"

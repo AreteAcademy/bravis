@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/AreteAcademy/bravis/internal/execution"
+	"github.com/AreteAcademy/brevis/internal/execution"
 )
 
 // GoExecutor roda tasks Go registradas, dentro do proprio processo.
@@ -13,7 +13,7 @@ import (
 // E o executor da secao 14: sem container, sem pod, sem processo filho. O ganho
 // e justamente esse — uma task Go simples nao paga startup de container, que foi
 // a medida que motivou este projeto (cold start de 38s contra 5s no benchmark
-// que originou o Bravis).
+// que originou o Brevis).
 //
 // Diferente do ProcessExecutor, NAO ha restricao de ambiente: o codigo aqui foi
 // compilado junto com o binario, entao nao ha superficie de execucao arbitraria.

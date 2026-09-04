@@ -115,7 +115,7 @@ do SDK, com precedência **documentada e nessa ordem**:
 4. erro, se não houver default sensato.
 
 Variáveis mínimas: projeto, dataset, bucket de staging, nível de log. Nomeie com
-prefixo (`BRAVIS_SDK_*`) **exceto** as que já são padrão do ecossistema
+prefixo (`BREVIS_SDK_*`) **exceto** as que já são padrão do ecossistema
 (`GOOGLE_PROJECT_ID`, `GOOGLE_APPLICATION_CREDENTIALS`) — inventar um nome novo
 para algo que já tem nome é atrito.
 
@@ -147,7 +147,7 @@ CLUSTER BY provider, entity;
 
 Três requisitos, e o terceiro é o que evita um incidente:
 
-- **Colunas de primeiro nível**, não `_bravis_*` dentro do payload. O
+- **Colunas de primeiro nível**, não `_brevis_*` dentro do payload. O
   `metadata_vendor()` do dbt lê `ingestion_id`, `provider`, `entity`,
   `source_key`, `ingestion_loaded_at` e `payload` como colunas. Hoje o SDK dobra
   tudo para dentro do payload e nada disso é legível a jusante.
@@ -283,7 +283,7 @@ Cada uma custou uma investigação. Estão aqui para não voltarem.
 Um SDK que faz tudo vira um framework, e framework não se adota — se herda.
 
 - **Transformação.** O SDK extrai e carrega. Transformar é do dbt.
-- **Agendamento.** É do Bravis, não da biblioteca.
+- **Agendamento.** É do Brevis, não da biblioteca.
 - **Outros destinos** (Postgres, S3) enquanto não houver um segundo consumidor
   real pedindo. Interface para permitir depois, sim; implementação agora, não.
 - **Mágica não substituível.** Toda escolha automática do SDK — estratégia,

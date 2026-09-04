@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/bigquery"
-	core "github.com/AreteAcademy/bravis/sdk/internal/core"
+	core "github.com/AreteAcademy/brevis/sdk/internal/core"
 )
 
 // loadWithMerge stages the batch in a temporary table and MERGEs it into
@@ -46,7 +46,7 @@ func (l *Loader) loadWithMerge(ctx context.Context, table *bigquery.Table, data 
 		return 0, 0, nil, fmt.Errorf("reading the destination schema: %w", err)
 	}
 
-	temp := l.bq.Dataset(l.cfg.Dataset).Table(fmt.Sprintf("_bravis_merge_%d", time.Now().UnixNano()))
+	temp := l.bq.Dataset(l.cfg.Dataset).Table(fmt.Sprintf("_brevis_merge_%d", time.Now().UnixNano()))
 	// It expires on its own so an interrupted run cannot leave it behind.
 	if err := temp.Create(ctx, &bigquery.TableMetadata{
 		Schema:         destMeta.Schema,

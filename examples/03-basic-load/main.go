@@ -14,8 +14,8 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/AreteAcademy/bravis/sdk"
-	"github.com/AreteAcademy/bravis/sdk/load"
+	"github.com/AreteAcademy/brevis/sdk"
+	"github.com/AreteAcademy/brevis/sdk/load"
 )
 
 func main() {

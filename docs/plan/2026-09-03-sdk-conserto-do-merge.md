@@ -11,7 +11,7 @@
 >   criar o destino a partir do schema da temporária. Como não há um segundo
 >   lugar criando tabela, não há `layout()` a extrair nem `409` a tratar. A
 >   solução é mais simples que a proposta aqui.
-> - **`TestIntegrationGCSStrategy` fica em SKIP** sem `BRAVIS_IT_BUCKET`. É a
+> - **`TestIntegrationGCSStrategy` fica em SKIP** sem `BREVIS_IT_BUCKET`. É a
 >   estratégia dos lotes acima de 5000 linhas, e é onde vive o conserto do
 >   `KeepStagedFile` — definir essa variável no ambiente automatizado é o que
 >   falta para o §0 valer para o pacote inteiro.
@@ -54,11 +54,11 @@ loader, err := New(ctx, nil,
 
 Tabela ausente, `CreateTable` ligado, `DedupMerge` ligado. Ele **deve** falhar
 com o 404 de hoje. Nunca rodou porque `requireIntegration`
-(`integration_test.go:35`) pula sem `BRAVIS_IT_PROJECT`:
+(`integration_test.go:35`) pula sem `BREVIS_IT_PROJECT`:
 
 ```bash
-export BRAVIS_IT_PROJECT=<projeto-gcp>
-export BRAVIS_IT_DATASET=bravis_it        # opcional, este e o default
+export BREVIS_IT_PROJECT=<projeto-gcp>
+export BREVIS_IT_DATASET=bravis_it        # opcional, este e o default
 go test ./sdk/load/ -run TestIntegrationMergeDoesNotDouble -v
 ```
 

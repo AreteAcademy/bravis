@@ -1,10 +1,10 @@
 package sdk
 
 import (
-	core "github.com/AreteAcademy/bravis/sdk/internal/core"
+	core "github.com/AreteAcademy/brevis/sdk/internal/core"
 )
 
-// RunContext is what the Bravis engine knows about this execution. See
+// RunContext is what the Brevis engine knows about this execution. See
 // core.RunContext; it lives there because the driver interfaces take it, and
 // a driver package cannot import the root.
 type RunContext = core.RunContext

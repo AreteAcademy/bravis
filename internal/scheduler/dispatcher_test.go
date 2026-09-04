@@ -15,20 +15,20 @@ import (
 
 	"github.com/google/uuid"
 
-	dom "github.com/AreteAcademy/bravis/internal/domain/run"
-	"github.com/AreteAcademy/bravis/internal/infrastructure/postgres"
-	"github.com/AreteAcademy/bravis/internal/notify"
-	"github.com/AreteAcademy/bravis/internal/queue"
-	"github.com/AreteAcademy/bravis/internal/scheduler"
+	dom "github.com/AreteAcademy/brevis/internal/domain/run"
+	"github.com/AreteAcademy/brevis/internal/infrastructure/postgres"
+	"github.com/AreteAcademy/brevis/internal/notify"
+	"github.com/AreteAcademy/brevis/internal/queue"
+	"github.com/AreteAcademy/brevis/internal/scheduler"
 )
 
-// Estes testes exigem Postgres. Sem BRAVIS_TEST_DATABASE_URL eles pulam, para
+// Estes testes exigem Postgres. Sem BREVIS_TEST_DATABASE_URL eles pulam, para
 // que `go test ./...` continue verde numa maquina sem docker.
 func banco(t *testing.T) *postgres.Pool {
 	t.Helper()
-	url := os.Getenv("BRAVIS_TEST_DATABASE_URL")
+	url := os.Getenv("BREVIS_TEST_DATABASE_URL")
 	if url == "" {
-		t.Skip("defina BRAVIS_TEST_DATABASE_URL para rodar os testes de fila (make up)")
+		t.Skip("defina BREVIS_TEST_DATABASE_URL para rodar os testes de fila (make up)")
 	}
 	p, err := postgres.New(context.Background(), url)
 	if err != nil {
@@ -453,7 +453,7 @@ func TestAlertaSaiUmaVezQuandoEsgotamAsTentativas(t *testing.T) {
 		return errors.New(`step "run": saiu com codigo 2`)
 	}, semLog())
 	d.Alertas = avisos
-	d.URLBase = "https://bravis.zarv.net"
+	d.URLBase = "https://brevis.zarv.net"
 
 	go func() { _ = d.Run(ctx) }()
 

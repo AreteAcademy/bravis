@@ -9,7 +9,7 @@ package config
 
 import (
 	"fmt"
-	"github.com/AreteAcademy/bravis/internal/auth"
+	"github.com/AreteAcademy/brevis/internal/auth"
 	"os"
 	"strconv"
 	"strings"
@@ -80,48 +80,48 @@ type Toleracao struct {
 // primeiro request, e ai o readiness ja mentiu para o orquestrador.
 func Load() (Config, error) {
 	c := Config{
-		Env:          get("BRAVIS_ENV", "local"),
-		HTTPAddr:     get("BRAVIS_HTTP_ADDR", ":8080"),
-		DatabaseURL:  os.Getenv("BRAVIS_DATABASE_URL"),
-		LogLevel:     get("BRAVIS_LOG_LEVEL", "info"),
-		BrandFile:    get("BRAVIS_BRAND_FILE", "brand.yaml"),
-		TaskEnv:      lista("BRAVIS_TASK_ENV"),
-		SlackWebhook: os.Getenv("BRAVIS_SLACK_WEBHOOK"),
-		UIURL:        os.Getenv("BRAVIS_UI_URL"),
+		Env:          get("BREVIS_ENV", "local"),
+		HTTPAddr:     get("BREVIS_HTTP_ADDR", ":8080"),
+		DatabaseURL:  os.Getenv("BREVIS_DATABASE_URL"),
+		LogLevel:     get("BREVIS_LOG_LEVEL", "info"),
+		BrandFile:    get("BREVIS_BRAND_FILE", "brand.yaml"),
+		TaskEnv:      lista("BREVIS_TASK_ENV"),
+		SlackWebhook: os.Getenv("BREVIS_SLACK_WEBHOOK"),
+		UIURL:        os.Getenv("BREVIS_UI_URL"),
 		Auth: auth.Credencial{
-			Usuario: os.Getenv("BRAVIS_AUTH_USUARIO"),
-			Hash:    os.Getenv("BRAVIS_AUTH_SENHA_HASH"),
-			Segredo: []byte(os.Getenv("BRAVIS_AUTH_SEGREDO")),
+			Usuario: os.Getenv("BREVIS_AUTH_USUARIO"),
+			Hash:    os.Getenv("BREVIS_AUTH_SENHA_HASH"),
+			Segredo: []byte(os.Getenv("BREVIS_AUTH_SEGREDO")),
 		},
 		Pods: PodsConfig{
-			Modo:              get("BRAVIS_PODS", "auto"),
-			Namespace:         os.Getenv("BRAVIS_POD_NAMESPACE"),
-			ServiceAccount:    os.Getenv("BRAVIS_POD_SERVICE_ACCOUNT"),
-			PullSecrets:       lista("BRAVIS_POD_PULL_SECRETS"),
-			EnvFromSecrets:    lista("BRAVIS_POD_ENV_FROM_SECRETS"),
-			EnvFromConfigMaps: lista("BRAVIS_POD_ENV_FROM_CONFIGMAPS"),
-			NodeSelector:      pares("BRAVIS_POD_NODE_SELECTOR"),
-			Toleracoes:        toleracoes("BRAVIS_POD_TOLERATIONS"),
-			ManterEmFalha:     os.Getenv("BRAVIS_POD_MANTER_EM_FALHA") == "true",
+			Modo:              get("BREVIS_PODS", "auto"),
+			Namespace:         os.Getenv("BREVIS_POD_NAMESPACE"),
+			ServiceAccount:    os.Getenv("BREVIS_POD_SERVICE_ACCOUNT"),
+			PullSecrets:       lista("BREVIS_POD_PULL_SECRETS"),
+			EnvFromSecrets:    lista("BREVIS_POD_ENV_FROM_SECRETS"),
+			EnvFromConfigMaps: lista("BREVIS_POD_ENV_FROM_CONFIGMAPS"),
+			NodeSelector:      pares("BREVIS_POD_NODE_SELECTOR"),
+			Toleracoes:        toleracoes("BREVIS_POD_TOLERATIONS"),
+			ManterEmFalha:     os.Getenv("BREVIS_POD_MANTER_EM_FALHA") == "true",
 		},
 		ShutdownTimeout: 15 * time.Second,
 	}
 
-	if v := os.Getenv("BRAVIS_SHUTDOWN_TIMEOUT_SECONDS"); v != "" {
+	if v := os.Getenv("BREVIS_SHUTDOWN_TIMEOUT_SECONDS"); v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil {
-			return Config{}, fmt.Errorf("BRAVIS_SHUTDOWN_TIMEOUT_SECONDS: %q nao e um inteiro", v)
+			return Config{}, fmt.Errorf("BREVIS_SHUTDOWN_TIMEOUT_SECONDS: %q nao e um inteiro", v)
 		}
 		c.ShutdownTimeout = time.Duration(n) * time.Second
 	}
 
 	if c.DatabaseURL == "" {
-		return Config{}, fmt.Errorf("BRAVIS_DATABASE_URL e obrigatoria")
+		return Config{}, fmt.Errorf("BREVIS_DATABASE_URL e obrigatoria")
 	}
 	switch c.Pods.Modo {
 	case "auto", "on", "off":
 	default:
-		return Config{}, fmt.Errorf("BRAVIS_PODS: %q invalido (auto, on ou off)", c.Pods.Modo)
+		return Config{}, fmt.Errorf("BREVIS_PODS: %q invalido (auto, on ou off)", c.Pods.Modo)
 	}
 	if err := c.Auth.Validar(); err != nil {
 		return Config{}, err
@@ -140,9 +140,9 @@ func Load() (Config, error) {
 	// a autenticacao de vez.
 	if c.Env != "local" && !c.Auth.Ativa() {
 		return Config{}, fmt.Errorf(
-			"BRAVIS_ENV=%s exige credencial: defina BRAVIS_AUTH_USUARIO, "+
-				"BRAVIS_AUTH_SENHA_HASH (gere com `bravis hash`) e "+
-				"BRAVIS_AUTH_SEGREDO", c.Env)
+			"BREVIS_ENV=%s exige credencial: defina BREVIS_AUTH_USUARIO, "+
+				"BREVIS_AUTH_SENHA_HASH (gere com `brevis hash`) e "+
+				"BREVIS_AUTH_SEGREDO", c.Env)
 	}
 	return c, nil
 }
@@ -150,18 +150,18 @@ func Load() (Config, error) {
 // AmbienteDasTasks monta o ambiente que cada passo local recebe.
 //
 // A task NAO herda o ambiente do orquestrador. A razao e concreta: o processo do
-// Bravis carrega BRAVIS_DATABASE_URL com usuario e senha do Postgres, e um
+// Brevis carrega BREVIS_DATABASE_URL com usuario e senha do Postgres, e um
 // workflow e um comando arbitrario escrito por outra pessoa — herdar por padrao
 // entregaria a credencial do banco a todo passo de todo pipeline.
 //
-// O que a task precisa, entao, e declarado: `BRAVIS_TASK_ENV=GOOGLE_PROJECT_ID,STAGE`
+// O que a task precisa, entao, e declarado: `BREVIS_TASK_ENV=GOOGLE_PROJECT_ID,STAGE`
 // repassa essas duas do ambiente do processo. `NOME=valor` define um literal.
-// `*` repassa tudo MENOS as BRAVIS_* — o curinga existe para quem precisa, e a
+// `*` repassa tudo MENOS as BREVIS_* — o curinga existe para quem precisa, e a
 // excecao existe porque a configuracao do orquestrador nunca e trabalho da task.
 //
 // PATH e HOME entram sempre: sem PATH nenhum comando resolve, e o erro seria um
 // "not found" que nao explica nada.
-// Funcao de pacote e nao metodo: `bravis run` roda sem banco e por isso sem
+// Funcao de pacote e nao metodo: `brevis run` roda sem banco e por isso sem
 // Config — mas precisa do mesmo ambiente.
 func AmbienteDasTasks(nomes []string) map[string]string {
 	env := map[string]string{
@@ -172,7 +172,7 @@ func AmbienteDasTasks(nomes []string) map[string]string {
 		if entrada == "*" {
 			for _, kv := range os.Environ() {
 				k, v, _ := strings.Cut(kv, "=")
-				if strings.HasPrefix(k, "BRAVIS_") {
+				if strings.HasPrefix(k, "BREVIS_") {
 					continue
 				}
 				env[k] = v
@@ -212,8 +212,8 @@ func toleracoes(chave string) []Toleracao {
 	return out
 }
 
-// TaskEnvDoAmbiente le BRAVIS_TASK_ENV para quem nao carregou a Config inteira.
-func TaskEnvDoAmbiente() []string { return lista("BRAVIS_TASK_ENV") }
+// TaskEnvDoAmbiente le BREVIS_TASK_ENV para quem nao carregou a Config inteira.
+func TaskEnvDoAmbiente() []string { return lista("BREVIS_TASK_ENV") }
 
 // lista separa por virgula, ignorando vazios — "a,,b" e um erro de digitacao, e
 // um nome de secret vazio faria o pod inteiro ser recusado pelo servidor.

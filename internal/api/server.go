@@ -1,4 +1,4 @@
-// Package api expoe a interface HTTP do Bravis.
+// Package api expoe a interface HTTP do Brevis.
 //
 // Usa net/http puro. O roteamento por metodo e path do ServeMux (Go 1.22+)
 // cobre o que precisamos, e a regra 6 do plano pede evitar framework quando a
@@ -7,7 +7,7 @@
 package api
 
 import (
-	"github.com/AreteAcademy/bravis/internal/auth"
+	"github.com/AreteAcademy/brevis/internal/auth"
 	"log/slog"
 	"net/http"
 	"time"

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/AreteAcademy/bravis/sdk/from"
+	"github.com/AreteAcademy/brevis/sdk/from"
 )
 
 // perto compares floats. Writing 14.1*9/5+32 as a literal would be evaluated

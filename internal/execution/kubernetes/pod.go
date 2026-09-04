@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/AreteAcademy/bravis/internal/execution"
+	"github.com/AreteAcademy/brevis/internal/execution"
 )
 
 // nomeContainer e fixo: o pod tem um container so, e um nome estavel torna o
@@ -191,7 +191,7 @@ type Opcoes struct {
 
 	// ManterPodEmFalha deixa o pod para inspecao quando o passo falha. O de
 	// sucesso e sempre apagado: milhares de pods Completed poluem o namespace e
-	// nao dizem nada que o historico do Bravis nao diga melhor.
+	// nao dizem nada que o historico do Brevis nao diga melhor.
 	ManterPodEmFalha bool
 }
 
@@ -271,21 +271,21 @@ func MontarPod(t execution.TaskExec, o Opcoes) (Pod, error) {
 		spec.ImagePullSecrets = append(spec.ImagePullSecrets, RefLocal{Name: s})
 	}
 	if t.Timeout > 0 {
-		// Rede de seguranca do lado do cluster: se o processo do Bravis morrer,
+		// Rede de seguranca do lado do cluster: se o processo do Brevis morrer,
 		// o pod ainda para sozinho em vez de rodar para sempre.
 		segundos := int64(t.Timeout.Seconds())
 		spec.ActiveDeadlineSeconds = &segundos
 	}
 
 	rotulos := map[string]string{
-		"app.kubernetes.io/managed-by": "bravis",
-		"bravis.dev/node":              valorDeRotulo(t.NodeID),
+		"app.kubernetes.io/managed-by": "brevis",
+		"brevis.dev/node":              valorDeRotulo(t.NodeID),
 	}
 	if t.RunID != "" {
-		rotulos["bravis.dev/run"] = valorDeRotulo(t.RunID)
+		rotulos["brevis.dev/run"] = valorDeRotulo(t.RunID)
 	}
 	if t.Workflow != "" {
-		rotulos["bravis.dev/workflow"] = valorDeRotulo(t.Workflow)
+		rotulos["brevis.dev/workflow"] = valorDeRotulo(t.Workflow)
 	}
 	for k, v := range o.Labels {
 		rotulos[k] = v
@@ -302,9 +302,9 @@ func MontarPod(t execution.TaskExec, o Opcoes) (Pod, error) {
 			// sanitizada. Assim o filtro por rotulo funciona e o valor original
 			// nao se perde.
 			Annotations: map[string]string{
-				"bravis.dev/workflow": t.Workflow,
-				"bravis.dev/node":     t.NodeID,
-				"bravis.dev/run":      t.RunID,
+				"brevis.dev/workflow": t.Workflow,
+				"brevis.dev/node":     t.NodeID,
+				"brevis.dev/run":      t.RunID,
 			},
 		},
 		Spec: spec,

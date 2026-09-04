@@ -1,14 +1,14 @@
 .DEFAULT_GOAL := help
-BIN := bin/bravis
+BIN := bin/brevis
 
 # --- Imagem -----------------------------------------------------------------
 # REGISTRY/NAMESPACE ficam em variavel para que um fork publique no proprio
 # espaco sem editar arquivo nenhum: `make image-push NAMESPACE=outro`.
 REGISTRY  ?= docker.io
 NAMESPACE ?= daniel3843
-IMAGEM    ?= $(REGISTRY)/$(NAMESPACE)/bravis
+IMAGEM    ?= $(REGISTRY)/$(NAMESPACE)/brevis
 VERSAO    ?= $(shell cat VERSION)
-# `-dirty` quando ha mudanca nao commitada. Sem o sufixo, `bravis version`
+# `-dirty` quando ha mudanca nao commitada. Sem o sufixo, `brevis version`
 # dentro da imagem apontaria para um commit que NAO contem o codigo publicado —
 # e e por essa informacao que se rastreia um incidente.
 COMMIT    ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo desconhecido)$(shell git diff --quiet HEAD 2>/dev/null || echo -dirty)
@@ -18,30 +18,30 @@ DATA      ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 # no cluster. Uma imagem so-amd64 roda no Mac por emulacao, devagar e escondendo
 # problemas de arquitetura ate o deploy.
 PLATAFORMAS ?= linux/amd64,linux/arm64
-DB_URL := postgres://bravis:bravis@localhost:5432/bravis?sslmode=disable
+DB_URL := postgres://brevis:brevis@localhost:5432/brevis?sslmode=disable
 # Banco SEPARADO para os testes de integracao. Desde que a stack local passou a
-# subir um scheduler de verdade, rodar os testes contra `bravis` era uma corrida:
+# subir um scheduler de verdade, rodar os testes contra `brevis` era uma corrida:
 # o scheduler do compose reivindicava os itens que o teste acabara de enfileirar
 # e o criterio de aceite falhava sem nada estar errado.
-TEST_DB_URL := postgres://bravis:bravis@localhost:5432/bravis_test?sslmode=disable
+TEST_DB_URL := postgres://brevis:brevis@localhost:5432/brevis_test?sslmode=disable
 
 help: ## Lista os alvos
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
 
 build: generate ## Compila o binario em bin/ (gera templ e css antes)
-	@go build -trimpath -o $(BIN) ./cmd/bravis
+	@go build -trimpath -o $(BIN) ./cmd/brevis
 
 test: ## Roda os testes (os de integracao pulam sem Postgres)
 	@go test ./...
 
 test-int: test-db ## Roda tudo, inclusive integracao (exige `make up`)
-	@BRAVIS_TEST_DATABASE_URL="$(TEST_DB_URL)" go test ./... -count=1
+	@BREVIS_TEST_DATABASE_URL="$(TEST_DB_URL)" go test ./... -count=1
 
 test-db: ## Cria e migra o banco de testes (idempotente)
-	@docker compose exec -T postgres psql -U bravis -d postgres -tAc \
-	  "SELECT 1 FROM pg_database WHERE datname='bravis_test'" | grep -q 1 \
-	  || docker compose exec -T postgres createdb -U bravis bravis_test
-	@BRAVIS_DATABASE_URL="$(TEST_DB_URL)" go run ./cmd/bravis migrate up >/dev/null
+	@docker compose exec -T postgres psql -U brevis -d postgres -tAc \
+	  "SELECT 1 FROM pg_database WHERE datname='brevis_test'" | grep -q 1 \
+	  || docker compose exec -T postgres createdb -U brevis brevis_test
+	@BREVIS_DATABASE_URL="$(TEST_DB_URL)" go run ./cmd/brevis migrate up >/dev/null
 
 check: ## gofmt + vet + testes (portao antes de commitar)
 	@test -z "$$(gofmt -l cmd internal migrations)" || { echo "gofmt pendente:"; gofmt -l cmd internal migrations; exit 1; }
@@ -51,7 +51,7 @@ check: ## gofmt + vet + testes (portao antes de commitar)
 dev: ## Hot reload: recompila e reinicia a cada mudanca (exige `make up` antes)
 	@command -v air >/dev/null || { echo "instale: go install github.com/air-verse/air@latest"; exit 1; }
 	@test -x bin/tailwindcss || $(MAKE) tailwind-install
-	@BRAVIS_DATABASE_URL="$(DB_URL)" air
+	@BREVIS_DATABASE_URL="$(DB_URL)" air
 
 tailwind-install: ## Baixa o binario standalone do Tailwind (sem Node)
 	@mkdir -p bin
@@ -73,11 +73,11 @@ image: generate ## Constroi as imagens para a arquitetura local (nao publica)
 	@echo "  $(IMAGEM):$(VERSAO)  e  $(IMAGEM):$(VERSAO)-worker"
 
 image-push: generate ## Publica multi-arch no registry (exige `docker login`)
-	@docker buildx inspect bravis >/dev/null 2>&1 || docker buildx create --name bravis --use
-	@docker buildx build --builder bravis --platform $(PLATAFORMAS) --target api \
+	@docker buildx inspect brevis >/dev/null 2>&1 || docker buildx create --name brevis --use
+	@docker buildx build --builder brevis --platform $(PLATAFORMAS) --target api \
 	  --build-arg VERSAO=$(VERSAO) --build-arg COMMIT=$(COMMIT) --build-arg DATA=$(DATA) \
 	  -t $(IMAGEM):$(VERSAO) -t $(IMAGEM):latest --push .
-	@docker buildx build --builder bravis --platform $(PLATAFORMAS) --target worker \
+	@docker buildx build --builder brevis --platform $(PLATAFORMAS) --target worker \
 	  --build-arg VERSAO=$(VERSAO) --build-arg COMMIT=$(COMMIT) --build-arg DATA=$(DATA) \
 	  -t $(IMAGEM):$(VERSAO)-worker -t $(IMAGEM):latest-worker --push .
 	@echo "publicado: $(IMAGEM):$(VERSAO) (+ -worker)"
@@ -85,8 +85,8 @@ image-push: generate ## Publica multi-arch no registry (exige `docker login`)
 image-smoke: ## Confere que as imagens locais sobem e reportam a versao
 	@docker run --rm $(IMAGEM):$(VERSAO) version
 	@docker run --rm $(IMAGEM):$(VERSAO)-worker version
-	@# --entrypoint: o worker entra por `tini -- bravis`, entao um `sh` solto
-	@# viraria subcomando do bravis. O shell existe para o WORKFLOW usar.
+	@# --entrypoint: o worker entra por `tini -- brevis`, entao um `sh` solto
+	@# viraria subcomando do brevis. O shell existe para o WORKFLOW usar.
 	@docker run --rm --entrypoint sh $(IMAGEM):$(VERSAO)-worker -c 'echo "  shell ok no worker"'
 
 up: ## Sobe Postgres + API + scheduler localmente

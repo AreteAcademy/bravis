@@ -16,14 +16,14 @@ import (
 //  4. the SDK default
 //  5. an error, when there is no sensible default
 //
-// Names carry the BRAVIS_SDK_ prefix except where the ecosystem already has
+// Names carry the BREVIS_SDK_ prefix except where the ecosystem already has
 // one -- inventing a new name for something that already has a name is
 // friction, so the Google variables keep theirs.
 const (
 	EnvProject  = "GOOGLE_PROJECT_ID"
-	EnvDataset  = "BRAVIS_SDK_DATASET"
-	EnvBucket   = "BRAVIS_SDK_STAGING_BUCKET"
-	EnvLogLevel = "BRAVIS_SDK_LOG_LEVEL"
+	EnvDataset  = "BREVIS_SDK_DATASET"
+	EnvBucket   = "BREVIS_SDK_STAGING_BUCKET"
+	EnvLogLevel = "BREVIS_SDK_LOG_LEVEL"
 )
 
 // Origin records where a resolved value came from, so the startup log can say
@@ -61,7 +61,7 @@ func LogResolution(ctx context.Context, fields map[string]Origin) {
 	slog.InfoContext(ctx, "resolved configuration", args...)
 }
 
-// LogLevel reads BRAVIS_SDK_LOG_LEVEL. Unset means info; an unparseable value
+// LogLevel reads BREVIS_SDK_LOG_LEVEL. Unset means info; an unparseable value
 // means info and a warning, never a crash -- a bad log level must not take
 // down a pipeline.
 func LogLevel() slog.Level {

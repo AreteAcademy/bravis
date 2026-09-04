@@ -2,7 +2,7 @@
 //
 // Existe porque a interface vai ser usada por clientes diferentes, e cada um
 // quer o proprio nome, a propria frase e as proprias cores. O que NAO se
-// customiza e a atribuicao "Powered by Bravis": ela nao vem da configuracao,
+// customiza e a atribuicao "Powered by Brevis": ela nao vem da configuracao,
 // vem do codigo, e por isso nao ha valor de YAML capaz de removê-la.
 //
 // A escolha por YAML segue o resto do projeto — workflows sao YAML, e um segundo
@@ -71,12 +71,12 @@ const LogoPadrao = "/assets/logo.svg"
 
 // Atribuicao e fixa. Nao e campo de configuracao de proposito: e a unica coisa
 // da tela que o cliente nao escolhe.
-const Atribuicao = "Powered by Bravis"
+const Atribuicao = "Powered by Brevis"
 
 // Padrao e a identidade Arete, usada quando nao ha arquivo de marca.
 func Padrao() Marca {
 	return Marca{
-		Titulo:    "Bravis",
+		Titulo:    "Brevis",
 		Subtitulo: "Orquestração",
 		Logo:      LogoPadrao,
 		Frase:     "Clareza, estrutura e virtude\ntambém fazem parte\nde quem constrói.",

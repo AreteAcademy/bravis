@@ -1,18 +1,18 @@
 # Identidade visual da instalacao.
 #
-# Copie para `brand.yaml` na raiz (ou aponte BRAVIS_BRAND_FILE) e ajuste. Todos
+# Copie para `brand.yaml` na raiz (ou aponte BREVIS_BRAND_FILE) e ajuste. Todos
 # os campos sao opcionais: o que voce nao escrever mantem o padrao, entao um
 # arquivo com apenas `titulo:` ja e valido.
 #
-# O que NAO se customiza: a linha "Powered by Bravis" no rodape da barra
+# O que NAO se customiza: a linha "Powered by Brevis" no rodape da barra
 # lateral. Ela nao e um campo deste arquivo — vem do codigo.
 
-titulo: Bravis                # barra lateral e <title> das paginas
+titulo: Brevis                # barra lateral e <title> das paginas
 subtitulo: Orquestração       # versalete sob o titulo
 
 # Marca grafica ao lado do titulo, na barra lateral e na tela de entrada.
 # Aceita URL (https:// ou http://) ou caminho interno comecando em `/`.
-# Ausente, usa o simbolo embutido do Bravis, que acompanha a cor do tema.
+# Ausente, usa o simbolo embutido do Brevis, que acompanha a cor do tema.
 #
 # Uma logo hospedada fora depende daquele host: se ele cair, ou se o cluster nao
 # tiver saida para a internet, a imagem nao carrega — o resto da interface segue

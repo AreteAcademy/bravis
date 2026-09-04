@@ -9,10 +9,10 @@ Concluída em 2026-09-01.
 | Cron e timezone | `internal/domain/schedule` |
 | Política de catchup | idem |
 | Missed runs | idem + `internal/scheduler/scheduler.go` |
-| Backfill | `Scheduler.Backfill`, `bravis backfill` |
-| Manual trigger | `bravis run` (PHASE 1) e `trigger_type` |
+| Backfill | `Scheduler.Backfill`, `brevis backfill` |
+| Manual trigger | `brevis run` (PHASE 1) e `trigger_type` |
 | `trigger_type` (§12) | `runs.trigger_type` — schedule, manual, backfill, api, retry |
-| Publicação de workflow | `bravis publish`, `workflows.definicao` |
+| Publicação de workflow | `brevis publish`, `workflows.definicao` |
 
 ## A regra estrutural da fase
 
@@ -21,7 +21,7 @@ responsabilidades."*
 
 Está separado de fato: `Scheduler.Ciclo` materializa slots em Runs e os enfileira,
 e nada mais. Quem executa é o `Dispatcher` da PHASE 2, consumindo a fila. Os dois
-laços correm independentes no `bravis scheduler` — **o scheduler pode cair sem
+laços correm independentes no `brevis scheduler` — **o scheduler pode cair sem
 interromper nenhuma execução em voo, e o dispatcher pode cair sem perder nenhum
 slot.**
 
@@ -78,7 +78,7 @@ com estado sujo o expôs.
 
 ## Tests
 
-`go test ./...` passa; os de integração pulam sem `BRAVIS_TEST_DATABASE_URL`.
+`go test ./...` passa; os de integração pulam sem `BREVIS_TEST_DATABASE_URL`.
 
 - **domínio**: catchup true preenche a lacuna, false pega só o recente, limite
   trunca e sinaliza, agenda nova não cria histórico, timezone muda o instante
@@ -106,7 +106,7 @@ teto por ciclo.
 - **`catchup` não vem do YAML.** É coluna no banco, com padrão `false`. A §12
   mostra `catchup: true` no arquivo — item pendente.
 - **`Queue.Recuperar` continua sem laço que a chame.** Segue pendente desde a
-  PHASE 2; o `bravis scheduler` seria o lugar natural.
+  PHASE 2; o `brevis scheduler` seria o lugar natural.
 - **Sem `trigger_type: api`** — não há API de disparo ainda.
 - Os testes de integração e o e2e compartilham o banco; o helper trunca tudo, então
   rodá-los em paralelo interfere.
@@ -114,4 +114,4 @@ teto por ciclo.
 ## Next Phase
 
 **PHASE 5 — UI FOUNDATION**: templ, templUI e o servidor de páginas (§17). É o
-primeiro pedaço da parte que a §1 chama de Bravis Observe.
+primeiro pedaço da parte que a §1 chama de Brevis Observe.

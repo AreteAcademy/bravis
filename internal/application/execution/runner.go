@@ -2,7 +2,7 @@
 //
 // Esta e a versao LOCAL: sem fila, sem persistencia, sem scheduler — essas
 // pecas tem fase propria no plano (§37, fases 2 e 4). O que existe aqui e o
-// suficiente para `bravis run arquivo.yaml` rodar na propria instancia, que foi
+// suficiente para `brevis run arquivo.yaml` rodar na propria instancia, que foi
 // o pedido.
 package execution
 
@@ -16,10 +16,10 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/AreteAcademy/bravis/internal/domain/run"
-	wf "github.com/AreteAcademy/bravis/internal/domain/workflow"
-	"github.com/AreteAcademy/bravis/internal/execution"
-	"github.com/AreteAcademy/bravis/internal/graph"
+	"github.com/AreteAcademy/brevis/internal/domain/run"
+	wf "github.com/AreteAcademy/brevis/internal/domain/workflow"
+	"github.com/AreteAcademy/brevis/internal/execution"
+	"github.com/AreteAcademy/brevis/internal/graph"
 	"sync"
 	"time"
 )
@@ -30,7 +30,7 @@ type Reporter interface {
 	Evento(execution.Event)
 }
 
-// Persistidor grava o estado de cada passo. Opcional: o `bravis run` local nao
+// Persistidor grava o estado de cada passo. Opcional: o `brevis run` local nao
 // tem banco, e exigi-lo tornaria a execucao ad-hoc dependente de infraestrutura.
 // Historico responde se um passo ja teve sucesso antes. E o que decide se
 // esta e a PRIMEIRA execucao dele — informacao que o passo nao tem e que so o
@@ -397,18 +397,18 @@ func (r Runner) tentar(ctx context.Context, w wf.Workflow, n wf.Node, tentativa 
 	return completa.String(), falha
 }
 
-// Prefixo das variaveis que descrevem ESTA execucao, separado do BRAVIS_SDK_
+// Prefixo das variaveis que descrevem ESTA execucao, separado do BREVIS_SDK_
 // que configura o SDK: um diz o que o SDK faz, o outro o que este disparo e.
 //
 // Nao e canal privado. O processo do passo pode ler o proprio ambiente, e
 // alguem vai ler. O que se promete e que ele NAO PRECISA — nao que nao consiga.
 const (
-	envRunID          = "BRAVIS_RUN_ID"
-	envRunFirst       = "BRAVIS_RUN_FIRST"
-	envRunAttempt     = "BRAVIS_RUN_ATTEMPT"
-	envRunTrigger     = "BRAVIS_RUN_TRIGGER"
-	envRunLogicalDate = "BRAVIS_RUN_LOGICAL_DATE"
-	envRunParams      = "BRAVIS_RUN_PARAMS"
+	envRunID          = "BREVIS_RUN_ID"
+	envRunFirst       = "BREVIS_RUN_FIRST"
+	envRunAttempt     = "BREVIS_RUN_ATTEMPT"
+	envRunTrigger     = "BREVIS_RUN_TRIGGER"
+	envRunLogicalDate = "BREVIS_RUN_LOGICAL_DATE"
+	envRunParams      = "BREVIS_RUN_PARAMS"
 )
 
 // contextoDoRun monta o que o engine sabe sobre esta execucao e o passo nao.
@@ -418,12 +418,12 @@ const (
 func (r Runner) contextoDoRun(nodeID string, primeira bool, tentativa int) map[string]string {
 	env := map[string]string{}
 
-	// Sem RunID nao ha run gerenciado: e o caminho de `bravis run`, que executa
+	// Sem RunID nao ha run gerenciado: e o caminho de `brevis run`, que executa
 	// um YAML na hora e nao pertence a historico nenhum.
 	//
 	// Injetar o UUID zero aqui seria pior que nao injetar nada: o SDK decide
 	// que esta sob o engine pela PRESENCA do id, entao um fetcher rodado a mao
-	// passaria a logar "running under Bravis" com um id inventado. Os params
+	// passaria a logar "running under Brevis" com um id inventado. Os params
 	// continuam indo, porque `--param` e justamente como se passa entrada
 	// nesse caminho.
 	if r.RunID != uuid.Nil {
@@ -452,7 +452,7 @@ func (r Runner) contextoDoRun(nodeID string, primeira bool, tentativa int) map[s
 
 // mesclarEnv junta o ambiente do runner com o desta execucao.
 //
-// O do runner ganha em colisao: se alguem definiu BRAVIS_RUN_PARAMS na
+// O do runner ganha em colisao: se alguem definiu BREVIS_RUN_PARAMS na
 // configuracao, foi porque quis, e o engine nao sobrescreve configuracao
 // explicita.
 func mesclarEnv(base, execucao map[string]string) map[string]string {

@@ -42,7 +42,7 @@ produziria número sem significado; a tabela mostra `—`.
 
 **Estado vazio comunica ausência, não erro.** Uma tabela vazia sem explicação faz
 o operador procurar defeito onde não há; cada uma sugere o comando que a preenche
-(`bravis publish`, `bravis scheduler`).
+(`brevis publish`, `brevis scheduler`).
 
 **`GET /{$}` para a raiz.** Sem o `{$}`, o `ServeMux` do Go trata `/` como
 prefixo e captura toda rota não registrada — inclusive erros de digitação, que
@@ -118,7 +118,7 @@ http.FileServer(http.Dir("web/assets"))
 ```
 
 — enquanto o `Dockerfile` é distroless e copia **apenas o binário**. Não existe
-`web/assets` no container. O mesmo quebrava ao rodar o `bravis` de qualquer
+`web/assets` no container. O mesmo quebrava ao rodar o `brevis` de qualquer
 diretório que não a raiz do repositório.
 
 Corrigido embutindo o CSS com `//go:embed`, como as migrations já eram. Verificado

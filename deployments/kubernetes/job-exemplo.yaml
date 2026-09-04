@@ -1,4 +1,4 @@
-# Não é para aplicar: é o pod que o Bravis CRIA, escrito à mão, para leitura.
+# Não é para aplicar: é o pod que o Brevis CRIA, escrito à mão, para leitura.
 #
 # Quando um passo assim é publicado…
 #
@@ -19,23 +19,23 @@ metadata:
   name: platform-workspace-bronze-workspace-a632ae46
   namespace: dados
   labels:
-    app.kubernetes.io/managed-by: bravis
-    bravis.dev/workflow: platform-workspace
-    bravis.dev/node: bronze-workspace
-    bravis.dev/run: 1f2e3d4c-0000-0000-0000-000000000000
+    app.kubernetes.io/managed-by: brevis
+    brevis.dev/workflow: platform-workspace
+    brevis.dev/node: bronze-workspace
+    brevis.dev/run: 1f2e3d4c-0000-0000-0000-000000000000
   annotations:
     # O valor original: rótulo tem limite de 63 caracteres e alfabeto restrito.
-    bravis.dev/workflow: platform_workspace
+    brevis.dev/workflow: platform_workspace
 spec:
   restartPolicy: Never          # quem conta tentativas é o dispatcher
-  serviceAccountName: bravis-task
+  serviceAccountName: brevis-task
   activeDeadlineSeconds: 1800   # rede de segurança do lado do cluster
   containers:
     - name: step
       image: us-central1-docker.pkg.dev/zarv/apps/dbt:1.10.3
       command: ["/bin/sh", "-c", "dbt build --select bronze_workspace+"]
       envFrom:
-        - secretRef: {name: bravis-task-env}
+        - secretRef: {name: brevis-task-env}
       resources:
         requests: {cpu: 200m, memory: 1Gi}
         limits: {memory: 2Gi}

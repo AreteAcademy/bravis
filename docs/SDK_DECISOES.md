@@ -232,7 +232,7 @@ quebrada para sempre; o `README` avisa.
 Consequências práticas:
 
 - errou uma versão? lance a próxima. Nunca tente apagar a tag.
-- `cmd/bravis-sdk` é módulo próprio e compila contra o **publicado**, então
+- `cmd/brevis-sdk` é módulo próprio e compila contra o **publicado**, então
   toda quebra de API falha aquele passo da CI uma vez, e o pin só sobe depois da
   tag existir. É para isso que ele existe — foi ele que pegou o rename do
   `ExtraMetadata` e a mudança de assinatura do `extract`.

@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/AreteAcademy/bravis/sdk"
-	"github.com/AreteAcademy/bravis/sdk/from"
-	"github.com/AreteAcademy/bravis/sdk/to/bigquery"
+	"github.com/AreteAcademy/brevis/sdk"
+	"github.com/AreteAcademy/brevis/sdk/from"
+	"github.com/AreteAcademy/brevis/sdk/to/bigquery"
 )
 
 // Escrito de fora do módulo do SDK de propósito.
@@ -18,7 +18,7 @@ import (
 // A mesma classe de defeito passou três vezes por testes que viviam dentro do
 // pacote e provavam o que o autor enxergava, não o que um consumidor
 // consegue: Data.Stats() que não existia, três With* sem re-export, e o
-// cmd/bravis que o CI não construía.
+// cmd/brevis que o CI não construía.
 //
 // Este pacote está no módulo examples, que tem replace para ../sdk. Ele
 // compila contra a árvore de trabalho e roda no CI, então uma quebra na
@@ -78,7 +78,7 @@ func TestSemEngineNadaAcontece(t *testing.T) {
 
 	log := executa(t, pipeline(srv.URL))
 
-	if strings.Contains(log, "under Bravis") {
+	if strings.Contains(log, "under Brevis") {
 		t.Error("rodando à mão, o fetcher não deve nem saber que isso existe")
 	}
 }
@@ -87,13 +87,13 @@ func TestComEngineOFetcherSabeQueERodadoPorEle(t *testing.T) {
 	srv := fonte(t)
 	defer srv.Close()
 
-	t.Setenv("BRAVIS_RUN_ID", "run-1")
-	t.Setenv("BRAVIS_RUN_FIRST", "true")
-	t.Setenv("BRAVIS_RUN_ATTEMPT", "1")
+	t.Setenv("BREVIS_RUN_ID", "run-1")
+	t.Setenv("BREVIS_RUN_FIRST", "true")
+	t.Setenv("BREVIS_RUN_ATTEMPT", "1")
 
 	log := executa(t, pipeline(srv.URL))
 
-	if !strings.Contains(log, "under Bravis") {
+	if !strings.Contains(log, "under Brevis") {
 		t.Errorf("o contexto do engine não chegou: %s", log)
 	}
 	if !strings.Contains(log, "first=true") {
@@ -105,8 +105,8 @@ func TestBeforeEnxergaOsParams(t *testing.T) {
 	srv := fonte(t)
 	defer srv.Close()
 
-	t.Setenv("BRAVIS_RUN_ID", "run-1")
-	t.Setenv("BRAVIS_RUN_PARAMS", `{"load_full":"true"}`)
+	t.Setenv("BREVIS_RUN_ID", "run-1")
+	t.Setenv("BREVIS_RUN_PARAMS", `{"load_full":"true"}`)
 
 	var viu string
 	p := pipeline(srv.URL)

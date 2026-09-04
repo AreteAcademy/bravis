@@ -16,7 +16,7 @@ import (
 	"os/exec"
 	"sync"
 
-	"github.com/AreteAcademy/bravis/internal/execution"
+	"github.com/AreteAcademy/brevis/internal/execution"
 )
 
 // ProcessExecutor roda comandos arbitrarios como processos do host.
@@ -32,7 +32,7 @@ type ProcessExecutor struct {
 type ErrForaDoLocal struct{ Env string }
 
 func (e ErrForaDoLocal) Error() string {
-	return fmt.Sprintf("ProcessExecutor so opera com BRAVIS_ENV=local (recebido %q); "+
+	return fmt.Sprintf("ProcessExecutor so opera com BREVIS_ENV=local (recebido %q); "+
 		"fora do local, `run:` deve ir para o KubernetesExecutor", e.Env)
 }
 

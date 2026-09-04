@@ -14,11 +14,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/AreteAcademy/bravis/internal/domain/run"
-	wf "github.com/AreteAcademy/bravis/internal/domain/workflow"
-	"github.com/AreteAcademy/bravis/internal/infrastructure/postgres"
-	"github.com/AreteAcademy/bravis/web/components"
-	"github.com/AreteAcademy/bravis/web/layouts"
+	"github.com/AreteAcademy/brevis/internal/domain/run"
+	wf "github.com/AreteAcademy/brevis/internal/domain/workflow"
+	"github.com/AreteAcademy/brevis/internal/infrastructure/postgres"
+	"github.com/AreteAcademy/brevis/web/components"
+	"github.com/AreteAcademy/brevis/web/layouts"
 )
 
 // ---------------------------------------------------------------------------
@@ -327,7 +327,7 @@ func Overview(d DadosOverview) templ.Component {
 				}
 				ctx = templ.InitializeContext(ctx)
 				if len(d.Proximas) == 0 {
-					templ_7745c5c3_Err = components.Vazio("Nenhuma agenda ativa.", "bravis publish arquivo.yaml").Render(ctx, templ_7745c5c3_Buffer)
+					templ_7745c5c3_Err = components.Vazio("Nenhuma agenda ativa.", "brevis publish arquivo.yaml").Render(ctx, templ_7745c5c3_Buffer)
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -1202,7 +1202,7 @@ func Workflows(ws []postgres.ResumoWorkflow, tags []string, f Filtro, total, fil
 				return templ_7745c5c3_Err
 			}
 			if len(ws) == 0 {
-				templ_7745c5c3_Err = components.Vazio("Nenhum workflow com esses filtros.", "bravis publish arquivo.yaml").Render(ctx, templ_7745c5c3_Buffer)
+				templ_7745c5c3_Err = components.Vazio("Nenhum workflow com esses filtros.", "brevis publish arquivo.yaml").Render(ctx, templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -2048,7 +2048,7 @@ func Projetos(ps []postgres.ResumoProjeto) templ.Component {
 			}
 			ctx = templ.InitializeContext(ctx)
 			if len(ps) == 0 {
-				templ_7745c5c3_Err = components.Vazio("Nenhum projeto ainda.", "bravis publish --project meu-projeto").Render(ctx, templ_7745c5c3_Buffer)
+				templ_7745c5c3_Err = components.Vazio("Nenhum projeto ainda.", "brevis publish --project meu-projeto").Render(ctx, templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -2165,7 +2165,7 @@ func tabelaRuns(runs []postgres.ResumoRun, p Paginacao) templ.Component {
 		}
 		ctx = templ.ClearChildren(ctx)
 		if len(runs) == 0 {
-			templ_7745c5c3_Err = components.Vazio("Nenhuma execução ainda.", "bravis scheduler").Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = components.Vazio("Nenhuma execução ainda.", "brevis scheduler").Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

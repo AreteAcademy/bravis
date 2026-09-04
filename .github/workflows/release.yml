@@ -15,7 +15,7 @@ on:
         required: true
 
 env:
-  IMAGEM: docker.io/daniel3843/bravis
+  IMAGEM: docker.io/daniel3843/brevis
 
 jobs:
   imagens:
@@ -63,7 +63,7 @@ jobs:
           fi
 
       # A versao do arquivo VERSION e a da tag precisam bater. Sem esta
-      # checagem, `bravis version` dentro da imagem mentiria sobre a tag que a
+      # checagem, `brevis version` dentro da imagem mentiria sobre a tag que a
       # publicou — e e por ela que se rastreia um incidente.
       - name: Conferir VERSION
         run: |

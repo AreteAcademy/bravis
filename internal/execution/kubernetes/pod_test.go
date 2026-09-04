@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/AreteAcademy/bravis/internal/execution"
-	k8s "github.com/AreteAcademy/bravis/internal/execution/kubernetes"
+	"github.com/AreteAcademy/brevis/internal/execution"
+	k8s "github.com/AreteAcademy/brevis/internal/execution/kubernetes"
 )
 
 func tarefa() execution.TaskExec {
@@ -28,7 +28,7 @@ func tarefa() execution.TaskExec {
 }
 
 func TestPodTrazImagemComandoERecursos(t *testing.T) {
-	p, err := k8s.MontarPod(tarefa(), k8s.Opcoes{Namespace: "dados", ServiceAccount: "bravis"})
+	p, err := k8s.MontarPod(tarefa(), k8s.Opcoes{Namespace: "dados", ServiceAccount: "brevis"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +58,7 @@ func TestPodTrazImagemComandoERecursos(t *testing.T) {
 	if p.Spec.RestartPolicy != "Never" {
 		t.Errorf("restartPolicy = %q", p.Spec.RestartPolicy)
 	}
-	if p.Spec.ServiceAccountName != "bravis" || p.Metadata.Namespace != "dados" {
+	if p.Spec.ServiceAccountName != "brevis" || p.Metadata.Namespace != "dados" {
 		t.Errorf("identidade errada: sa=%q ns=%q", p.Spec.ServiceAccountName, p.Metadata.Namespace)
 	}
 	if p.Spec.ActiveDeadlineSeconds == nil || *p.Spec.ActiveDeadlineSeconds != 1800 {
@@ -85,8 +85,8 @@ func TestSemShellUsaArgvDireto(t *testing.T) {
 
 func TestEnvOrdenadaEEnvFrom(t *testing.T) {
 	p, err := k8s.MontarPod(tarefa(), k8s.Opcoes{
-		EnvFromSecrets:    []string{"bravis-bigquery"},
-		EnvFromConfigMaps: []string{"bravis-config"},
+		EnvFromSecrets:    []string{"brevis-bigquery"},
+		EnvFromConfigMaps: []string{"brevis-config"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -97,7 +97,7 @@ func TestEnvOrdenadaEEnvFrom(t *testing.T) {
 	if len(c.Env) != 2 || c.Env[0].Name != "GOOGLE_PROJECT_ID" || c.Env[1].Name != "STAGE" {
 		t.Errorf("env = %v, quero ordem alfabetica", c.Env)
 	}
-	if len(c.EnvFrom) != 2 || c.EnvFrom[0].SecretRef.Name != "bravis-bigquery" {
+	if len(c.EnvFrom) != 2 || c.EnvFrom[0].SecretRef.Name != "brevis-bigquery" {
 		t.Errorf("envFrom = %+v", c.EnvFrom)
 	}
 }
@@ -169,16 +169,16 @@ func TestNomeDoPodObedeceOLimiteDoKubernetes(t *testing.T) {
 
 func TestRotulosPermitemAcharOsPodsDaRun(t *testing.T) {
 	p, _ := k8s.MontarPod(tarefa(), k8s.Opcoes{})
-	if p.Metadata.Labels["app.kubernetes.io/managed-by"] != "bravis" {
-		t.Error("sem o rotulo de gestao nao da para achar os pods do Bravis")
+	if p.Metadata.Labels["app.kubernetes.io/managed-by"] != "brevis" {
+		t.Error("sem o rotulo de gestao nao da para achar os pods do Brevis")
 	}
-	if p.Metadata.Labels["bravis.dev/workflow"] != "platform-workspace" {
-		t.Errorf("rotulo de workflow = %q (sanitizado)", p.Metadata.Labels["bravis.dev/workflow"])
+	if p.Metadata.Labels["brevis.dev/workflow"] != "platform-workspace" {
+		t.Errorf("rotulo de workflow = %q (sanitizado)", p.Metadata.Labels["brevis.dev/workflow"])
 	}
 	// O valor original vive na anotacao: rotulo tem limite de 63 e alfabeto
 	// restrito, anotacao nao.
-	if p.Metadata.Annotations["bravis.dev/workflow"] != "platform_workspace" {
-		t.Errorf("anotacao = %q, quero o valor original", p.Metadata.Annotations["bravis.dev/workflow"])
+	if p.Metadata.Annotations["brevis.dev/workflow"] != "platform_workspace" {
+		t.Errorf("anotacao = %q, quero o valor original", p.Metadata.Annotations["brevis.dev/workflow"])
 	}
 }
 

@@ -73,7 +73,7 @@ workflow depois não pode mudar o significado de uma execução passada.
 ## Tests
 
 `go test ./...` passa. Os de integração exigem Postgres e **pulam** sem
-`BRAVIS_TEST_DATABASE_URL`, para que a suíte siga verde numa máquina sem docker.
+`BREVIS_TEST_DATABASE_URL`, para que a suíte siga verde numa máquina sem docker.
 `make test-int` roda tudo.
 
 - **máquina de estados**: caminho feliz, ciclo de retry, limpeza de carimbos, sete

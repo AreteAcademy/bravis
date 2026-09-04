@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	core "github.com/AreteAcademy/bravis/sdk/internal/core"
+	core "github.com/AreteAcademy/brevis/sdk/internal/core"
 )
 
 func escreve(t *testing.T, dir, nome, conteudo string) {

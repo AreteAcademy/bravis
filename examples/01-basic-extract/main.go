@@ -8,12 +8,12 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/AreteAcademy/bravis/sdk"
-	"github.com/AreteAcademy/bravis/sdk/from"
+	"github.com/AreteAcademy/brevis/sdk"
+	"github.com/AreteAcademy/brevis/sdk/from"
 )
 
 func main() {
-	url := flag.String("url", "https://raw.githubusercontent.com/AreteAcademy/bravis/master/examples/testdata/people.csv", "CSV endpoint")
+	url := flag.String("url", "https://raw.githubusercontent.com/AreteAcademy/brevis/master/examples/testdata/people.csv", "CSV endpoint")
 	flag.Parse()
 
 	// The first row names the columns; pass NoHeader to key rows positionally.

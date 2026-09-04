@@ -1,12 +1,12 @@
-# Bravis
+# Brevis
 
 ## High-Performance Data Transformation &amp; Workflow Engine
 
 # SUPER PROMPT DE ARQUITETURA E IMPLEMENTAÇÃO
 
-Você é o principal arquiteto e engenheiro responsável pela construção do **Bravis**.
+Você é o principal arquiteto e engenheiro responsável pela construção do **Brevis**.
 
-O Bravis é uma plataforma de Data Engineering fortemente baseada em Go, criada para unificar:
+O Brevis é uma plataforma de Data Engineering fortemente baseada em Go, criada para unificar:
 
 - transformação de dados inspirada no dbt;
 - execução de DAGs;
@@ -43,9 +43,9 @@ Extensibility
 
 # 1. VISÃO DO PRODUTO
 
-O Bravis possui três responsabilidades principais.
+O Brevis possui três responsabilidades principais.
 
-## Bravis TRANSFORM
+## Brevis TRANSFORM
 
 Responsável por transformação de dados.
 
@@ -83,7 +83,7 @@ Artifacts
 
 ---
 
-# Bravis ORCHESTRATOR
+# Brevis ORCHESTRATOR
 
 Responsável por:
 
@@ -107,7 +107,7 @@ Ele substitui a responsabilidade que seria desempenhada por Airflow ou LeoFlow.
 
 ---
 
-# Bravis UI
+# Brevis UI
 
 Responsável por operação e visualização.
 
@@ -145,7 +145,7 @@ A interface não deve ser uma SPA completa.
 
 ```text
                          ┌───────────────────────┐
-                         │       Bravis UI        │
+                         │       Brevis UI        │
                          │                       │
                          │ templ + templUI       │
                          │ React Flow Islands    │
@@ -154,7 +154,7 @@ A interface não deve ser uma SPA completa.
                           HTTP / SSE / WebSocket
                                      │
                          ┌───────────▼───────────┐
-                         │       Bravis API       │
+                         │       Brevis API       │
                          │                       │
                          │         GoFr          │
                          └───────────┬───────────┘
@@ -191,16 +191,16 @@ A interface não deve ser uma SPA completa.
 
 # 3. REGRA FUNDAMENTAL DE EXECUÇÃO
 
-O Bravis deve possuir diferentes tipos de runtime.
+O Brevis deve possuir diferentes tipos de runtime.
 
 ## GO LOCAL EXECUTOR
 
-Jobs escritos em Go podem executar localmente dentro de um Worker Bravis.
+Jobs escritos em Go podem executar localmente dentro de um Worker Brevis.
 
 Exemplo:
 
 ```text
-Bravis Worker
+Brevis Worker
      │
      ▼
 Go Runtime
@@ -265,7 +265,7 @@ Pod Running
 Stream Events
     │
     ▼
-Bravis Run Updated
+Brevis Run Updated
 
 ```
 
@@ -301,8 +301,8 @@ LOCAL (in-process) ou KUBERNETES
 
 OUTRAS LINGUAGENS
 ↓
-KUBERNETES          quando BRAVIS_ENV != local
-PROCESSO DO HOST    quando BRAVIS_ENV == local
+KUBERNETES          quando BREVIS_ENV != local
+PROCESSO DO HOST    quando BREVIS_ENV == local
 ```
 
 Existe portanto um TERCEIRO executor, além dos dois da §13:
@@ -314,7 +314,7 @@ KubernetesExecutor  todo o resto
 ```
 
 **A fronteira é código, não convenção.** O `ProcessExecutor` recusa-se a ser
-construído quando `BRAVIS_ENV != local`, e a recusa é testada. O risco de
+construído quando `BREVIS_ENV != local`, e a recusa é testada. O risco de
 `run:` não é o comando em si — é ele existir sem limite declarado.
 
 O que a emenda NÃO afrouxa:
@@ -340,7 +340,7 @@ executor: kubernetes
 
 ```
 
-O Bravis nunca deve tentar executar arbitrariamente código de outras linguagens diretamente dentro do processo principal.
+O Brevis nunca deve tentar executar arbitrariamente código de outras linguagens diretamente dentro do processo principal.
 
 ---
 
@@ -449,18 +449,18 @@ tasks:
 
   - id: transform_silver
 
-    type: Bravis
+    type: Brevis
 
-    command: Bravis run --select silver.*
+    command: Brevis run --select silver.*
 
     depends_on:
       - ingest_users
 
   - id: transform_gold
 
-    type: Bravis
+    type: Brevis
 
-    command: Bravis run --select gold.*
+    command: Brevis run --select gold.*
 
     depends_on:
       - transform_silver
@@ -866,7 +866,7 @@ catchup: true
 Backfill:
 
 ```bash
-Bravis backfill \
+Brevis backfill \
   --dag daily_analytics \
   --from 2026-01-01 \
   --to 2026-01-31
@@ -1023,7 +1023,7 @@ Cleanup
 
 ```
 
-O Bravis deve armazenar:
+O Brevis deve armazenar:
 
 ```text
 cluster
@@ -1305,7 +1305,7 @@ Fluxo:
 Database DAG Definition
        │
        ▼
-Bravis API
+Brevis API
        │
        ▼
 React Flow JSON
@@ -1351,7 +1351,7 @@ Configuration
 Permitir criar nodes:
 
 ```text
-Bravis Transform
+Brevis Transform
 
 Go Local Task
 
@@ -1383,13 +1383,13 @@ Exemplo de node:
 ```yaml
 id: transform_gold
 
-type: Bravis
+type: Brevis
 
 executor: local
 
 command:
 
-  Bravis run --select gold.*
+  Brevis run --select gold.*
 
 retry:
 
@@ -1715,16 +1715,16 @@ Worker B executes Run X
 
 # 28. HIGH AVAILABILITY
 
-Não assumir que apenas uma instância do Bravis existe.
+Não assumir que apenas uma instância do Brevis existe.
 
 A arquitetura deve permitir futuramente:
 
 ```text
-Bravis API 1
-Bravis API 2
-Bravis Worker 1
-Bravis Worker 2
-Bravis Scheduler
+Brevis API 1
+Brevis API 2
+Brevis Worker 1
+Brevis Worker 2
+Brevis Scheduler
 
 ```
 
@@ -1781,7 +1781,7 @@ transactional operations
 
 ---
 
-# 30. Bravis TRANSFORM
+# 30. Brevis TRANSFORM
 
 O módulo de transformação continua sendo parte central.
 
@@ -1853,14 +1853,14 @@ MICROBATCH
 
 # 31. TRANSFORM COMO TASK
 
-Um workflow pode executar Bravis Transform.
+Um workflow pode executar Brevis Transform.
 
 Exemplo:
 
 ```yaml
 id: silver
 
-type: Bravis_transform
+type: Brevis_transform
 
 executor: local
 
@@ -1873,10 +1873,10 @@ select:
 O runtime:
 
 ```text
-Bravis Orchestrator
+Brevis Orchestrator
         │
         ▼
-Bravis Transform Engine
+Brevis Transform Engine
         │
         ▼
 Model DAG
@@ -1965,7 +1965,7 @@ finished_at
 
 ```
 
-GoFr deve expor métricas e tracing, e o Bravis deve acrescentar métricas específicas do domínio de execução.
+GoFr deve expor métricas e tracing, e o Brevis deve acrescentar métricas específicas do domínio de execução.
 
 ---
 
@@ -2088,7 +2088,7 @@ trace
 
 # 35. SEGURANÇA
 
-O Bravis não deve permitir execução arbitrária sem controle.
+O Brevis não deve permitir execução arbitrária sem controle.
 
 Local Go:
 
@@ -2124,10 +2124,10 @@ como funcionalidade padrão da API pública.
 # 36. ESTRUTURA DO REPOSITÓRIO
 
 ```text
-Bravis/
+Brevis/
 
 ├── cmd/
-│   └── Bravis/
+│   └── Brevis/
 │
 ├── internal/
 │
@@ -2484,7 +2484,7 @@ executado via Kubernetes e acompanhado pela UI.
 
 ---
 
-## PHASE 8 — Bravis TRANSFORM CORE
+## PHASE 8 — Brevis TRANSFORM CORE
 
 Implementar:
 
@@ -2571,7 +2571,7 @@ Fair Scheduling
 
 Worker Pools
 
-Multiple Bravis Instances
+Multiple Brevis Instances
 
 Leader Election
 
@@ -2703,7 +2703,7 @@ com:
 ```text
 PostgreSQL
 
-Bravis API
+Brevis API
 
 ```
 
@@ -2724,10 +2724,10 @@ Não avançar automaticamente para a PHASE 1.
 
 # PRINCÍPIO FINAL
 
-O Bravis deve ser pensado como:
+O Brevis deve ser pensado como:
 
 ```text
-               Bravis
+               Brevis
 
      ┌────────────────────────┐
      │                        │

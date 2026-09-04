@@ -19,26 +19,26 @@ func TestQuemNaoUsaBigQueryNaoCompilaBigQuery(t *testing.T) {
 		pacotes  []string
 		proibido bool
 	}{
-		{"só a raiz", []string{"github.com/AreteAcademy/bravis/sdk"}, true},
+		{"só a raiz", []string{"github.com/AreteAcademy/brevis/sdk"}, true},
 		{"raiz + from", []string{
-			"github.com/AreteAcademy/bravis/sdk",
-			"github.com/AreteAcademy/bravis/sdk/from",
+			"github.com/AreteAcademy/brevis/sdk",
+			"github.com/AreteAcademy/brevis/sdk/from",
 		}, true},
 		// Um pipeline de arquivos inteiro -- from e to -- ainda não traz o
 		// BigQuery. Este caso faltava na v0.20.0, e sem ele o defeito passou:
 		// to.BigQuery e to.Files viviam no mesmo pacote, então escrever um
 		// arquivo compilava o Google.
 		{"raiz + from + to (arquivos)", []string{
-			"github.com/AreteAcademy/bravis/sdk",
-			"github.com/AreteAcademy/bravis/sdk/from",
-			"github.com/AreteAcademy/bravis/sdk/to",
+			"github.com/AreteAcademy/brevis/sdk",
+			"github.com/AreteAcademy/brevis/sdk/from",
+			"github.com/AreteAcademy/brevis/sdk/to",
 		}, true},
 
 		// E o controle: quem pede o BigQuery recebe o BigQuery. Sem isto, o
 		// teste passaria com um SDK que não carrega nada.
 		{"raiz + to/bigquery", []string{
-			"github.com/AreteAcademy/bravis/sdk",
-			"github.com/AreteAcademy/bravis/sdk/to/bigquery",
+			"github.com/AreteAcademy/brevis/sdk",
+			"github.com/AreteAcademy/brevis/sdk/to/bigquery",
 		}, false},
 	}
 
@@ -68,17 +68,17 @@ func TestQuemLeArquivoLocalNaoCompilaNuvem(t *testing.T) {
 		esperado bool
 	}{
 		{"from sozinho não traz a AWS", []string{
-			"github.com/AreteAcademy/bravis/sdk/from"}, "aws-sdk-go", false},
+			"github.com/AreteAcademy/brevis/sdk/from"}, "aws-sdk-go", false},
 		{"from sozinho não traz o Google", []string{
-			"github.com/AreteAcademy/bravis/sdk/from"}, "cloud.google.com", false},
+			"github.com/AreteAcademy/brevis/sdk/from"}, "cloud.google.com", false},
 
 		// Os controles: quem pede o backend recebe o backend.
 		{"store/s3 traz a AWS", []string{
-			"github.com/AreteAcademy/bravis/sdk/store/s3"}, "aws-sdk-go", true},
+			"github.com/AreteAcademy/brevis/sdk/store/s3"}, "aws-sdk-go", true},
 		{"store/gcs traz o Google", []string{
-			"github.com/AreteAcademy/bravis/sdk/store/gcs"}, "cloud.google.com", true},
+			"github.com/AreteAcademy/brevis/sdk/store/gcs"}, "cloud.google.com", true},
 		{"store/s3 não traz o Google", []string{
-			"github.com/AreteAcademy/bravis/sdk/store/s3"}, "cloud.google.com", false},
+			"github.com/AreteAcademy/brevis/sdk/store/s3"}, "cloud.google.com", false},
 	}
 
 	for _, c := range casos {

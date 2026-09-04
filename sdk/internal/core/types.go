@@ -98,7 +98,7 @@ type LoadConfig struct {
 	ProjectID       string // GCP project ID; required
 	Dataset         string // BigQuery dataset; required
 	Table           string // BigQuery table; required
-	StagingBucket   string // GCS bucket for staging; default: "{projectID}-bravis-staging"
+	StagingBucket   string // GCS bucket for staging; default: "{projectID}-brevis-staging"
 	StagingPrefix   string // prefix for staged files; default: "extracts/"
 	ThresholdForGCS int    // row count above which to use GCS; default: 5000
 	Format          string // "ndjson", "csv", or "parquet"; default: "ndjson"

@@ -212,9 +212,9 @@ ambiente, como os testes do BigQuery já são:
 
 | serviço | serve a | variável |
 |---|---|---|
-| `postgres:17-alpine` | `from.Postgres`, `to.Postgres` | `BRAVIS_IT_PG_DSN` |
-| `mysql:8` | `from.MySQL`, `to.MySQL` | `BRAVIS_IT_MYSQL_DSN` |
-| `minio/minio` | `s3://` de `Files` e o staging do Redshift | `BRAVIS_IT_S3_ENDPOINT` |
+| `postgres:17-alpine` | `from.Postgres`, `to.Postgres` | `BREVIS_IT_PG_DSN` |
+| `mysql:8` | `from.MySQL`, `to.MySQL` | `BREVIS_IT_MYSQL_DSN` |
+| `minio/minio` | `s3://` de `Files` e o staging do Redshift | `BREVIS_IT_S3_ENDPOINT` |
 
 O compose já existe: `docker-compose.drivers.yml`, na raiz. O MinIO já é usado
 pelos testes do `Files`.
@@ -258,7 +258,7 @@ antes de dar por bom. Esta é a regra que mais achou defeito neste projeto.
 - [ ] exemplo executável que roda de primeira
 - [ ] `CHANGELOG` com o diff de migração por extenso
 - [ ] `go test ./... -race` verde, `golangci-lint run ./...` limpo
-- [ ] `cmd/bravis-sdk` continua compilando (módulo próprio, pin sobe depois da tag)
+- [ ] `cmd/brevis-sdk` continua compilando (módulo próprio, pin sobe depois da tag)
 
 ---
 

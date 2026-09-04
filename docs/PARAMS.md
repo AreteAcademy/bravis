@@ -24,8 +24,8 @@ steps:
 
 | onde | como |
 |---|---|
-| CLI local | `bravis run wf.yaml --param load_full=true` |
-| Backfill | `bravis backfill diario --from … --to … --param load_full=true` |
+| CLI local | `brevis run wf.yaml --param load_full=true` |
+| Backfill | `brevis backfill diario --from … --to … --param load_full=true` |
 | UI | formulário na página do workflow (aparece só se houver params) |
 | Cron | sempre os **padrões** — não há quem informe valores às 4 da manhã |
 
@@ -78,7 +78,7 @@ o código que executa. Só o comando é renderizado.
 
 ## Vindo do Kestra
 
-`bravis/bin/from-kestra.py` no repositório de dados traduz `inputs:` para
+`brevis/bin/from-kestra.py` no repositório de dados traduz `inputs:` para
 `params:` e `{{ inputs.x }}` para `{{ .x }}`, incluindo os condicionais
 (`x == true ? '--flag' : ''` vira `{{ if eq .x "true" }}`). Isso destravou 6 dos
 10 flows que antes não convertiam.

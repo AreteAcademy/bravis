@@ -61,7 +61,7 @@ legitimamente longas; quem conhece a task declara o limite.
 
 ## Tests
 
-`go test ./...` passa. Os de integração pulam sem `BRAVIS_TEST_DATABASE_URL`.
+`go test ./...` passa. Os de integração pulam sem `BREVIS_TEST_DATABASE_URL`.
 
 - **registry**: duplicado recusado, nome vazio recusado, `Nomes()` ordenado,
   `Input.Texto` valida ausência e tipo
@@ -87,10 +87,10 @@ carga — natural na PHASE 4, com o scheduler disparando volume real.
 - **Nenhuma task registrada de fábrica.** `docker.run` e `kubernetes.run` do
   YAML de exemplo continuam sem implementação; falham citando as disponíveis.
   São os itens 5 e 6 de `docs/gaps-yaml-vs-plano.md`.
-- **O `bravis run` usa registry vazio.** Tasks Go são registradas por quem compila
+- **O `brevis run` usa registry vazio.** Tasks Go são registradas por quem compila
   o binário; o CLI genérico não conhece nenhuma. Falta um ponto de extensão
-  documentado para quem embute o Bravis.
-- **Timeout e retry não vêm do YAML.** São flags de `bravis run`
+  documentado para quem embute o Brevis.
+- **Timeout e retry não vêm do YAML.** São flags de `brevis run`
   (`--timeout`, `--retries`), não campos por step — item 9 dos gaps.
 - **O runner não persiste nada.** Ele e o dispatcher da PHASE 2 ainda não se
   falam: `task_runs` segue sem ser populado.

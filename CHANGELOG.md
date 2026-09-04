@@ -1,10 +1,48 @@
 # Changelog
 
-Versões do SDK (`github.com/AreteAcademy/bravis/sdk`). O formato segue
+Versões do SDK (`github.com/AreteAcademy/brevis/sdk`). O formato segue
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), e as versões seguem
 [SemVer](https://semver.org/lang/pt-BR/).
 
 A tag de um módulo aninhado leva o prefixo do diretório: `sdk/v0.2.1`.
+
+---
+
+## [0.25.0] — 2026-09-04
+
+**BREAKING, e é a maior de todas: o projeto mudou de nome.** `bravis` → `brevis`,
+inclusive o caminho do módulo.
+
+```go
+// antes
+import "github.com/AreteAcademy/bravis/sdk"
+
+// depois
+import "github.com/AreteAcademy/brevis/sdk"
+```
+
+### O que muda no seu fetcher
+
+1. **Os imports**, os quatro: `sdk`, `sdk/from`, `sdk/to`, `sdk/to/bigquery`.
+2. **As variáveis de ambiente**, todas: `BRAVIS_*` → `BREVIS_*`. Não há
+   compatibilidade — uma variável ausente falha alto, e é assim de propósito.
+3. **O bucket de staging padrão** passou de `{projeto}-bravis-staging` para
+   `{projeto}-brevis-staging`. Crie o novo, ou passe `StagingBucket` explícito.
+
+O **`ingestion_id` não muda.** O namespace, a fórmula, a ordem dos campos e o
+separador continuam congelados — nenhum deles carrega o nome do projeto, e é
+por isso que uma carga anterior segue casando com uma nova.
+
+### As versões antigas continuam existindo
+`github.com/AreteAcademy/bravis/sdk` da `v0.1.0` à `v0.24.0` estão publicadas no
+proxy do Go **para sempre**, e continuam resolvendo. O caminho novo é um módulo
+novo, e recomeça aqui — na `v0.25.0`, e não na `v0.1.0`, porque o CHANGELOG é
+contínuo e a maturidade também.
+
+### O que não foi renomeado, de propósito
+O dataset `bravis_it` e o bucket `...-bravis-it` da suíte de integração são
+infraestrutura que existe. Só os **nomes das variáveis** mudaram; os valores
+apontam para os mesmos recursos.
 
 ---
 
@@ -208,7 +246,7 @@ está em [`docs/SDK_CONSUMIDOR.md`](docs/SDK_CONSUMIDOR.md).
 
   O BigQuery precisa de credencial e ainda não roda. O job já está escrito,
   liga sozinho quando o secret `GCP_CREDENTIALS` e as variáveis
-  `BRAVIS_IT_PROJECT`/`DATASET`/`BUCKET` existirem, e **avisa com
+  `BREVIS_IT_PROJECT`/`DATASET`/`BUCKET` existirem, e **avisa com
   `::warning::`** enquanto não existirem — em vez de passar verde em silêncio,
   que é exatamente como a lição aconteceu da primeira vez.
 
@@ -919,14 +957,14 @@ existiam desde a 0.2.1 e rodaram pela primeira vez.
 ## [0.10.1] — 2026-09-03
 
 ### Adicionado
-- O dispatcher liga no Runner: a engine passa `BRAVIS_RUN_*` ao processo do
+- O dispatcher liga no Runner: a engine passa `BREVIS_RUN_*` ao processo do
   passo, com o histórico decidindo se é a primeira execução bem-sucedida.
 
 ### Corrigido
 - `RunContext.Attempt` era documentado contando de 1; a engine conta de 0
   (`task_runs.attempt DEFAULT 0`).
-- `BRAVIS_RUN_ID` era injetado como UUID zero fora de um run de verdade. O SDK
-  detecta "sob a Bravis" pela presença do id, então um fetcher rodado à mão
+- `BREVIS_RUN_ID` era injetado como UUID zero fora de um run de verdade. O SDK
+  detecta "sob a Brevis" pela presença do id, então um fetcher rodado à mão
   logava um id falso. As variáveis de identidade só saem com `RunID` real.
 
 ---
@@ -1022,7 +1060,7 @@ existiam desde a 0.2.1 e rodaram pela primeira vez.
 
 ## [0.5.0] — 2026-09-02
 
-**BREAKING.** Os campos de metadado perderam o prefixo `_bravis_`.
+**BREAKING.** Os campos de metadado perderam o prefixo `_brevis_`.
 
 ---
 
@@ -1065,7 +1103,7 @@ Conserto do `load`, conforme [`docs/SDK_LOAD.md`](docs/SDK_LOAD.md).
   `ingestion_id` ter um dono único: usa `Envelope.IngestionID()`, a mesma
   função, e há teste que falha se as duas divergirem.
 - Teste de integração contra BigQuery real, travado em `-short` e em
-  `BRAVIS_IT_PROJECT`. É o único que prova que uma linha realmente entra.
+  `BREVIS_IT_PROJECT`. É o único que prova que uma linha realmente entra.
 
 ### Corrigido
 - **A estratégia inline era streaming insert, não lote.** `table.Inserter()` é
@@ -1130,7 +1168,7 @@ Primeira versão que compila.
 ### Corrigido
 - Imports não usados que impediam a compilação.
 - `gcsRef.Format` e `bigquery.NDJSON`, que não existem na API do BigQuery.
-- Import de `github.com/zarvhq/bravis/sdk` num teste, caminho que não existe.
+- Import de `github.com/zarvhq/brevis/sdk` num teste, caminho que não existe.
 - Cinco dependências indiretas fixadas em revisões inexistentes.
 
 ---
@@ -1145,35 +1183,35 @@ Primeira versão que compila.
 > versão de `proxy.golang.org`, então ela permanece publicada e quebrada para
 > sempre. Comece pela `v0.1.1`.
 
-[0.24.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.24.0
-[0.23.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.23.0
-[0.22.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.22.0
-[0.21.1]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.21.1
-[0.21.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.21.0
-[0.20.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.20.0
-[0.19.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.19.0
-[0.18.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.18.0
-[0.17.1]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.17.1
-[0.17.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.17.0
-[0.16.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.16.0
-[0.15.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.15.0
-[0.14.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.14.0
-[0.13.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.13.0
-[0.12.1]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.12.1
-[0.12.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.12.0
-[0.11.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.11.0
-[0.10.1]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.10.1
-[0.10.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.10.0
-[0.9.1]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.9.1
-[0.9.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.9.0
-[0.8.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.8.0
-[0.7.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.7.0
-[0.6.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.6.0
-[0.5.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.5.0
-[0.4.1]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.4.1
-[0.4.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.4.0
-[0.3.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.3.0
-[0.2.1]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.2.1
-[0.2.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.2.0
-[0.1.1]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.1.1
-[0.1.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.1.0
+[0.24.0]: https://github.com/AreteAcademy/brevis/releases/tag/sdk%2Fv0.24.0
+[0.23.0]: https://github.com/AreteAcademy/brevis/releases/tag/sdk%2Fv0.23.0
+[0.22.0]: https://github.com/AreteAcademy/brevis/releases/tag/sdk%2Fv0.22.0
+[0.21.1]: https://github.com/AreteAcademy/brevis/releases/tag/sdk%2Fv0.21.1
+[0.21.0]: https://github.com/AreteAcademy/brevis/releases/tag/sdk%2Fv0.21.0
+[0.20.0]: https://github.com/AreteAcademy/brevis/releases/tag/sdk%2Fv0.20.0
+[0.19.0]: https://github.com/AreteAcademy/brevis/releases/tag/sdk%2Fv0.19.0
+[0.18.0]: https://github.com/AreteAcademy/brevis/releases/tag/sdk%2Fv0.18.0
+[0.17.1]: https://github.com/AreteAcademy/brevis/releases/tag/sdk%2Fv0.17.1
+[0.17.0]: https://github.com/AreteAcademy/brevis/releases/tag/sdk%2Fv0.17.0
+[0.16.0]: https://github.com/AreteAcademy/brevis/releases/tag/sdk%2Fv0.16.0
+[0.15.0]: https://github.com/AreteAcademy/brevis/releases/tag/sdk%2Fv0.15.0
+[0.14.0]: https://github.com/AreteAcademy/brevis/releases/tag/sdk%2Fv0.14.0
+[0.13.0]: https://github.com/AreteAcademy/brevis/releases/tag/sdk%2Fv0.13.0
+[0.12.1]: https://github.com/AreteAcademy/brevis/releases/tag/sdk%2Fv0.12.1
+[0.12.0]: https://github.com/AreteAcademy/brevis/releases/tag/sdk%2Fv0.12.0
+[0.11.0]: https://github.com/AreteAcademy/brevis/releases/tag/sdk%2Fv0.11.0
+[0.10.1]: https://github.com/AreteAcademy/brevis/releases/tag/sdk%2Fv0.10.1
+[0.10.0]: https://github.com/AreteAcademy/brevis/releases/tag/sdk%2Fv0.10.0
+[0.9.1]: https://github.com/AreteAcademy/brevis/releases/tag/sdk%2Fv0.9.1
+[0.9.0]: https://github.com/AreteAcademy/brevis/releases/tag/sdk%2Fv0.9.0
+[0.8.0]: https://github.com/AreteAcademy/brevis/releases/tag/sdk%2Fv0.8.0
+[0.7.0]: https://github.com/AreteAcademy/brevis/releases/tag/sdk%2Fv0.7.0
+[0.6.0]: https://github.com/AreteAcademy/brevis/releases/tag/sdk%2Fv0.6.0
+[0.5.0]: https://github.com/AreteAcademy/brevis/releases/tag/sdk%2Fv0.5.0
+[0.4.1]: https://github.com/AreteAcademy/brevis/releases/tag/sdk%2Fv0.4.1
+[0.4.0]: https://github.com/AreteAcademy/brevis/releases/tag/sdk%2Fv0.4.0
+[0.3.0]: https://github.com/AreteAcademy/brevis/releases/tag/sdk%2Fv0.3.0
+[0.2.1]: https://github.com/AreteAcademy/brevis/releases/tag/sdk%2Fv0.2.1
+[0.2.0]: https://github.com/AreteAcademy/brevis/releases/tag/sdk%2Fv0.2.0
+[0.1.1]: https://github.com/AreteAcademy/brevis/releases/tag/sdk%2Fv0.1.1
+[0.1.0]: https://github.com/AreteAcademy/brevis/releases/tag/sdk%2Fv0.1.0

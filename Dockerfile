@@ -25,7 +25,7 @@ RUN test -f web/assets/app.css || { echo "web/assets/app.css ausente — rode 'm
 RUN test -f web/assets/fonts/inter-latin.woff2 || { echo "web/assets/fonts ausente"; exit 1; }
 RUN test -f web/assets/vendor/xyflow.js || { echo "web/assets/vendor ausente"; exit 1; }
 
-# Versao carimbada no binario. `bravis version` dentro do container e a unica
+# Versao carimbada no binario. `brevis version` dentro do container e a unica
 # forma confiavel de saber o que esta rodando quando a tag da imagem foi movida.
 ARG VERSAO=dev
 ARG COMMIT=""
@@ -42,7 +42,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -trimpath \
       -ldflags="-s -w -X main.Versao=${VERSAO} -X main.Commit=${COMMIT} -X main.Data=${DATA}" \
-      -o /out/bravis ./cmd/bravis
+      -o /out/brevis ./cmd/brevis
 
 # Duas imagens do MESMO binario, porque os dois papeis tem exigencias opostas.
 #
@@ -51,16 +51,16 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 FROM gcr.io/distroless/static-debian12:nonroot AS api
 ARG VERSAO=dev
 ARG COMMIT=""
-LABEL org.opencontainers.image.title="Bravis" \
+LABEL org.opencontainers.image.title="Brevis" \
       org.opencontainers.image.description="Engine de orquestracao e transformacao de dados" \
-      org.opencontainers.image.source="https://github.com/AreteAcademy/bravis" \
+      org.opencontainers.image.source="https://github.com/AreteAcademy/brevis" \
       org.opencontainers.image.version="${VERSAO}" \
       org.opencontainers.image.revision="${COMMIT}" \
       org.opencontainers.image.licenses="Apache-2.0"
-COPY --from=build /out/bravis /usr/local/bin/bravis
+COPY --from=build /out/brevis /usr/local/bin/brevis
 USER nonroot:nonroot
 EXPOSE 8080
-ENTRYPOINT ["bravis"]
+ENTRYPOINT ["brevis"]
 CMD ["serve"]
 
 # `worker` roda os passos `run:` dos workflows — e isso EXIGE um shell. Rodar o
@@ -69,14 +69,14 @@ CMD ["serve"]
 FROM alpine:3.20 AS worker
 ARG VERSAO=dev
 ARG COMMIT=""
-LABEL org.opencontainers.image.title="Bravis worker" \
-      org.opencontainers.image.description="Bravis com shell, para executar os passos dos workflows" \
-      org.opencontainers.image.source="https://github.com/AreteAcademy/bravis" \
+LABEL org.opencontainers.image.title="Brevis worker" \
+      org.opencontainers.image.description="Brevis com shell, para executar os passos dos workflows" \
+      org.opencontainers.image.source="https://github.com/AreteAcademy/brevis" \
       org.opencontainers.image.version="${VERSAO}" \
       org.opencontainers.image.revision="${COMMIT}"
 RUN apk add --no-cache ca-certificates tini
-COPY --from=build /out/bravis /usr/local/bin/bravis
-RUN adduser -D -u 65532 bravis
-USER bravis
-ENTRYPOINT ["/sbin/tini", "--", "bravis"]
+COPY --from=build /out/brevis /usr/local/bin/brevis
+RUN adduser -D -u 65532 brevis
+USER brevis
+ENTRYPOINT ["/sbin/tini", "--", "brevis"]
 CMD ["scheduler"]

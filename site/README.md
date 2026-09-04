@@ -1,4 +1,4 @@
-# Landing page do Bravis
+# Landing page do Brevis
 
 HTML, CSS e JS estáticos. Sem build, sem dependência, sem `node_modules` —
 o que está no diretório é o que vai para o ar.
@@ -53,7 +53,7 @@ um fundo único, em vez de dois esquemas para manter em paralelo.
 
 Três estados: `data-theme="light"`, `data-theme="dark"` e nenhum dos dois —
 que segue o `prefers-color-scheme` do sistema. A escolha do visitante vai para
-`localStorage` (`bravis-theme`) e é reaplicada por um script no `<head>`, antes
+`localStorage` (`brevis-theme`) e é reaplicada por um script no `<head>`, antes
 da primeira pintura; sem ele, quem escolheu o escuro vê o pergaminho por um
 frame a cada carregamento.
 
@@ -92,7 +92,7 @@ imagem no push.
 
 ```bash
 vercel .                       # ou: netlify deploy --dir=.
-docker build -t bravis-site .  # o que a CI faz
+docker build -t brevis-site .  # o que a CI faz
 ```
 
 ## Analytics
@@ -100,5 +100,5 @@ docker build -t bravis-site .  # o que a CI faz
 Não há nenhum. Para adicionar, uma linha antes de `</body>`:
 
 ```html
-<script defer data-domain="bravis.sh" src="https://plausible.io/js/script.js"></script>
+<script defer data-domain="brevis.sh" src="https://plausible.io/js/script.js"></script>
 ```

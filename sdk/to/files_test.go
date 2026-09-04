@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	core "github.com/AreteAcademy/bravis/sdk/internal/core"
+	core "github.com/AreteAcademy/brevis/sdk/internal/core"
 )
 
 func lote(n int) []core.Envelope {
@@ -182,7 +182,7 @@ func TestFilesNaoDeixaTemporario(t *testing.T) {
 	}
 	entradas, _ := os.ReadDir(dir)
 	for _, e := range entradas {
-		if strings.HasPrefix(e.Name(), ".bravis-") {
+		if strings.HasPrefix(e.Name(), ".brevis-") {
 			t.Errorf("sobrou um temporário: %s", e.Name())
 		}
 	}

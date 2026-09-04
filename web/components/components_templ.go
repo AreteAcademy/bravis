@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/AreteAcademy/bravis/internal/infrastructure/postgres"
+	"github.com/AreteAcademy/brevis/internal/infrastructure/postgres"
 )
 
 // Estado desenha o estado de um Run.
@@ -567,7 +567,7 @@ func Execucoes(baldes []postgres.Balde) templ.Component {
 		}
 		ctx = templ.ClearChildren(ctx)
 		if len(baldes) == 0 {
-			templ_7745c5c3_Err = Vazio("Sem execuções na janela.", "bravis scheduler").Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = Vazio("Sem execuções na janela.", "brevis scheduler").Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

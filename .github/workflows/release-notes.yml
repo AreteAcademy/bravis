@@ -49,14 +49,14 @@ jobs:
 
             ## Installation
             ```bash
-            go get github.com/AreteAcademy/bravis/sdk@${{ steps.version.outputs.version }}
+            go get github.com/AreteAcademy/brevis/sdk@${{ steps.version.outputs.version }}
             ```
 
             ## Documentation
-            - [SDK Reference](https://pkg.go.dev/github.com/AreteAcademy/bravis/sdk@${{ steps.version.outputs.version }})
-            - [Extract Package](https://pkg.go.dev/github.com/AreteAcademy/bravis/sdk/extract@${{ steps.version.outputs.version }})
-            - [Load Package](https://pkg.go.dev/github.com/AreteAcademy/bravis/sdk/load@${{ steps.version.outputs.version }})
-            - [Examples](https://github.com/AreteAcademy/bravis/tree/main/examples)
+            - [SDK Reference](https://pkg.go.dev/github.com/AreteAcademy/brevis/sdk@${{ steps.version.outputs.version }})
+            - [Extract Package](https://pkg.go.dev/github.com/AreteAcademy/brevis/sdk/extract@${{ steps.version.outputs.version }})
+            - [Load Package](https://pkg.go.dev/github.com/AreteAcademy/brevis/sdk/load@${{ steps.version.outputs.version }})
+            - [Examples](https://github.com/AreteAcademy/brevis/tree/main/examples)
 
             ## Recent Changes
             ```
@@ -65,7 +65,7 @@ jobs:
 
             ## Testing
             ```bash
-            go test github.com/AreteAcademy/bravis/sdk/...@${{ steps.version.outputs.version }}
+            go test github.com/AreteAcademy/brevis/sdk/...@${{ steps.version.outputs.version }}
             ```
 
             ## Features
@@ -73,9 +73,9 @@ jobs:
             - 📥 Load: BigQuery writer with automatic strategy selection
             - 🔐 Idempotency: Deterministic UUID v5 ingestion IDs
             - 🎯 Flexible: You define the schema (no opinions)
-            - 📊 Optional metadata: _bravis_* fields for tracking
+            - 📊 Optional metadata: _brevis_* fields for tracking
 
             ---
-            **Powered by [Bravis](https://github.com/AreteAcademy/bravis)**
+            **Powered by [Brevis](https://github.com/AreteAcademy/brevis)**
           draft: false
           prerelease: false

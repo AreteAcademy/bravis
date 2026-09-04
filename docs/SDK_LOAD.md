@@ -13,7 +13,7 @@
 > na `v0.2.1`. Ver [`CHANGELOG.md`](../CHANGELOG.md).
 >
 > Fica em aberto: a issue de CSV/Parquet (item 3) não foi aberta, e o teste de
-> integração nunca rodou — precisa de `BRAVIS_IT_PROJECT` apontando para um
+> integração nunca rodou — precisa de `BREVIS_IT_PROJECT` apontando para um
 > projeto GCP real. Enquanto não rodar, os caminhos que falam de fato com o
 > BigQuery seguem sem prova, que é exatamente o argumento do item 8.7.
 >
@@ -37,7 +37,7 @@ O que a `v0.1.1` consertou em relação à `v0.1.0`, conferido item por item:
 |---|---|
 | Não compilava — 4 imports não usados | **resolvido**, binário gera |
 | `gcsRef.Format` / `bigquery.NDJSON` inexistentes | removidos |
-| Teste importava `github.com/zarvhq/bravis/sdk` | nenhuma ocorrência |
+| Teste importava `github.com/zarvhq/brevis/sdk` | nenhuma ocorrência |
 | 5 versões indiretas em revisões inexistentes | **`go mod tidy` de consumidor passa** |
 
 E o contrato de idempotência continua correto — `IngestionID()` foi conferido
@@ -182,11 +182,11 @@ texto ausente.
 mesclados **para dentro** do payload com chaves prefixadas:
 
 ```go
-"_bravis_ingestion_id", "_bravis_ingestion_loaded_at",
-"_bravis_provider", "_bravis_entity", "_bravis_source_key", "_bravis_record_ts"
+"_brevis_ingestion_id", "_brevis_ingestion_loaded_at",
+"_brevis_provider", "_brevis_entity", "_brevis_source_key", "_brevis_record_ts"
 ```
 
-O resultado é um objeto plano com `_bravis_*` misturado ao dado da fonte — não as
+O resultado é um objeto plano com `_brevis_*` misturado ao dado da fonte — não as
 colunas de primeiro nível `ingestion_id`, `ingestion_loaded_at`, `provider`,
 `entity`, `source_key`, `payload` que o consumidor `zarv-data-pipeline` lê no
 `metadata_vendor()` do dbt.
@@ -233,7 +233,7 @@ Implementado e funcionando, conferido: `Guard`, `Timeout` por tentativa,
 
 Ela diz "pkg.go.dev exige repositório público — e hoje não existe" e trata a
 publicação como bloqueio. O módulo **está publicado** em
-`github.com/AreteAcademy/bravis/sdk`, com `v0.1.0` e `v0.1.1` no proxy. Reescreva
+`github.com/AreteAcademy/brevis/sdk`, com `v0.1.0` e `v0.1.1` no proxy. Reescreva
 como registro do que foi feito, mantendo a armadilha da tag com prefixo de
 diretório — ela continua valendo para as próximas versões.
 

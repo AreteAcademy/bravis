@@ -1,4 +1,4 @@
-# Bravis SDK
+# Brevis SDK
 
 High-performance data extraction and loading library for Go.
 
@@ -7,7 +7,7 @@ Extract HTTP data with retry, timeout, and format handling. Load to BigQuery wit
 ## Installation
 
 ```bash
-go get github.com/AreteAcademy/bravis/sdk@latest
+go get github.com/AreteAcademy/brevis/sdk@latest
 go mod tidy
 ```
 
@@ -21,9 +21,9 @@ Requires Go 1.23 or newer (the SDK streams rows as `iter.Seq2`).
 
 ```go
 import (
-	"github.com/AreteAcademy/bravis/sdk"
-	"github.com/AreteAcademy/bravis/sdk/from"
-	"github.com/AreteAcademy/bravis/sdk/to/bigquery"
+	"github.com/AreteAcademy/brevis/sdk"
+	"github.com/AreteAcademy/brevis/sdk/from"
+	"github.com/AreteAcademy/brevis/sdk/to/bigquery"
 )
 
 dados, err := sdk.Extract(ctx, sdk.Source{
@@ -242,9 +242,9 @@ SDK default, then an error when there is no sensible default.
 | variable | default |
 |---|---|
 | `GOOGLE_PROJECT_ID` | — (error) |
-| `BRAVIS_SDK_DATASET` | `landing` |
-| `BRAVIS_SDK_STAGING_BUCKET` | `<projeto>-bravis-staging` |
-| `BRAVIS_SDK_LOG_LEVEL` | `info` |
+| `BREVIS_SDK_DATASET` | `landing` |
+| `BREVIS_SDK_STAGING_BUCKET` | `<projeto>-brevis-staging` |
+| `BREVIS_SDK_LOG_LEVEL` | `info` |
 
 Every run logs where each value came from — `projeto=x (de GOOGLE_PROJECT_ID)`.
 Reading the environment silently is how a job works on your machine and writes
@@ -290,8 +290,8 @@ import (
 	"context"
 	"log"
 
-	"github.com/AreteAcademy/bravis/sdk"
-	"github.com/AreteAcademy/bravis/sdk/extract"
+	"github.com/AreteAcademy/brevis/sdk"
+	"github.com/AreteAcademy/brevis/sdk/extract"
 )
 
 func main() {
@@ -322,8 +322,8 @@ package main
 import (
 	"context"
 	"log"
-	"github.com/AreteAcademy/bravis/sdk"
-	"github.com/AreteAcademy/bravis/sdk/load"
+	"github.com/AreteAcademy/brevis/sdk"
+	"github.com/AreteAcademy/brevis/sdk/load"
 )
 
 func main() {
@@ -746,10 +746,10 @@ Target: sdk.Target{..., Columns: []string{"ingestion_loaded_at", ...}},
 
 See [`examples/07-own-shape`](../examples/07-own-shape/).
 
-## Running inside Bravis
+## Running inside Brevis
 
 A fetcher does not change to run under the engine. The engine injects
-`BRAVIS_RUN_*` into the step, `sdk.Run` picks it up, and `Pipeline.Run` holds
+`BREVIS_RUN_*` into the step, `sdk.Run` picks it up, and `Pipeline.Run` holds
 what is useful:
 
 | what | from |
@@ -789,7 +789,7 @@ sdk.Target{
 
 Three states, because two are not enough:
 
-| `CreateTable` | outside Bravis | inside Bravis |
+| `CreateTable` | outside Brevis | inside Brevis |
 |---|---|---|
 | `nil` | nothing created | created on the step's first run, or when dispatched with `create_table=true` |
 | `sdk.Bool(true)` | created | created |

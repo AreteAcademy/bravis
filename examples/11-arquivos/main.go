@@ -20,13 +20,13 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/AreteAcademy/bravis/sdk"
-	"github.com/AreteAcademy/bravis/sdk/from"
-	"github.com/AreteAcademy/bravis/sdk/to"
+	"github.com/AreteAcademy/brevis/sdk"
+	"github.com/AreteAcademy/brevis/sdk/from"
+	"github.com/AreteAcademy/brevis/sdk/to"
 )
 
 func main() {
-	dir, err := os.MkdirTemp("", "bravis-arquivos-*")
+	dir, err := os.MkdirTemp("", "brevis-arquivos-*")
 	if err != nil {
 		log.Fatal(err)
 	}

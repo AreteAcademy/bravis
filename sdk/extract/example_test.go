@@ -6,8 +6,8 @@ import (
 	"log"
 	"time"
 
-	"github.com/AreteAcademy/bravis/sdk/extract"
-	core "github.com/AreteAcademy/bravis/sdk/internal/core"
+	"github.com/AreteAcademy/brevis/sdk/extract"
+	core "github.com/AreteAcademy/brevis/sdk/internal/core"
 )
 
 // These compile as part of `go test`, so the snippets on pkg.go.dev cannot

@@ -74,7 +74,7 @@ inválido, não falha do servidor — e a mensagem precisa dizer isso na tela.
 **`task_runs` era escrito por ninguém desde a PHASE 2.** A tabela existia no
 schema, o retry era por Run inteiro e não havia estado por passo. "Execution
 States" depende exatamente disso, então o `Runner` ganhou `Persist`/`RunID`
-opcionais — opcionais porque `bravis run` local não tem banco, e exigir um
+opcionais — opcionais porque `brevis run` local não tem banco, e exigir um
 tornaria a execução ad-hoc dependente de infraestrutura.
 
 **O exit code se perdia dentro da mensagem de erro.** `tentar()` colapsava o
@@ -297,7 +297,7 @@ Esgotadas as tentativas, ele para em `failed` em vez de circular.
 **Efeito colateral descoberto na hora:** com um scheduler de verdade rodando, os
 testes de integração passaram a competir com ele pela fila — o critério de aceite
 da PHASE 2 falhou com `queued: 87` em vez de 95, sem nada estar errado. `make
-test-int` agora usa um banco próprio (`bravis_test`), criado e migrado por
+test-int` agora usa um banco próprio (`brevis_test`), criado e migrado por
 `make test-db`.
 
 ### 3. Erro em diálogo, não em linha extra
@@ -410,12 +410,12 @@ escreve progresso em stderr.
 ## Marca branca — identidade por configuração (2026-09-01)
 
 Título, subtítulo, frase e paleta saem de um YAML. O objetivo é o produto: cada
-cliente com a própria cara, **exceto** a linha "Powered by Bravis".
+cliente com a própria cara, **exceto** a linha "Powered by Brevis".
 
 ### Onde fica
 
 `brand.example.yaml` na raiz é o modelo; copie para `brand.yaml` (ignorado pelo
-git — é do cliente, não do repositório) ou aponte `BRAVIS_BRAND_FILE`.
+git — é do cliente, não do repositório) ou aponte `BREVIS_BRAND_FILE`.
 
 YAML e não banco, painel ou vinte variáveis de ambiente: workflows já são YAML, e
 um segundo mecanismo de configuração seria um jeito novo de fazer a mesma coisa.
@@ -485,7 +485,7 @@ arquivo não muda nada.
 
 Um tema escuro completo (`Acme Dados`, azul-petróleo) aplicado por arquivo,
 conferido em Overview e na tela da DAG: cartões, gráficos, rosca, nós, arestas e
-controles do grafo — todos seguiram, com "POWERED BY BRAVIS" no rodapé. O tema
+controles do grafo — todos seguiram, com "POWERED BY BREVIS" no rodapé. O tema
 padrão, no mesmo binário, continua idêntico e sem `<style>` extra.
 
 Nove testes em `internal/branding`.
@@ -499,22 +499,22 @@ Relato: `dbt` falhando com `Env var required but not provided: 'GOOGLE_PROJECT_I
 mesmo com a variável no `.env` e no ambiente do container do scheduler.
 
 Causa: **a task não herda o ambiente do orquestrador** — e isso é deliberado. O
-processo do Bravis carrega `BRAVIS_DATABASE_URL` com usuário e senha do Postgres,
+processo do Brevis carrega `BREVIS_DATABASE_URL` com usuário e senha do Postgres,
 e um workflow é um comando arbitrário escrito por outra pessoa; herdar por padrão
 entregaria a credencial do banco a todo passo de todo pipeline. O executor local
 passava apenas `PATH` e `HOME`.
 
 O que faltava era o mecanismo de declarar o que a task precisa. Em Kubernetes ele
-já existia (`BRAVIS_POD_ENV_FROM_SECRETS` → `envFrom.secretRef`, sem passar pelo
+já existia (`BREVIS_POD_ENV_FROM_SECRETS` → `envFrom.secretRef`, sem passar pelo
 scheduler); no modo local, não havia equivalente.
 
-`BRAVIS_TASK_ENV` preenche a lacuna:
+`BREVIS_TASK_ENV` preenche a lacuna:
 
 | forma | efeito |
 |---|---|
 | `GOOGLE_PROJECT_ID,STAGE` | repassa essas do ambiente do processo |
 | `STAGE=prod` | define um literal |
-| `*` | repassa tudo **menos** as `BRAVIS_*` |
+| `*` | repassa tudo **menos** as `BREVIS_*` |
 
 A exceção do curinga é o ponto: a configuração do orquestrador nunca é trabalho
 da task. Variável nomeada mas ausente **não vira string vazia** —
@@ -539,6 +539,6 @@ Parsing Error
 Env var required but not provided: GOOGLE_PROJECT_ID
 ```
 
-Publicado em `daniel3843/bravis:0.1.1` (variáveis) e `:0.1.2` (stdout na falha).
-Confirmado ponta a ponta: `bravis_smoke` roda `dbt debug` contra o BigQuery de
+Publicado em `daniel3843/brevis:0.1.1` (variáveis) e `:0.1.2` (stdout na falha).
+Confirmado ponta a ponta: `brevis_smoke` roda `dbt debug` contra o BigQuery de
 dev e termina com `All checks passed!` em 8 segundos.

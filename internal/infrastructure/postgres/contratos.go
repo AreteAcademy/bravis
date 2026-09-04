@@ -1,7 +1,7 @@
 package postgres
 
 import (
-	app "github.com/AreteAcademy/bravis/internal/application/execution"
+	app "github.com/AreteAcademy/brevis/internal/application/execution"
 )
 
 // O que o runner espera deste repositorio, checado em tempo de compilacao.

@@ -23,7 +23,7 @@
 >   PASS  TestIntegrationMergeIntoADifferentColumnOrder  (item 2, novo)
 >   PASS  TestIntegrationFirstMergeLoadStillPartitions   (a costura da v0.11.0)
 >   PASS  TestIntegrationInlineStrategy / CreatesTableFromData / RefusesMissingTableUnasked
->   SKIP  TestIntegrationGCSStrategy                     (BRAVIS_IT_BUCKET ausente)
+>   SKIP  TestIntegrationGCSStrategy                     (BREVIS_IT_BUCKET ausente)
 > ```
 >
 > O item 1 foi resolvido por um caminho **diferente** do que a spec propôs, e
@@ -130,7 +130,7 @@ não cobre o terceiro.
 `CreateTable` passou de `bool` para `*bool` tri-estado, e com `nil` — que é o
 valor de quem **não escreveu o campo** — a decisão passa para o engine:
 
-> `nil` you did not say. Inside Bravis the engine decides: it creates on the
+> `nil` you did not say. Inside Brevis the engine decides: it creates on the
 > step's first successful run, or when the run was dispatched with
 > `create_table=true`.
 
@@ -152,7 +152,7 @@ ele amplia o alcance de um caminho que não cria a tabela.
 > `Dedup(DedupMerge)`. O teste **existe e cobre o defeito**.
 >
 > Ele nunca rodou. `requireIntegration` (`integration_test.go:35`) pula sem
-> `BRAVIS_IT_PROJECT`, e essa variável não está definida em lugar nenhum
+> `BREVIS_IT_PROJECT`, e essa variável não está definida em lugar nenhum
 > automatizado — é a mesma pendência que registrei no cabeçalho do
 > [`SDK_LOAD.md`](SDK_LOAD.md) em 2026-09-02.
 >
@@ -164,7 +164,7 @@ ele amplia o alcance de um caminho que não cria a tabela.
 Rodar o que já existe:
 
 ```bash
-export BRAVIS_IT_PROJECT=<projeto-gcp>
+export BREVIS_IT_PROJECT=<projeto-gcp>
 go test ./sdk/load/ -run TestIntegrationMergeDoesNotDouble -v
 ```
 

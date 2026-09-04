@@ -1,4 +1,4 @@
-# ILUSTRATIVO: `kubernetes.run` e `bravis run --select` ainda nao existem, entao
+# ILUSTRATIVO: `kubernetes.run` e `brevis run --select` ainda nao existem, entao
 # este arquivo mostra o FORMATO, nao um workflow executavel. O que roda de
 # verdade e `examples/hello.yaml`.
 #
@@ -15,15 +15,15 @@ steps:
       image: company/ingestion:latest
 
   - id: transform_silver
-    run: bravis run --select silver.*
+    run: brevis run --select silver.*
     depends_on: [ingest_users]
 
   - id: gold_metrics
-    run: bravis run --select gold.metrics
+    run: brevis run --select gold.metrics
     depends_on: [transform_silver]
 
   - id: gold_users
-    run: bravis run --select gold.users
+    run: brevis run --select gold.users
     depends_on: [transform_silver]
 
   - id: publish

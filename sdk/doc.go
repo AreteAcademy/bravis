@@ -1,4 +1,4 @@
-// Package bravis/sdk provides high-performance data extraction and loading to BigQuery.
+// Package brevis/sdk provides high-performance data extraction and loading to BigQuery.
 //
 // # Extract
 //
@@ -18,5 +18,5 @@
 //
 // # Module path
 //
-// Published at github.com/AreteAcademy/bravis/sdk
+// Published at github.com/AreteAcademy/brevis/sdk
 package sdk

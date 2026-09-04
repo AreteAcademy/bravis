@@ -5,14 +5,14 @@
 # ConfigMap com os YAMLs, e um Job que os aplica. Publicar um workflow novo e
 # atualizar o ConfigMap e rodar o Job de novo — nao ha build por DAG.
 #
-#   kubectl -n dados create configmap bravis-workflows \
-#     --from-file=bravis/workflows/ --dry-run=client -o yaml | kubectl apply -f -
-#   kubectl -n dados delete job bravis-publish --ignore-not-found
+#   kubectl -n dados create configmap brevis-workflows \
+#     --from-file=brevis/workflows/ --dry-run=client -o yaml | kubectl apply -f -
+#   kubectl -n dados delete job brevis-publish --ignore-not-found
 #   kubectl apply -f deployments/kubernetes/publish-job.yaml
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: bravis-publish
+  name: brevis-publish
   namespace: dados
 spec:
   # O Job nao repete sozinho: publicar e idempotente, mas um erro aqui e de
@@ -29,14 +29,14 @@ spec:
         seccompProfile: {type: RuntimeDefault}
       containers:
         - name: publish
-          image: daniel3843/bravis:0.2.1-worker
+          image: daniel3843/brevis:0.2.1-worker
           # `--prune` torna a pasta a fonte da verdade: workflow que sai do
           # ConfigMap sai do banco, junto com a agenda. Sem ele, remover um YAML
           # deixaria a agenda dele criando runs para sempre.
           args: ["publish", "/workflows", "--project", "zarv", "--prune"]
           env:
-            - name: BRAVIS_DATABASE_URL
-              valueFrom: {secretKeyRef: {name: bravis-db, key: url}}
+            - name: BREVIS_DATABASE_URL
+              valueFrom: {secretKeyRef: {name: brevis-db, key: url}}
           volumeMounts:
             - {name: workflows, mountPath: /workflows, readOnly: true}
           resources:
@@ -48,4 +48,4 @@ spec:
             capabilities: {drop: ["ALL"]}
       volumes:
         - name: workflows
-          configMap: {name: bravis-workflows}
+          configMap: {name: brevis-workflows}

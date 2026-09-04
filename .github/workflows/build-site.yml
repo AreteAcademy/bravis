@@ -49,7 +49,7 @@ jobs:
       - name: Validate Docker build
         run: |
           cd site
-          docker build -t bravis-site:ci .
+          docker build -t brevis-site:ci .
           echo "✅ Docker build validation passed"
 
   lighthouse:
@@ -112,12 +112,12 @@ jobs:
           context: ./site
           push: true
           tags: |
-            ${{ secrets.DOCKER_USERNAME }}/bravis-site:latest
-            ${{ secrets.DOCKER_USERNAME }}/bravis-site:${{ github.sha }}
+            ${{ secrets.DOCKER_USERNAME }}/brevis-site:latest
+            ${{ secrets.DOCKER_USERNAME }}/brevis-site:${{ github.sha }}
 
       - name: Build only (no credentials configured)
         if: env.DOCKER_USERNAME == ''
         run: |
           cd site
-          docker build -t bravis-site:test .
+          docker build -t brevis-site:test .
           echo "✅ Docker build successful (DOCKER_USERNAME secret not set; skipping push)"

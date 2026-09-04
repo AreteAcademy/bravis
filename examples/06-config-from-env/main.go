@@ -9,8 +9,8 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/AreteAcademy/bravis/sdk"
-	"github.com/AreteAcademy/bravis/sdk/load"
+	"github.com/AreteAcademy/brevis/sdk"
+	"github.com/AreteAcademy/brevis/sdk/load"
 )
 
 func env(key, fallback string) string {
@@ -29,27 +29,27 @@ func envInt(key string, fallback int) int {
 }
 
 func main() {
-	project := os.Getenv("BRAVIS_PROJECT")
+	project := os.Getenv("BREVIS_PROJECT")
 	if project == "" {
-		log.Fatal("BRAVIS_PROJECT is required")
+		log.Fatal("BREVIS_PROJECT is required")
 	}
 
 	ctx := context.Background()
 
 	loader, err := load.New(ctx, nil,
 		sdk.WithProjectID(project),
-		sdk.WithDataset(env("BRAVIS_DATASET", "landing")),
-		sdk.WithTable(env("BRAVIS_TABLE", "raw_data")),
-		sdk.WithStagingBucket(env("BRAVIS_STAGING_BUCKET", project+"-bravis-staging")),
-		sdk.WithThresholdForGCS(envInt("BRAVIS_GCS_THRESHOLD", 5000)),
+		sdk.WithDataset(env("BREVIS_DATASET", "landing")),
+		sdk.WithTable(env("BREVIS_TABLE", "raw_data")),
+		sdk.WithStagingBucket(env("BREVIS_STAGING_BUCKET", project+"-brevis-staging")),
+		sdk.WithThresholdForGCS(envInt("BREVIS_GCS_THRESHOLD", 5000)),
 	)
 	if err != nil {
 		log.Fatalf("loader: %v", err)
 	}
 
 	result, err := loader.Load(ctx, sdk.Envelope{
-		Provider:  env("BRAVIS_PROVIDER", "example_api"),
-		Entity:    env("BRAVIS_ENTITY", "transactions"),
+		Provider:  env("BREVIS_PROVIDER", "example_api"),
+		Entity:    env("BREVIS_ENTITY", "transactions"),
 		SourceKey: "tx-1",
 		RecordTS:  "2026-01-01T00:00:00Z",
 		Payload:   map[string]any{"amount": 10},

@@ -49,7 +49,7 @@ falta, e `name` tem precedência quando existe.
 A §5 exige validar IDs duplicados, ciclos, dependências ausentes e configuração
 inválida antes de salvar. Implementado, e o erro de ciclo **mostra o caminho**
 (`a -> b -> c -> a`) em vez de só dizer que existe. Disponível sem banco via
-`bravis validate`, para rodar no editor ou na CI.
+`brevis validate`, para rodar no editor ou na CI.
 
 ---
 
@@ -60,7 +60,7 @@ inválida antes de salvar. Implementado, e o erro de ciclo **mostra o caminho**
 A §3 diz:
 
 > OUTRAS LINGUAGENS → KUBERNETES OBRIGATÓRIO
-> O Bravis nunca deve tentar executar arbitrariamente código de outras linguagens
+> O Brevis nunca deve tentar executar arbitrariamente código de outras linguagens
 > diretamente dentro do processo principal.
 
 E a §14:
@@ -90,7 +90,7 @@ reescrita, não ignorada em silêncio.
 
 **Recomendação: B, com a §3 emendada e o executor recusando-se a operar fora do
 modo local.** O risco real não é o `run:` em si — é ele existir sem fronteira
-declarada. Um `ProcessExecutor` que só aceita registro quando `BRAVIS_ENV=local`
+declarada. Um `ProcessExecutor` que só aceita registro quando `BREVIS_ENV=local`
 torna a fronteira código, não convenção.
 
 ### 5. `action: docker.run` — um terceiro executor
@@ -127,7 +127,7 @@ agendas, o formato muda.
 ### 8. Sem `project`
 
 A §4 define Project → Workflow → Run, e o schema tem `projects`. O YAML não
-menciona projeto. Precisa definir: vem do diretório? De um `bravis.yaml` na
+menciona projeto. Precisa definir: vem do diretório? De um `brevis.yaml` na
 raiz? De um flag na publicação?
 
 ### 9. Campos operacionais ausentes
@@ -151,7 +151,7 @@ arquivo alteraria o significado de execuções passadas.
 |---|---|---|
 | 1 | `chain` vs DAG | resolvido (açúcar → arestas) |
 | 2 | nome do workflow | resolvido (arquivo ou `name`) |
-| 3 | validação | resolvido (`bravis validate`) |
+| 3 | validação | resolvido (`brevis validate`) |
 | 4 | **`run:` vs §3/§14** | **decisão — recomendo executor de processo restrito ao local** |
 | 5 | `docker.run` e portabilidade | decisão |
 | 6 | ações tipadas | decisão |

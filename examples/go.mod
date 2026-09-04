@@ -1,8 +1,8 @@
-module github.com/AreteAcademy/bravis/examples
+module github.com/AreteAcademy/brevis/examples
 
 go 1.24
 
-require github.com/AreteAcademy/bravis/sdk v0.10.0
+require github.com/AreteAcademy/brevis/sdk v0.10.0
 
 require (
 	cloud.google.com/go v0.110.0 // indirect
@@ -50,4 +50,4 @@ require (
 
 // Examples are a gate on the working tree, not a consumer of the release:
 // CI builds them against ../sdk so a breaking change shows up here first.
-replace github.com/AreteAcademy/bravis/sdk => ../sdk
+replace github.com/AreteAcademy/brevis/sdk => ../sdk

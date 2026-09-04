@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	core "github.com/AreteAcademy/bravis/sdk/internal/core"
+	core "github.com/AreteAcademy/brevis/sdk/internal/core"
 )
 
 // O from.HTTP é um adaptador: ele copia os seus campos para a core.Source que
@@ -44,7 +44,7 @@ func TestHTTPPassaTodosOsCamposAdiante(t *testing.T) {
 		URL:          srv.URL + "/v1/eventos",
 		Method:       http.MethodPost,
 		Body:         strings.NewReader(`{"q":1}`),
-		Header:       map[string][]string{"X-Cliente": {"bravis"}},
+		Header:       map[string][]string{"X-Cliente": {"brevis"}},
 		Timeout:      5 * time.Second,
 		TotalTimeout: time.Minute,
 		Format:       core.FormatJSON,
@@ -71,7 +71,7 @@ func TestHTTPPassaTodosOsCamposAdiante(t *testing.T) {
 	if corpo != `{"q":1}` {
 		t.Errorf("Body não chegou: %q", corpo)
 	}
-	if header != "bravis" {
+	if header != "brevis" {
 		t.Errorf("Header não chegou: %q", header)
 	}
 	if caminho != "/v1/eventos" {

@@ -1,7 +1,7 @@
 # Serviços para os testes de integração dos drivers.
 #
 #   docker compose -f docker-compose.drivers.yml up -d
-#   BRAVIS_IT_S3_ENDPOINT=http://localhost:9000 go test ./sdk/... -run Integration
+#   BREVIS_IT_S3_ENDPOINT=http://localhost:9000 go test ./sdk/... -run Integration
 #
 # Travados por variável de ambiente, como os do BigQuery: sem a variável, os
 # testes pulam, e a suíte normal segue offline.
@@ -10,8 +10,8 @@ services:
     image: minio/minio:latest
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: bravis
-      MINIO_ROOT_PASSWORD: bravis-secret
+      MINIO_ROOT_USER: brevis
+      MINIO_ROOT_PASSWORD: brevis-secret
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -26,13 +26,13 @@ services:
   postgres:
     image: postgres:17-alpine
     environment:
-      POSTGRES_USER: bravis
-      POSTGRES_PASSWORD: bravis
+      POSTGRES_USER: brevis
+      POSTGRES_PASSWORD: brevis
       POSTGRES_DB: bravis_it
     ports:
       - "55432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U bravis"]
+      test: ["CMD-SHELL", "pg_isready -U brevis"]
       interval: 3s
       timeout: 3s
       retries: 10
@@ -40,12 +40,12 @@ services:
   mysql:
     image: mysql:8
     environment:
-      MYSQL_ROOT_PASSWORD: bravis
+      MYSQL_ROOT_PASSWORD: brevis
       MYSQL_DATABASE: bravis_it
     ports:
       - "53306:3306"
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-pbravis"]
+      test: ["CMD", "mysqladmin", "ping", "-pbrevis"]
       interval: 5s
       timeout: 3s
       retries: 15

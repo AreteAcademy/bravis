@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/AreteAcademy/bravis/internal/execution"
-	k8s "github.com/AreteAcademy/bravis/internal/execution/kubernetes"
+	"github.com/AreteAcademy/brevis/internal/execution"
+	k8s "github.com/AreteAcademy/brevis/internal/execution/kubernetes"
 )
 
 // apiFalsa simula o servidor de API: uma sequencia de fases, o log e o registro

@@ -1,4 +1,4 @@
-# Bravis SDK — exemplos
+# Brevis SDK — exemplos
 
 Cada exemplo é um módulo executável próprio. O `go.mod` daqui aponta para
 `../sdk` via `replace`, então eles compilam contra a árvore de trabalho — o CI
@@ -40,7 +40,7 @@ go run ./03-basic-load -project meu-projeto -dataset landing -table raw_data
 ```
 
 A tabela precisa existir: o SDK não é dono do seu schema. Mostra as opções
-funcionais e `WithMetadata`, que dobra os campos `_bravis_*` para dentro do
+funcionais e `WithMetadata`, que dobra os campos `_brevis_*` para dentro do
 payload.
 
 ### [07-envelope-columns](07-envelope-columns/) — o contrato de 6 colunas
@@ -104,8 +104,8 @@ processamento.
 ### [06-config-from-env](06-config-from-env/) — configuração por ambiente
 
 ```bash
-export BRAVIS_PROJECT=meu-projeto
-export BRAVIS_DATASET=landing
+export BREVIS_PROJECT=meu-projeto
+export BREVIS_DATASET=landing
 go run ./06-config-from-env
 ```
 

@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/bigquery"
-	core "github.com/AreteAcademy/bravis/sdk/internal/core"
+	core "github.com/AreteAcademy/brevis/sdk/internal/core"
 )
 
 // --- resolveConfig --------------------------------------------------------
@@ -45,7 +45,7 @@ func TestResolveConfigDefaults(t *testing.T) {
 		t.Fatalf("resolveConfig: %v", err)
 	}
 
-	if got.StagingBucket != "proj-bravis-staging" {
+	if got.StagingBucket != "proj-brevis-staging" {
 		t.Errorf("StagingBucket should derive from the project, got %q", got.StagingBucket)
 	}
 	if got.StagingPrefix != "extracts/" {

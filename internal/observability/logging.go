@@ -22,7 +22,7 @@ func NewLogger(env, nivel string) *slog.Logger {
 	} else {
 		h = slog.NewJSONHandler(os.Stdout, opts)
 	}
-	return slog.New(h).With("service", "bravis", "env", env)
+	return slog.New(h).With("service", "brevis", "env", env)
 }
 
 func parseNivel(n string) slog.Level {

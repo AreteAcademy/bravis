@@ -12,8 +12,8 @@ import (
 	"strconv"
 	"time"
 
-	core "github.com/AreteAcademy/bravis/sdk/internal/core"
-	"github.com/AreteAcademy/bravis/sdk/load"
+	core "github.com/AreteAcademy/brevis/sdk/internal/core"
+	"github.com/AreteAcademy/brevis/sdk/load"
 )
 
 // Table writes to a BigQuery table.
@@ -35,7 +35,7 @@ type Table struct {
 	Name    string
 
 	// StagingBucket is used above InlineLimit rows. Defaults to
-	// <project>-bravis-staging.
+	// <project>-brevis-staging.
 	StagingBucket string
 
 	// InlineLimit is the row count above which the load stages through GCS.
@@ -109,11 +109,11 @@ func (b Table) config(opt core.WriteOptions) (*core.LoadConfig, map[string]core.
 	if table.Value == "" {
 		return nil, nil, fmt.Errorf("table not set: pass bigquery.Table.Name")
 	}
-	bucket := core.Resolve(b.StagingBucket, core.EnvBucket, project.Value+"-bravis-staging")
+	bucket := core.Resolve(b.StagingBucket, core.EnvBucket, project.Value+"-brevis-staging")
 
 	limit := b.InlineLimit
 	if limit == 0 {
-		limit = core.EnvInt("BRAVIS_SDK_LIMITE_INLINE", 5000)
+		limit = core.EnvInt("BREVIS_SDK_LIMITE_INLINE", 5000)
 	}
 
 	create, createOrigin := b.resolveCreate(opt.Run)

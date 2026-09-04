@@ -12,7 +12,7 @@ import (
 
 	"cloud.google.com/go/bigquery"
 	"cloud.google.com/go/storage"
-	core "github.com/AreteAcademy/bravis/sdk/internal/core"
+	core "github.com/AreteAcademy/brevis/sdk/internal/core"
 )
 
 // Loader writes Envelopes to BigQuery as generic JSON.
@@ -85,7 +85,7 @@ func resolveConfig(cfg *core.LoadConfig, opts ...core.LoadOption) (*core.LoadCon
 	}
 
 	if c.StagingBucket == "" {
-		c.StagingBucket = fmt.Sprintf("%s-bravis-staging", c.ProjectID)
+		c.StagingBucket = fmt.Sprintf("%s-brevis-staging", c.ProjectID)
 	}
 	if c.StagingPrefix == "" {
 		c.StagingPrefix = "extracts/"
@@ -161,7 +161,7 @@ func sourceFormat(format string) (bigquery.DataFormat, error) {
 		return bigquery.JSON, nil
 	case "csv", "parquet":
 		return "", fmt.Errorf("format %q is not implemented in this version: the SDK writes ndjson. "+
-			"Track it at https://github.com/AreteAcademy/bravis/issues", format)
+			"Track it at https://github.com/AreteAcademy/brevis/issues", format)
 	default:
 		return "", fmt.Errorf("unknown format %q, want \"ndjson\"", format)
 	}

@@ -34,7 +34,7 @@ import (
 	"log/slog"
 	"time"
 
-	core "github.com/AreteAcademy/bravis/sdk/internal/core"
+	core "github.com/AreteAcademy/brevis/sdk/internal/core"
 )
 
 // Data is a stream of records with the statistics of the fetch that produced

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/AreteAcademy/bravis/internal/infrastructure/postgres"
+	"github.com/AreteAcademy/brevis/internal/infrastructure/postgres"
 )
 
 // Estado desenha o estado de um Run.
@@ -154,7 +154,7 @@ const (
 // "quanto tempo".
 templ Execucoes(baldes []postgres.Balde) {
 	if len(baldes) == 0 {
-		@Vazio("Sem execuções na janela.", "bravis scheduler")
+		@Vazio("Sem execuções na janela.", "brevis scheduler")
 	} else {
 		<div class="overflow-x-auto">
 			<svg

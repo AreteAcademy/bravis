@@ -6,14 +6,14 @@ Concluída em 2026-08-31. Validada 100% local.
 
 | item | onde |
 |---|---|
-| Go module (`github.com/AreteAcademy/bravis`, Go 1.25) | `go.mod` |
+| Go module (`github.com/AreteAcademy/brevis`, Go 1.25) | `go.mod` |
 | Configuration | `internal/config` |
 | Logging estruturado | `internal/observability` |
 | Health checks (`/health`, `/ready`) | `internal/api` |
 | PostgreSQL (pool + check) | `internal/infrastructure/postgres` |
 | Migrations embutidas | `migrations/` |
 | Project structure (§36) | árvore criada, pacotes vazios até sua fase |
-| CLI (`serve`, `migrate up/down/status`) | `cmd/bravis` |
+| CLI (`serve`, `migrate up/down/status`) | `cmd/brevis` |
 | Docker development environment | `docker-compose.yml`, `Dockerfile` |
 
 Fora de escopo por decisão: scheduler, fila, executores, transform, UI. A §37
@@ -65,7 +65,7 @@ silencioso (regra 7).
 
 `go test ./...` passa. Sete testes, sem dependência de banco:
 
-- `config`: falha sem `BRAVIS_DATABASE_URL`; aplica padrões; rejeita timeout não numérico
+- `config`: falha sem `BREVIS_DATABASE_URL`; aplica padrões; rejeita timeout não numérico
 - `api`: `/health` responde 200 **mesmo com a dependência quebrada**; `/ready` responde 200 quando tudo responde e 503 **nomeando** a dependência que falhou; método errado devolve 405
 
 Validação de integração, executada contra o ambiente local:

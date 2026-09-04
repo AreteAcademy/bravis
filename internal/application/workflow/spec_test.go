@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	dominio "github.com/AreteAcademy/bravis/internal/domain/workflow"
+	dominio "github.com/AreteAcademy/brevis/internal/domain/workflow"
 )
 
 // O exemplo que o autor pediu tem de passar exatamente como escrito.

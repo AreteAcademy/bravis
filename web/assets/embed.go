@@ -2,7 +2,7 @@
 //
 // Servir do sistema de arquivos (`http.Dir("web/assets")`) quebrava em duas
 // situacoes: no container distroless, que copia apenas o binario, e ao rodar o
-// `bravis` de qualquer diretorio que nao a raiz do repo. Em ambas o CSS dava 404
+// `brevis` de qualquer diretorio que nao a raiz do repo. Em ambas o CSS dava 404
 // e a UI aparecia sem estilo — que parece defeito da pagina, nao do caminho.
 //
 // Embutir resolve as duas de uma vez, e segue o que ja e feito com as migrations:

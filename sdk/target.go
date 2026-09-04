@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	core "github.com/AreteAcademy/bravis/sdk/internal/core"
+	core "github.com/AreteAcademy/brevis/sdk/internal/core"
 )
 
 // Target says where records land, and what every destination honours.

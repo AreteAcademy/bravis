@@ -82,9 +82,9 @@ toda invocação para economizar disco que já foi baixado.
 `FROM scratch` — o binário, os certificados e um `/tmp`. `CGO_ENABLED=0` é o que
 permite: com cgo o binário ficaria ligado à libc do sistema, que lá não existe.
 
-`bravis/vendor_fake_go/` é o exemplo funcional. Ele fala com a API do BigQuery
+`brevis/vendor_fake_go/` é o exemplo funcional. Ele fala com a API do BigQuery
 por HTTP puro em vez de usar a biblioteca do Google — que multiplicaria o binário
-para usar uma chamada. Mesma escolha do cliente do Kubernetes no Bravis.
+para usar uma chamada. Mesma escolha do cliente do Kubernetes no Brevis.
 
 ## `shell: false` é obrigatório nas duas imagens enxutas
 

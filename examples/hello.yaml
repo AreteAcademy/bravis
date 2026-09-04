@@ -5,7 +5,7 @@
 # na imagem do worker. Este aqui usa so shell, entao serve para provar a stack
 # ponta a ponta:
 #
-#   bravis publish examples/hello.yaml
+#   brevis publish examples/hello.yaml
 #   e clicar em ▶ na tela de workflows
 name: hello
 type: dag

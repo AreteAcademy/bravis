@@ -2,8 +2,8 @@
 #
 # Duas contas, nao uma:
 #
-#   bravis-scheduler  cria e apaga pods. E a unica que precisa dessa permissao.
-#   bravis-task       a identidade com que os pods de task rodam — SEM nenhuma
+#   brevis-scheduler  cria e apaga pods. E a unica que precisa dessa permissao.
+#   brevis-task       a identidade com que os pods de task rodam — SEM nenhuma
 #                     permissao no cluster.
 #
 # A separacao e o ponto: o pod de task executa comandos vindos de um YAML. Se ele
@@ -13,23 +13,23 @@
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: bravis-scheduler
+  name: brevis-scheduler
   namespace: dados
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: bravis-task
+  name: brevis-task
   namespace: dados
   # Workload Identity: e por aqui que o pod de task fala com o BigQuery, sem
   # nenhuma chave em arquivo.
   # annotations:
-  #   iam.gke.io/gcp-service-account: bravis-task@PROJETO.iam.gserviceaccount.com
+  #   iam.gke.io/gcp-service-account: brevis-task@PROJETO.iam.gserviceaccount.com
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: bravis-scheduler
+  name: brevis-scheduler
   namespace: dados
 rules:
   # Sem `update` e sem `patch`: o scheduler cria, observa e apaga. Ele nunca
@@ -45,13 +45,13 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: bravis-scheduler
+  name: brevis-scheduler
   namespace: dados
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: bravis-scheduler
+  name: brevis-scheduler
 subjects:
   - kind: ServiceAccount
-    name: bravis-scheduler
+    name: brevis-scheduler
     namespace: dados

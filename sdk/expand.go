@@ -3,7 +3,7 @@ package sdk
 import (
 	"fmt"
 
-	core "github.com/AreteAcademy/bravis/sdk/internal/core"
+	core "github.com/AreteAcademy/brevis/sdk/internal/core"
 )
 
 // Expander turns one decoded document into the records it contains.

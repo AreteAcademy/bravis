@@ -51,7 +51,7 @@ type Pipeline struct {
 	// that takes parameters of its own.
 	Flags func(*flag.FlagSet)
 
-	// Run is what the Bravis engine knows about this execution: whether it is
+	// Run is what the Brevis engine knows about this execution: whether it is
 	// the first, the parameters it was dispatched with, which run it is.
 	//
 	// Filled in from the environment before Before runs, and zero when the
@@ -118,7 +118,7 @@ func Execute(ctx context.Context, p *Pipeline, args []string) error {
 	// Read before Before, so a hook can act on it.
 	p.Run = runContextFromEnv()
 	if p.Run.FromEngine() {
-		slog.InfoContext(ctx, "running under Bravis",
+		slog.InfoContext(ctx, "running under Brevis",
 			append([]any{"pipeline", p.name()}, p.Run.Args()...)...)
 	}
 

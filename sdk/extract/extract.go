@@ -22,7 +22,7 @@ import (
 	"time"
 	"unicode"
 
-	core "github.com/AreteAcademy/bravis/sdk/internal/core"
+	core "github.com/AreteAcademy/brevis/sdk/internal/core"
 )
 
 // CSV fetches and decodes CSV data from the given source.

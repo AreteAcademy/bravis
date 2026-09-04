@@ -1,4 +1,4 @@
-# Contribuindo com o Bravis
+# Contribuindo com o Brevis
 
 ## Estrutura
 
@@ -6,11 +6,11 @@ Três módulos Go independentes, cada um com seu `go.mod`:
 
 | diretório | módulo | o que é |
 |---|---|---|
-| `/` | `github.com/AreteAcademy/bravis` | a engine |
-| `/sdk` | `github.com/AreteAcademy/bravis/sdk` | SDK público, publicado no proxy |
-| `/cmd/bravis` | (módulo raiz) | o binário do Bravis: `serve`, `scheduler`, `migrate`, `publish`, `validate`, `backfill` |
-| `/cmd/bravis-sdk` | `github.com/AreteAcademy/bravis/cmd/bravis-sdk` | CLI do SDK: `extract`, `load` |
-| `/examples` | `github.com/AreteAcademy/bravis/examples` | exemplos, com `replace` para `../sdk` |
+| `/` | `github.com/AreteAcademy/brevis` | a engine |
+| `/sdk` | `github.com/AreteAcademy/brevis/sdk` | SDK público, publicado no proxy |
+| `/cmd/brevis` | (módulo raiz) | o binário do Brevis: `serve`, `scheduler`, `migrate`, `publish`, `validate`, `backfill` |
+| `/cmd/brevis-sdk` | `github.com/AreteAcademy/brevis/cmd/brevis-sdk` | CLI do SDK: `extract`, `load` |
+| `/examples` | `github.com/AreteAcademy/brevis/examples` | exemplos, com `replace` para `../sdk` |
 
 O SDK tem módulo próprio para manter as dependências mínimas: hoje são três
 diretas (`bigquery`, `storage`, `uuid`). **Pense duas vezes antes de somar uma
@@ -30,9 +30,9 @@ Os testes de integração do `load` são a exceção e ficam travados atrás de
 `-short` e de variáveis de ambiente:
 
 ```bash
-export BRAVIS_IT_PROJECT=meu-projeto
-export BRAVIS_IT_DATASET=bravis_it     # precisa existir
-export BRAVIS_IT_BUCKET=meu-bucket     # para a estratégia GCS
+export BREVIS_IT_PROJECT=meu-projeto
+export BREVIS_IT_DATASET=bravis_it     # precisa existir
+export BREVIS_IT_BUCKET=meu-bucket     # para a estratégia GCS
 go test ./load/... -run Integration
 ```
 

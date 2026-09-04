@@ -9,8 +9,8 @@ import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
 import (
-	"github.com/AreteAcademy/bravis/internal/branding"
-	"github.com/AreteAcademy/bravis/web/assets"
+	"github.com/AreteAcademy/brevis/internal/branding"
+	"github.com/AreteAcademy/brevis/web/assets"
 )
 
 // DadosLogin e o estado da tela de entrada.

@@ -3,22 +3,22 @@ package config
 import (
 	"os"
 
-	"github.com/AreteAcademy/bravis/internal/auth"
+	"github.com/AreteAcademy/brevis/internal/auth"
 	"strings"
 	"testing"
 	"time"
 )
 
 func TestLoadExigeDatabaseURL(t *testing.T) {
-	t.Setenv("BRAVIS_DATABASE_URL", "")
+	t.Setenv("BREVIS_DATABASE_URL", "")
 
 	if _, err := Load(); err == nil {
-		t.Fatal("esperava erro quando BRAVIS_DATABASE_URL falta; o processo nao pode subir sem banco")
+		t.Fatal("esperava erro quando BREVIS_DATABASE_URL falta; o processo nao pode subir sem banco")
 	}
 }
 
 func TestLoadAplicaPadroes(t *testing.T) {
-	t.Setenv("BRAVIS_DATABASE_URL", "postgres://u:p@localhost:5432/db")
+	t.Setenv("BREVIS_DATABASE_URL", "postgres://u:p@localhost:5432/db")
 
 	c, err := Load()
 	if err != nil {
@@ -36,8 +36,8 @@ func TestLoadAplicaPadroes(t *testing.T) {
 }
 
 func TestLoadRejeitaTimeoutInvalido(t *testing.T) {
-	t.Setenv("BRAVIS_DATABASE_URL", "postgres://u:p@localhost:5432/db")
-	t.Setenv("BRAVIS_SHUTDOWN_TIMEOUT_SECONDS", "quinze")
+	t.Setenv("BREVIS_DATABASE_URL", "postgres://u:p@localhost:5432/db")
+	t.Setenv("BREVIS_SHUTDOWN_TIMEOUT_SECONDS", "quinze")
 
 	if _, err := Load(); err == nil {
 		t.Fatal("esperava erro num timeout nao numerico, em vez de cair no padrao em silencio")
@@ -50,14 +50,14 @@ func TestLoadRejeitaTimeoutInvalido(t *testing.T) {
 func TestAmbienteDasTasksRepassaOQueFoiDeclarado(t *testing.T) {
 	t.Setenv("GOOGLE_PROJECT_ID", "zarv-dev")
 	t.Setenv("STAGE", "local")
-	t.Setenv("BRAVIS_DATABASE_URL", "postgres://bravis:senha@db/bravis")
+	t.Setenv("BREVIS_DATABASE_URL", "postgres://brevis:senha@db/brevis")
 
 	env := AmbienteDasTasks([]string{"GOOGLE_PROJECT_ID", "STAGE"})
 
 	if env["GOOGLE_PROJECT_ID"] != "zarv-dev" || env["STAGE"] != "local" {
 		t.Errorf("nao repassou o declarado: %v", env)
 	}
-	if _, vazou := env["BRAVIS_DATABASE_URL"]; vazou {
+	if _, vazou := env["BREVIS_DATABASE_URL"]; vazou {
 		t.Error("a credencial do banco chegou na task")
 	}
 	if env["PATH"] == "" {
@@ -91,10 +91,10 @@ func TestValorLiteralEVariavelAusente(t *testing.T) {
 
 // O curinga existe para quem precisa; a excecao existe porque a configuracao do
 // orquestrador nunca e trabalho da task.
-func TestCuringaNaoLevaAsVariaveisDoProprioBravis(t *testing.T) {
+func TestCuringaNaoLevaAsVariaveisDoProprioBrevis(t *testing.T) {
 	t.Setenv("MINHA_VAR", "valor")
-	t.Setenv("BRAVIS_DATABASE_URL", "postgres://bravis:senha@db/bravis")
-	t.Setenv("BRAVIS_BRAND_FILE", "/etc/bravis/brand.yaml")
+	t.Setenv("BREVIS_DATABASE_URL", "postgres://brevis:senha@db/brevis")
+	t.Setenv("BREVIS_BRAND_FILE", "/etc/brevis/brand.yaml")
 
 	env := AmbienteDasTasks([]string{"*"})
 
@@ -102,7 +102,7 @@ func TestCuringaNaoLevaAsVariaveisDoProprioBravis(t *testing.T) {
 		t.Error("curinga deveria repassar as variaveis comuns")
 	}
 	for k := range env {
-		if strings.HasPrefix(k, "BRAVIS_") {
+		if strings.HasPrefix(k, "BREVIS_") {
 			t.Errorf("curinga levou %s para a task", k)
 		}
 	}
@@ -113,12 +113,12 @@ func TestCuringaNaoLevaAsVariaveisDoProprioBravis(t *testing.T) {
 // era o novo, e o alerta simplesmente nao saia. Este teste amarra ambiente e
 // campo.
 func TestLoadLeOAmbienteDeCadaCampo(t *testing.T) {
-	t.Setenv("BRAVIS_DATABASE_URL", "postgres://x/y")
-	t.Setenv("BRAVIS_SLACK_WEBHOOK", "https://hooks.slack.com/services/abc")
-	t.Setenv("BRAVIS_UI_URL", "https://bravis.zarv.net")
-	t.Setenv("BRAVIS_TASK_ENV", "GOOGLE_PROJECT_ID,STAGE")
-	t.Setenv("BRAVIS_POD_SERVICE_ACCOUNT", "bravis-task")
-	t.Setenv("BRAVIS_POD_TOLERATIONS", "kubernetes.io/arch=arm64:NoSchedule")
+	t.Setenv("BREVIS_DATABASE_URL", "postgres://x/y")
+	t.Setenv("BREVIS_SLACK_WEBHOOK", "https://hooks.slack.com/services/abc")
+	t.Setenv("BREVIS_UI_URL", "https://brevis.zarv.net")
+	t.Setenv("BREVIS_TASK_ENV", "GOOGLE_PROJECT_ID,STAGE")
+	t.Setenv("BREVIS_POD_SERVICE_ACCOUNT", "brevis-task")
+	t.Setenv("BREVIS_POD_TOLERATIONS", "kubernetes.io/arch=arm64:NoSchedule")
 
 	c, err := Load()
 	if err != nil {
@@ -127,13 +127,13 @@ func TestLoadLeOAmbienteDeCadaCampo(t *testing.T) {
 	if c.SlackWebhook != "https://hooks.slack.com/services/abc" {
 		t.Errorf("SlackWebhook = %q", c.SlackWebhook)
 	}
-	if c.UIURL != "https://bravis.zarv.net" {
+	if c.UIURL != "https://brevis.zarv.net" {
 		t.Errorf("UIURL = %q", c.UIURL)
 	}
 	if len(c.TaskEnv) != 2 {
 		t.Errorf("TaskEnv = %v", c.TaskEnv)
 	}
-	if c.Pods.ServiceAccount != "bravis-task" {
+	if c.Pods.ServiceAccount != "brevis-task" {
 		t.Errorf("ServiceAccount = %q", c.Pods.ServiceAccount)
 	}
 	if len(c.Pods.Toleracoes) != 1 || c.Pods.Toleracoes[0].Efeito != "NoSchedule" {
@@ -146,20 +146,20 @@ func TestLoadLeOAmbienteDeCadaCampo(t *testing.T) {
 // warehouse. Um aviso no log nao bastaria — ninguem le o log de um processo que
 // funciona.
 func TestForaDoLocalExigeCredencial(t *testing.T) {
-	t.Setenv("BRAVIS_DATABASE_URL", "postgres://x/y")
-	t.Setenv("BRAVIS_ENV", "prod")
+	t.Setenv("BREVIS_DATABASE_URL", "postgres://x/y")
+	t.Setenv("BREVIS_ENV", "prod")
 
 	if _, err := Load(); err == nil {
-		t.Fatal("BRAVIS_ENV=prod subiu sem credencial")
+		t.Fatal("BREVIS_ENV=prod subiu sem credencial")
 	}
 
 	h, err := auth.GerarHash("senha-de-teste-longa")
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("BRAVIS_AUTH_USUARIO", "operador")
-	t.Setenv("BRAVIS_AUTH_SENHA_HASH", h)
-	t.Setenv("BRAVIS_AUTH_SEGREDO", "um-segredo-de-teste-com-mais-de-32-bytes")
+	t.Setenv("BREVIS_AUTH_USUARIO", "operador")
+	t.Setenv("BREVIS_AUTH_SENHA_HASH", h)
+	t.Setenv("BREVIS_AUTH_SEGREDO", "um-segredo-de-teste-com-mais-de-32-bytes")
 
 	c, err := Load()
 	if err != nil {
@@ -174,8 +174,8 @@ func TestForaDoLocalExigeCredencial(t *testing.T) {
 // quem desenvolve, e pedir senha a cada `make up` empurraria o time a desligar
 // a autenticacao de vez.
 func TestLocalSobeSemCredencial(t *testing.T) {
-	t.Setenv("BRAVIS_DATABASE_URL", "postgres://x/y")
-	t.Setenv("BRAVIS_ENV", "local")
+	t.Setenv("BREVIS_DATABASE_URL", "postgres://x/y")
+	t.Setenv("BREVIS_ENV", "local")
 	if _, err := Load(); err != nil {
 		t.Fatalf("local deveria subir sem credencial: %v", err)
 	}

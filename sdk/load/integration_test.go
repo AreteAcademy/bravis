@@ -10,7 +10,7 @@ import (
 
 	"cloud.google.com/go/bigquery"
 	"cloud.google.com/go/storage"
-	core "github.com/AreteAcademy/bravis/sdk/internal/core"
+	core "github.com/AreteAcademy/brevis/sdk/internal/core"
 	"google.golang.org/api/iterator"
 )
 
@@ -21,12 +21,12 @@ import (
 //
 // Run them against a real project:
 //
-//	export BRAVIS_IT_PROJECT=my-project
-//	export BRAVIS_IT_DATASET=bravis_it        # must already exist
-//	export BRAVIS_IT_BUCKET=my-staging-bucket # for the GCS strategy
+//	export BREVIS_IT_PROJECT=my-project
+//	export BREVIS_IT_DATASET=bravis_it        # must already exist
+//	export BREVIS_IT_BUCKET=my-staging-bucket # for the GCS strategy
 //	go test ./load/... -run Integration
 //
-// They skip under -short and skip when BRAVIS_IT_PROJECT is unset, so the
+// They skip under -short and skip when BREVIS_IT_PROJECT is unset, so the
 // normal suite and CI stay offline.
 
 type itEnv struct {
@@ -42,17 +42,17 @@ func requireIntegration(t *testing.T) itEnv {
 		t.Skip("integration test skipped under -short")
 	}
 
-	project := os.Getenv("BRAVIS_IT_PROJECT")
+	project := os.Getenv("BREVIS_IT_PROJECT")
 	if project == "" {
-		t.Skip("BRAVIS_IT_PROJECT not set; skipping integration test")
+		t.Skip("BREVIS_IT_PROJECT not set; skipping integration test")
 	}
 
-	dataset := os.Getenv("BRAVIS_IT_DATASET")
+	dataset := os.Getenv("BREVIS_IT_DATASET")
 	if dataset == "" {
 		dataset = "bravis_it"
 	}
 
-	return itEnv{project: project, dataset: dataset, bucket: os.Getenv("BRAVIS_IT_BUCKET")}
+	return itEnv{project: project, dataset: dataset, bucket: os.Getenv("BREVIS_IT_BUCKET")}
 }
 
 // createTable makes a throwaway table with the given schema and removes it
@@ -206,7 +206,7 @@ func TestIntegrationInlineStrategy(t *testing.T) {
 func TestIntegrationGCSStrategy(t *testing.T) {
 	env := requireIntegration(t)
 	if env.bucket == "" {
-		t.Skip("BRAVIS_IT_BUCKET not set; skipping GCS strategy")
+		t.Skip("BREVIS_IT_BUCKET not set; skipping GCS strategy")
 	}
 	ctx := context.Background()
 
@@ -880,7 +880,7 @@ func TestIntegrationPartitionOptionsReachTheTable(t *testing.T) {
 func TestIntegrationKeepStagedFile(t *testing.T) {
 	env := requireIntegration(t)
 	if env.bucket == "" {
-		t.Skip("BRAVIS_IT_BUCKET not set")
+		t.Skip("BREVIS_IT_BUCKET not set")
 	}
 	ctx := context.Background()
 
@@ -956,7 +956,7 @@ func TestIntegrationKeepStagedFile(t *testing.T) {
 func TestIntegrationInlineLimitPicksTheStrategy(t *testing.T) {
 	env := requireIntegration(t)
 	if env.bucket == "" {
-		t.Skip("BRAVIS_IT_BUCKET not set")
+		t.Skip("BREVIS_IT_BUCKET not set")
 	}
 	ctx := context.Background()
 

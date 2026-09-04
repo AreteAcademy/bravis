@@ -9,9 +9,9 @@ import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
 import (
-	"github.com/AreteAcademy/bravis/internal/auth"
-	"github.com/AreteAcademy/bravis/internal/branding"
-	"github.com/AreteAcademy/bravis/web/assets"
+	"github.com/AreteAcademy/brevis/internal/auth"
+	"github.com/AreteAcademy/brevis/internal/branding"
+	"github.com/AreteAcademy/brevis/web/assets"
 )
 
 // Base e o esqueleto de toda pagina.
@@ -537,7 +537,7 @@ func sidebar(ativo string, marca branding.Marca) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 50, "<a href=\"https://github.com/AreteAcademy/bravis\" target=\"_blank\" rel=\"noreferrer\" class=\"mt-4 block text-[0.68rem] tracking-[0.1em] text-muted/60 uppercase transition-colors hover:text-gold-strong\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 50, "<a href=\"https://github.com/AreteAcademy/brevis\" target=\"_blank\" rel=\"noreferrer\" class=\"mt-4 block text-[0.68rem] tracking-[0.1em] text-muted/60 uppercase transition-colors hover:text-gold-strong\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

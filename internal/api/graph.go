@@ -6,9 +6,9 @@ import (
 
 	"github.com/google/uuid"
 
-	wf "github.com/AreteAcademy/bravis/internal/domain/workflow"
-	"github.com/AreteAcademy/bravis/internal/graph"
-	"github.com/AreteAcademy/bravis/internal/infrastructure/postgres"
+	wf "github.com/AreteAcademy/brevis/internal/domain/workflow"
+	"github.com/AreteAcademy/brevis/internal/graph"
+	"github.com/AreteAcademy/brevis/internal/infrastructure/postgres"
 )
 
 // Este arquivo implementa o fluxo da secao 20 do plano:
@@ -144,7 +144,7 @@ func (u *UI) responderGrafo(w http.ResponseWriter, def wf.Workflow,
 				}
 			}
 			resp.Nodes = append(resp.Nodes, noFlow{
-				ID: id, Type: "bravis",
+				ID: id, Type: "brevis",
 				Position: posicao{X: nivel * larguraNivel, Y: desloc + i*alturaNo},
 				Data:     dados,
 			})

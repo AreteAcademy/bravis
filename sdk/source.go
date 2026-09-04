@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"io"
 
-	core "github.com/AreteAcademy/bravis/sdk/internal/core"
+	core "github.com/AreteAcademy/brevis/sdk/internal/core"
 )
 
 // Source says where records come from, and what every origin honours.

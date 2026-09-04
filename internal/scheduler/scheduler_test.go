@@ -7,11 +7,11 @@ import (
 
 	"github.com/google/uuid"
 
-	dom "github.com/AreteAcademy/bravis/internal/domain/run"
-	wf "github.com/AreteAcademy/bravis/internal/domain/workflow"
-	"github.com/AreteAcademy/bravis/internal/infrastructure/postgres"
-	"github.com/AreteAcademy/bravis/internal/queue"
-	"github.com/AreteAcademy/bravis/internal/scheduler"
+	dom "github.com/AreteAcademy/brevis/internal/domain/run"
+	wf "github.com/AreteAcademy/brevis/internal/domain/workflow"
+	"github.com/AreteAcademy/brevis/internal/infrastructure/postgres"
+	"github.com/AreteAcademy/brevis/internal/queue"
+	"github.com/AreteAcademy/brevis/internal/scheduler"
 )
 
 func emUTC(s string) time.Time {

@@ -8,9 +8,9 @@ import (
 
 	"github.com/google/uuid"
 
-	app "github.com/AreteAcademy/bravis/internal/application/execution"
-	wf "github.com/AreteAcademy/bravis/internal/domain/workflow"
-	"github.com/AreteAcademy/bravis/internal/execution"
+	app "github.com/AreteAcademy/brevis/internal/application/execution"
+	wf "github.com/AreteAcademy/brevis/internal/domain/workflow"
+	"github.com/AreteAcademy/brevis/internal/execution"
 )
 
 // capturador guarda a TaskExec que o runner montou, para conferir o ambiente
@@ -75,22 +75,22 @@ func TestAmbienteDoPassoCarregaOContextoDoRun(t *testing.T) {
 		Historico:   &historico{jaTeve: false},
 	})
 
-	if tarefa.Env["BRAVIS_RUN_ID"] != id.String() {
-		t.Errorf("BRAVIS_RUN_ID = %q", tarefa.Env["BRAVIS_RUN_ID"])
+	if tarefa.Env["BREVIS_RUN_ID"] != id.String() {
+		t.Errorf("BREVIS_RUN_ID = %q", tarefa.Env["BREVIS_RUN_ID"])
 	}
-	if tarefa.Env["BRAVIS_RUN_FIRST"] != "true" {
-		t.Errorf("sem sucesso anterior, o passo roda pela primeira vez: %q", tarefa.Env["BRAVIS_RUN_FIRST"])
+	if tarefa.Env["BREVIS_RUN_FIRST"] != "true" {
+		t.Errorf("sem sucesso anterior, o passo roda pela primeira vez: %q", tarefa.Env["BREVIS_RUN_FIRST"])
 	}
-	if tarefa.Env["BRAVIS_RUN_TRIGGER"] != "backfill" {
-		t.Errorf("BRAVIS_RUN_TRIGGER = %q", tarefa.Env["BRAVIS_RUN_TRIGGER"])
+	if tarefa.Env["BREVIS_RUN_TRIGGER"] != "backfill" {
+		t.Errorf("BREVIS_RUN_TRIGGER = %q", tarefa.Env["BREVIS_RUN_TRIGGER"])
 	}
-	if tarefa.Env["BRAVIS_RUN_LOGICAL_DATE"] != "2026-09-03T00:00:00Z" {
-		t.Errorf("BRAVIS_RUN_LOGICAL_DATE = %q", tarefa.Env["BRAVIS_RUN_LOGICAL_DATE"])
+	if tarefa.Env["BREVIS_RUN_LOGICAL_DATE"] != "2026-09-03T00:00:00Z" {
+		t.Errorf("BREVIS_RUN_LOGICAL_DATE = %q", tarefa.Env["BREVIS_RUN_LOGICAL_DATE"])
 	}
 
 	var params map[string]string
-	if err := json.Unmarshal([]byte(tarefa.Env["BRAVIS_RUN_PARAMS"]), &params); err != nil {
-		t.Fatalf("BRAVIS_RUN_PARAMS nao e JSON: %v", err)
+	if err := json.Unmarshal([]byte(tarefa.Env["BREVIS_RUN_PARAMS"]), &params); err != nil {
+		t.Fatalf("BREVIS_RUN_PARAMS nao e JSON: %v", err)
 	}
 	if params["load_full"] != "true" {
 		t.Errorf("params = %v", params)
@@ -117,8 +117,8 @@ func TestPrimeiraExecucaoEPorPassoNaoPorWorkflow(t *testing.T) {
 func TestPassoComSucessoAnteriorNaoEPrimeiro(t *testing.T) {
 	tarefa := rodar(t, app.Runner{RunID: uuid.New(), Historico: &historico{jaTeve: true}})
 
-	if tarefa.Env["BRAVIS_RUN_FIRST"] != "false" {
-		t.Errorf("ja houve sucesso, entao nao e a primeira: %q", tarefa.Env["BRAVIS_RUN_FIRST"])
+	if tarefa.Env["BREVIS_RUN_FIRST"] != "false" {
+		t.Errorf("ja houve sucesso, entao nao e a primeira: %q", tarefa.Env["BREVIS_RUN_FIRST"])
 	}
 }
 
@@ -127,8 +127,8 @@ func TestSemHistoricoNaoInventaPrimeiraExecucao(t *testing.T) {
 	// explicitamente no codigo do fetcher.
 	tarefa := rodar(t, app.Runner{RunID: uuid.New()})
 
-	if tarefa.Env["BRAVIS_RUN_FIRST"] != "false" {
-		t.Errorf("sem historico configurado a resposta e nao: %q", tarefa.Env["BRAVIS_RUN_FIRST"])
+	if tarefa.Env["BREVIS_RUN_FIRST"] != "false" {
+		t.Errorf("sem historico configurado a resposta e nao: %q", tarefa.Env["BREVIS_RUN_FIRST"])
 	}
 }
 
@@ -136,8 +136,8 @@ func TestFalhaNaConsultaNaoViraCriacaoDeTabela(t *testing.T) {
 	h := &historico{err: context.DeadlineExceeded}
 	tarefa := rodar(t, app.Runner{RunID: uuid.New(), Historico: h})
 
-	if tarefa.Env["BRAVIS_RUN_FIRST"] != "false" {
-		t.Errorf("banco fora do ar nao pode virar DDL: %q", tarefa.Env["BRAVIS_RUN_FIRST"])
+	if tarefa.Env["BREVIS_RUN_FIRST"] != "false" {
+		t.Errorf("banco fora do ar nao pode virar DDL: %q", tarefa.Env["BREVIS_RUN_FIRST"])
 	}
 }
 
@@ -146,16 +146,16 @@ func TestAmbienteDoRunnerGanhaEmColisao(t *testing.T) {
 	tarefa := rodar(t, app.Runner{
 		RunID:     uuid.New(),
 		Historico: &historico{jaTeve: false},
-		Env:       map[string]string{"BRAVIS_RUN_FIRST": "false", "OUTRA": "coisa"},
+		Env:       map[string]string{"BREVIS_RUN_FIRST": "false", "OUTRA": "coisa"},
 	})
 
-	if tarefa.Env["BRAVIS_RUN_FIRST"] != "false" {
+	if tarefa.Env["BREVIS_RUN_FIRST"] != "false" {
 		t.Error("configuracao explicita do runner tem de vencer o valor calculado")
 	}
 	if tarefa.Env["OUTRA"] != "coisa" {
 		t.Error("o resto do ambiente do runner tem de sobreviver")
 	}
-	if tarefa.Env["BRAVIS_RUN_ID"] == "" {
+	if tarefa.Env["BREVIS_RUN_ID"] == "" {
 		t.Error("as variaveis sem colisao continuam chegando")
 	}
 }
@@ -163,32 +163,32 @@ func TestAmbienteDoRunnerGanhaEmColisao(t *testing.T) {
 func TestSemParamsNaoInjetaVariavelVazia(t *testing.T) {
 	tarefa := rodar(t, app.Runner{RunID: uuid.New(), Historico: &historico{}})
 
-	if _, existe := tarefa.Env["BRAVIS_RUN_PARAMS"]; existe {
+	if _, existe := tarefa.Env["BREVIS_RUN_PARAMS"]; existe {
 		t.Error("sem params, a variavel nao deve existir em vez de existir vazia")
 	}
-	if _, existe := tarefa.Env["BRAVIS_RUN_TRIGGER"]; existe {
+	if _, existe := tarefa.Env["BREVIS_RUN_TRIGGER"]; existe {
 		t.Error("sem trigger, idem")
 	}
 }
 
 func TestSemRunIDNaoInventaExecucaoGerenciada(t *testing.T) {
-	// `bravis run` executa um YAML na hora e nao pertence a historico nenhum.
+	// `brevis run` executa um YAML na hora e nao pertence a historico nenhum.
 	// O SDK decide que esta sob o engine pela PRESENCA do id, entao injetar o
-	// UUID zero faria um fetcher rodado a mao logar "running under Bravis" com
+	// UUID zero faria um fetcher rodado a mao logar "running under Brevis" com
 	// um id inventado.
 	tarefa := rodar(t, app.Runner{
 		Params:    map[string]string{"create_table": "true"},
 		Historico: &historico{jaTeve: false},
 	})
 
-	for _, v := range []string{"BRAVIS_RUN_ID", "BRAVIS_RUN_FIRST", "BRAVIS_RUN_ATTEMPT"} {
+	for _, v := range []string{"BREVIS_RUN_ID", "BREVIS_RUN_FIRST", "BREVIS_RUN_ATTEMPT"} {
 		if _, existe := tarefa.Env[v]; existe {
 			t.Errorf("%s nao devia existir sem um run de verdade: %q", v, tarefa.Env[v])
 		}
 	}
 
 	// Os params continuam indo: `--param` e como se passa entrada nesse caminho.
-	if tarefa.Env["BRAVIS_RUN_PARAMS"] == "" {
+	if tarefa.Env["BREVIS_RUN_PARAMS"] == "" {
 		t.Error("os params tem de chegar ao passo mesmo sem run gerenciado")
 	}
 }
@@ -198,12 +198,12 @@ func TestTentativaComecaEmZeroComoNoBanco(t *testing.T) {
 	// Divergir aqui faria o passo reportar uma tentativa que nao existe.
 	tarefa := rodar(t, app.Runner{RunID: uuid.New(), Historico: &historico{}})
 
-	if tarefa.Env["BRAVIS_RUN_ATTEMPT"] != "0" {
-		t.Errorf("primeira tentativa = %q, esperado \"0\"", tarefa.Env["BRAVIS_RUN_ATTEMPT"])
+	if tarefa.Env["BREVIS_RUN_ATTEMPT"] != "0" {
+		t.Errorf("primeira tentativa = %q, esperado \"0\"", tarefa.Env["BREVIS_RUN_ATTEMPT"])
 	}
 }
 
-// TestCaminhoDoDispatcher reproduz o que cmd/bravis monta no `executar` do
+// TestCaminhoDoDispatcher reproduz o que cmd/brevis monta no `executar` do
 // dispatcher: um run de verdade, com id, params, trigger e historico.
 //
 // E o unico teste que cobre a forma como o Runner e realmente construido em
@@ -229,12 +229,12 @@ func TestCaminhoDoDispatcher(t *testing.T) {
 
 	// E o contexto do run chega junto.
 	esperado := map[string]string{
-		"BRAVIS_RUN_ID":           id.String(),
-		"BRAVIS_RUN_FIRST":        "true",
-		"BRAVIS_RUN_ATTEMPT":      "0",
-		"BRAVIS_RUN_TRIGGER":      "schedule",
-		"BRAVIS_RUN_LOGICAL_DATE": "2026-09-03T04:00:00Z",
-		"BRAVIS_RUN_PARAMS":       `{"load_full":"true"}`,
+		"BREVIS_RUN_ID":           id.String(),
+		"BREVIS_RUN_FIRST":        "true",
+		"BREVIS_RUN_ATTEMPT":      "0",
+		"BREVIS_RUN_TRIGGER":      "schedule",
+		"BREVIS_RUN_LOGICAL_DATE": "2026-09-03T04:00:00Z",
+		"BREVIS_RUN_PARAMS":       `{"load_full":"true"}`,
 	}
 	for k, v := range esperado {
 		if tarefa.Env[k] != v {

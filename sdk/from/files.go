@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/AreteAcademy/bravis/sdk/extract"
-	core "github.com/AreteAcademy/bravis/sdk/internal/core"
+	"github.com/AreteAcademy/brevis/sdk/extract"
+	core "github.com/AreteAcademy/brevis/sdk/internal/core"
 )
 
 // Files reads records out of files, on disk or in object storage.

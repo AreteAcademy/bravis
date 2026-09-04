@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/AreteAcademy/bravis/internal/infrastructure/postgres"
+	"github.com/AreteAcademy/brevis/internal/infrastructure/postgres"
 )
 
 func baldesCom(totais ...int) []postgres.Balde {

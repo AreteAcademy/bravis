@@ -12,11 +12,11 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/AreteAcademy/bravis/internal/api"
-	"github.com/AreteAcademy/bravis/internal/branding"
-	dom "github.com/AreteAcademy/bravis/internal/domain/run"
-	wf "github.com/AreteAcademy/bravis/internal/domain/workflow"
-	"github.com/AreteAcademy/bravis/internal/infrastructure/postgres"
+	"github.com/AreteAcademy/brevis/internal/api"
+	"github.com/AreteAcademy/brevis/internal/branding"
+	dom "github.com/AreteAcademy/brevis/internal/domain/run"
+	wf "github.com/AreteAcademy/brevis/internal/domain/workflow"
+	"github.com/AreteAcademy/brevis/internal/infrastructure/postgres"
 )
 
 // Grafo em diamante: b e c dependem de a, d depende dos dois. O formato importa
@@ -112,8 +112,8 @@ func TestGrafoDoWorkflowPoeNiveisEmColunas(t *testing.T) {
 	y := map[string]int{}
 	for _, n := range g.Nodes {
 		x[n.ID], y[n.ID] = n.Position.X, n.Position.Y
-		if n.Type != "bravis" {
-			t.Errorf("no %s com type %q, quero bravis (o custom node)", n.ID, n.Type)
+		if n.Type != "brevis" {
+			t.Errorf("no %s com type %q, quero brevis (o custom node)", n.ID, n.Type)
 		}
 	}
 	if !(x["a"] < x["b"] && x["b"] < x["d"]) {

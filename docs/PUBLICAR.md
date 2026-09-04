@@ -4,8 +4,8 @@ Duas imagens saem do mesmo `Dockerfile`, do mesmo binário:
 
 | tag | base | papel |
 |---|---|---|
-| `daniel3843/bravis:<versao>` | distroless | API e UI. Não executa nada, então não tem shell. |
-| `daniel3843/bravis:<versao>-worker` | alpine | `scheduler`, `publish`, `backfill`. **Tem shell**, porque os passos `run:` dos workflows precisam de um. |
+| `daniel3843/brevis:<versao>` | distroless | API e UI. Não executa nada, então não tem shell. |
+| `daniel3843/brevis:<versao>-worker` | alpine | `scheduler`, `publish`, `backfill`. **Tem shell**, porque os passos `run:` dos workflows precisam de um. |
 
 A separação não é preciosismo: o worker roda comandos arbitrários do YAML do
 cliente, e a API não. Dar shell à API seria ampliar a superfície do processo
@@ -40,7 +40,7 @@ git commit -am "release: 0.2.0"
 git tag v0.2.0 && git push origin main --tags
 ```
 
-A CI recusa a tag se o `VERSION` não bater com ela — senão `bravis version`
+A CI recusa a tag se o `VERSION` não bater com ela — senão `brevis version`
 dentro da imagem mentiria sobre a tag que a publicou, e é por ela que se
 rastreia um incidente.
 
@@ -54,6 +54,6 @@ estágio de build), então nada roda sob QEMU: são segundos, não minutos.
 ## Verificar o que foi publicado
 
 ```bash
-docker run --rm daniel3843/bravis:0.1.0 version
-docker buildx imagetools inspect daniel3843/bravis:0.1.0   # confere as duas arquiteturas
+docker run --rm daniel3843/brevis:0.1.0 version
+docker buildx imagetools inspect daniel3843/brevis:0.1.0   # confere as duas arquiteturas
 ```

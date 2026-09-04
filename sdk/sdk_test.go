@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/AreteAcademy/bravis/sdk/from"
-	core "github.com/AreteAcademy/bravis/sdk/internal/core"
+	"github.com/AreteAcademy/brevis/sdk/from"
+	core "github.com/AreteAcademy/brevis/sdk/internal/core"
 )
 
 // --- Key e Field ---------------------------------------------------------

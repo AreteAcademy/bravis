@@ -6,7 +6,7 @@
 > Para o SDK como ele é hoje: [`SDK_ARQUITETURA.md`](SDK_ARQUITETURA.md),
 > [`SDK_NOVO_DRIVER.md`](SDK_NOVO_DRIVER.md) e [`SDK_DECISOES.md`](SDK_DECISOES.md).
 
-O primeiro recurso público do Bravis fora do orquestrador: uma biblioteca Go que
+O primeiro recurso público do Brevis fora do orquestrador: uma biblioteca Go que
 resolve as duas pontas de um fetcher de dados. **Extract** abstrai a coleta por
 HTTP; **load** escreve no BigQuery com as técnicas boas — lote, staging em GCS,
 CSV, Parquet.
@@ -50,7 +50,7 @@ driver de Postgres não é adotado.**
 
 ### 2.2 Publicado
 
-O módulo está em `github.com/AreteAcademy/bravis/sdk`. Versões no proxy:
+O módulo está em `github.com/AreteAcademy/brevis/sdk`. Versões no proxy:
 
 | versão | estado |
 |---|---|
@@ -157,7 +157,7 @@ As três formas de escrever, e quando usar cada uma:
 | modo | escreve | quando |
 |---|---|---|
 | padrão | o payload, cru | você define o schema e não quer nada imposto |
-| `WithMetadata(true)` | payload + campos `_bravis_*` misturados nele | quer a proveniência junto do dado, num objeto plano |
+| `WithMetadata(true)` | payload + campos `_brevis_*` misturados nele | quer a proveniência junto do dado, num objeto plano |
 | `WithEnvelopeColumns(true)` | as 6 colunas, com o payload aninhado em `payload` | precisa casar com a camada bronze do `zarv-data-pipeline` |
 
 Os dois últimos são mutuamente exclusivos e `New` recusa os dois juntos — são
@@ -195,7 +195,7 @@ O caso comum:
 ```go
 linhas, err := extract.CSV(ctx, extract.Fonte{
     URL:       "https://exemplo.gov/api/area/csv/" + chave + "/VIIRS/-74,-34,-34,6/1",
-    Cabecalho: http.Header{"User-Agent": {"bravis-sdk"}},
+    Cabecalho: http.Header{"User-Agent": {"brevis-sdk"}},
 })
 ```
 

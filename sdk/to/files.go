@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	core "github.com/AreteAcademy/bravis/sdk/internal/core"
+	core "github.com/AreteAcademy/brevis/sdk/internal/core"
 )
 
 // Files writes records to files, on disk or in object storage.
@@ -179,7 +179,7 @@ func (f Files) put(ctx context.Context, loc core.Location, key string, data []by
 
 	// Temporary file then rename: on the same filesystem a rename is atomic,
 	// so a reader watching the directory never sees a half-written file.
-	tmp, err := os.CreateTemp(filepath.Dir(key), ".bravis-*")
+	tmp, err := os.CreateTemp(filepath.Dir(key), ".brevis-*")
 	if err != nil {
 		return fmt.Errorf("creating a temporary file: %w", err)
 	}

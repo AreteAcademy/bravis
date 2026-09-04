@@ -1,5 +1,5 @@
 /* ===========================================================================
-   Bravis — landing page
+   Brevis — landing page
 
    Identidade da Arete Academy (areteacademy.com.br): pergaminho, ouro e
    serifa. As variaveis carregam os MESMOS valores do site do grupo e da UI do
@@ -1333,7 +1333,7 @@ tbody td.is-highlight {
   font-family: var(--font-mono);
   font-size: 0.76rem;
   line-height: 1.5;
-  /* "github.com/AreteAcademy/bravis/cmd/bravis@latest" e uma palavra so:
+  /* "github.com/AreteAcademy/brevis/cmd/brevis@latest" e uma palavra so:
      sem isto ela transborda o card em vez de quebrar. */
   overflow-wrap: anywhere;
 }

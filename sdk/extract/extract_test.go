@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	core "github.com/AreteAcademy/bravis/sdk/internal/core"
+	core "github.com/AreteAcademy/brevis/sdk/internal/core"
 )
 
 // TestRetryOn429 verifies retry on rate limit.
@@ -363,7 +363,7 @@ func TestPostSendsMethodBodyAndHeaders(t *testing.T) {
 		Method: http.MethodPost,
 		Body:   strings.NewReader(corpo),
 		Header: map[string][]string{
-			"X-Api-Client": {"bravis"},
+			"X-Api-Client": {"brevis"},
 			"Content-Type": {"application/json"},
 		},
 	}, nil)
@@ -384,7 +384,7 @@ func TestPostSendsMethodBodyAndHeaders(t *testing.T) {
 	if gotBody != corpo {
 		t.Errorf("corpo = %q, esperado %q", gotBody, corpo)
 	}
-	if gotHeader != "bravis" {
+	if gotHeader != "brevis" {
 		t.Errorf("o header do fetcher não chegou: %q", gotHeader)
 	}
 	if gotType != "application/json" {

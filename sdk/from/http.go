@@ -12,8 +12,8 @@ import (
 	"iter"
 	"time"
 
-	"github.com/AreteAcademy/bravis/sdk/extract"
-	core "github.com/AreteAcademy/bravis/sdk/internal/core"
+	"github.com/AreteAcademy/brevis/sdk/extract"
+	core "github.com/AreteAcademy/brevis/sdk/internal/core"
 )
 
 // HTTP reads from an HTTP API.

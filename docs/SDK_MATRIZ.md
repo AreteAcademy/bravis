@@ -120,9 +120,9 @@ go test ./...
 
 # os de nuvem pedem as variáveis
 docker compose -f docker-compose.drivers.yml up -d minio
-BRAVIS_IT_S3_ENDPOINT=http://localhost:9000 \
-BRAVIS_IT_PROJECT=meu-projeto BRAVIS_IT_DATASET=bravis_it \
-BRAVIS_IT_BUCKET=meu-bucket \
+BREVIS_IT_S3_ENDPOINT=http://localhost:9000 \
+BREVIS_IT_PROJECT=meu-projeto BREVIS_IT_DATASET=bravis_it \
+BREVIS_IT_BUCKET=meu-bucket \
   go test ./... -run Integration
 ```
 

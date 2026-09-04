@@ -134,7 +134,7 @@ duas linhas era a tabela.
 
 `TestIntegrationMergeDoesNotDouble` cobria exatamente o §1 — tabela ausente,
 `CreateTable`, `DedupMerge` — desde a `v0.2.1`. Nunca rodou: `requireIntegration`
-pula sem `BRAVIS_IT_PROJECT`, e a variável não estava definida em nada
+pula sem `BREVIS_IT_PROJECT`, e a variável não estava definida em nada
 automatizado. Quando finalmente rodou, achou **quatro** defeitos a mais numa
 única execução, incluindo `Load` mutando a fatia do chamador — que quebrava
 exatamente o retry que o `DedupMerge` existe para tratar.
@@ -234,9 +234,9 @@ Três detalhes que só um consumidor real produz, e que valem para o próximo:
    | o que criar | onde | o quê |
    |---|---|---|
    | secret `GCP_CREDENTIALS` | Settings → Secrets → Actions | o JSON de uma service account com BigQuery Data Editor, Job User e Storage Object Admin |
-   | variable `BRAVIS_IT_PROJECT` | Settings → Variables → Actions | `zarv-development-94b6` |
-   | variable `BRAVIS_IT_DATASET` | idem | `bravis_it` |
-   | variable `BRAVIS_IT_BUCKET` | idem | `zarv-development-94b6-bravis-it` |
+   | variable `BREVIS_IT_PROJECT` | Settings → Variables → Actions | `zarv-development-94b6` |
+   | variable `BREVIS_IT_DATASET` | idem | `bravis_it` |
+   | variable `BREVIS_IT_BUCKET` | idem | `zarv-development-94b6-bravis-it` |
 
    Enquanto não existirem, **dezessete testes ficam em `SKIP`** e o job diz
    isso com um `::warning::` — em vez de passar verde em silêncio, que é como a

@@ -9,15 +9,15 @@
 > **Correção de 2026-09-03:** o §7 está completo, e a ressalva anterior estava
 > errada. Eu havia registrado que "nada instancia o `Runner`" — na verdade o
 > `executar` do `cmdScheduler` sempre fez isso; ele tinha sumido junto com o
-> entrypoint do engine, que um CLI escrevera por cima. Com o `cmd/bravis`
+> entrypoint do engine, que um CLI escrevera por cima. Com o `cmd/brevis`
 > recuperado, a ligação dispatcher → `Runner` reapareceu inteira, e só faltava
 > passar os três campos novos (`Historico`, `Trigger`, `LogicalDate`).
 >
-> Duas coisas apareceram ao provar de ponta a ponta com `bravis run`:
+> Duas coisas apareceram ao provar de ponta a ponta com `brevis run`:
 >
-> - O `RunID` zero era injetado como `BRAVIS_RUN_ID`, e o SDK decide estar sob
+> - O `RunID` zero era injetado como `BREVIS_RUN_ID`, e o SDK decide estar sob
 >   o engine pela **presença** do id — então um fetcher rodado à mão logaria
->   "running under Bravis" com um id inventado. Agora as três variáveis de
+>   "running under Brevis" com um id inventado. Agora as três variáveis de
 >   identidade só saem quando há run de verdade; os params continuam indo,
 >   porque `--param` é como se passa entrada nesse caminho.
 > - A tentativa é **0-based** no engine, como a coluna `task_runs.attempt`. A
@@ -38,7 +38,7 @@ func main() {
 }
 ```
 
-Rodando sozinho, na mão, é exatamente isso. Rodando dentro do Bravis, o mesmo
+Rodando sozinho, na mão, é exatamente isso. Rodando dentro do Brevis, o mesmo
 binário passa a saber que é a primeira execução e cria a tabela — sem uma linha
 a mais.
 
@@ -66,19 +66,19 @@ O engine já injeta ambiente em pod e em processo local, pelo mesmo campo. Um
 segundo mecanismo — arquivo, socket, flag — significaria dois caminhos para
 testar e dois para quebrar.
 
-**Prefixo `BRAVIS_RUN_`**, separado do `BRAVIS_SDK_` que já existe: um diz *o
+**Prefixo `BREVIS_RUN_`**, separado do `BREVIS_SDK_` que já existe: um diz *o
 que o SDK faz*, o outro *o que este disparo é*. Misturá-los faria
-`BRAVIS_SDK_DATASET` e `BRAVIS_RUN_PARAMS` parecerem a mesma categoria de
+`BREVIS_SDK_DATASET` e `BREVIS_RUN_PARAMS` parecerem a mesma categoria de
 coisa, e não são.
 
 | variável | tipo | vem de |
 |---|---|---|
-| `BRAVIS_RUN_ID` | UUID | `Run.ID` |
-| `BRAVIS_RUN_FIRST` | `"true"` \| `"false"` | §3 |
-| `BRAVIS_RUN_ATTEMPT` | inteiro | `Run.Attempt` |
-| `BRAVIS_RUN_TRIGGER` | `schedule` \| `manual` \| `backfill` | `Run.TriggerType` |
-| `BRAVIS_RUN_LOGICAL_DATE` | RFC 3339, vazio em disparo manual | `Run.LogicalDate` |
-| `BRAVIS_RUN_PARAMS` | JSON `{"chave":"valor"}` | `Run.Params` |
+| `BREVIS_RUN_ID` | UUID | `Run.ID` |
+| `BREVIS_RUN_FIRST` | `"true"` \| `"false"` | §3 |
+| `BREVIS_RUN_ATTEMPT` | inteiro | `Run.Attempt` |
+| `BREVIS_RUN_TRIGGER` | `schedule` \| `manual` \| `backfill` | `Run.TriggerType` |
+| `BREVIS_RUN_LOGICAL_DATE` | RFC 3339, vazio em disparo manual | `Run.LogicalDate` |
+| `BREVIS_RUN_PARAMS` | JSON `{"chave":"valor"}` | `Run.Params` |
 
 > **Diga a verdade sobre isto na documentação.** Variável de ambiente **não é
 > canal privado**: o processo do fetcher pode lê-la, e alguém vai ler. O que se
@@ -98,7 +98,7 @@ Três candidatos, e dois estão errados:
 | Consumidor, por flag | `--first-run` | **não.** É exatamente o que se está tirando dele |
 
 **A consulta:** existe algum `run` deste `workflow_slug` com status terminal de
-sucesso, anterior a este? Se não, `BRAVIS_RUN_FIRST=true`.
+sucesso, anterior a este? Se não, `BREVIS_RUN_FIRST=true`.
 
 Duas armadilhas que custam caro se ignoradas:
 
@@ -111,7 +111,7 @@ Duas armadilhas que custam caro se ignoradas:
   workflow de um passo só e falha silenciosamente no resto.
 
 **Como provar:** teste que insere runs anteriores e confere que
-`BRAVIS_RUN_FIRST` só é `true` quando não há sucesso prévio *daquele step*; e um
+`BREVIS_RUN_FIRST` só é `true` quando não há sucesso prévio *daquele step*; e um
 que confere que a segunda tentativa do mesmo run não reabre a flag.
 
 ---
@@ -139,7 +139,7 @@ CreateTable *bool   // nil = não falei; o engine decide
 | `sdk.Bool(false)` | `firstRun=true` | **não cria** — o autor recusou, e recusa explícita ganha |
 
 Ponteiro incomoda. A alternativa — o engine sempre ganhar — significa que um
-`CreateTable: false` escrito de propósito é ignorado dentro do Bravis e
+`CreateTable: false` escrito de propósito é ignorado dentro do Brevis e
 respeitado fora, o que é pior: o mesmo código com dois comportamentos e nenhum
 aviso.
 
@@ -152,7 +152,7 @@ pergunta de plantão — "por que ele criou a tabela?" — não tem resposta no 
 
 ## 5. `propertyRun`: os parâmetros do disparo
 
-`BRAVIS_RUN_PARAMS` chega como JSON e vira um mapa que o fetcher **pode** ler,
+`BREVIS_RUN_PARAMS` chega como JSON e vira um mapa que o fetcher **pode** ler,
 sem precisar:
 
 ```go
@@ -186,7 +186,7 @@ Isso dá ao operador um botão para o caso "a tabela foi apagada, recria" sem
 editar código nem inventar uma primeira execução falsa.
 
 **Como provar:** teste que roda o mesmo `Pipeline` com e sem
-`BRAVIS_RUN_PARAMS`, conferindo que o `Before` enxerga os valores e que o
+`BREVIS_RUN_PARAMS`, conferindo que o `Before` enxerga os valores e que o
 fetcher sem `Before` não muda de comportamento.
 
 ---
@@ -219,7 +219,7 @@ Env: mesclar(r.Env, contextoDoRun(run, step)),
 ```
 
 `contextoDoRun` monta as seis variáveis da §2. **O ambiente do runner ganha em
-colisão** — se alguém definiu `BRAVIS_RUN_PARAMS` na configuração do runner, é
+colisão** — se alguém definiu `BREVIS_RUN_PARAMS` na configuração do runner, é
 porque quis, e o engine não deve sobrescrever configuração explícita.
 
 O executor Kubernetes e o local não mudam: os dois já leem `TaskExec.Env`.
@@ -231,9 +231,9 @@ variáveis; e um teste de `pod` que confere que elas chegam ao container.
 
 ## 8. O que **não** deve entrar
 
-- **Segredo por esta via.** `BRAVIS_RUN_*` é contexto de execução, não
+- **Segredo por esta via.** `BREVIS_RUN_*` é contexto de execução, não
   credencial. Credencial continua em `envFrom.secretRef`, que já existe.
-- **Objeto grande.** Se `BRAVIS_RUN_PARAMS` crescer para além de alguns KB, o
+- **Objeto grande.** Se `BREVIS_RUN_PARAMS` crescer para além de alguns KB, o
   canal está errado — variável de ambiente tem limite e o erro aparece como pod
   que não inicia, longe da causa.
 - **O SDK consultando o banco do engine.** O SDK não conhece Postgres e não deve
@@ -247,7 +247,7 @@ variáveis; e um teste de `pod` que confere que elas chegam ao container.
 ## 9. Critério de pronto
 
 1. Um fetcher **sem uma linha de mudança** cria a tabela na primeira execução
-   dentro do Bravis, e não cria fora.
+   dentro do Brevis, e não cria fora.
 2. `firstRun` é por (`workflow_slug`, `step_id`), não por workflow, e um retry
    não o reabre.
 3. `CreateTable` é tri-estado, e `sdk.Bool(false)` explícito vence o engine.
@@ -260,7 +260,7 @@ variáveis; e um teste de `pod` que confere que elas chegam ao container.
    que já existe, sem alteração.
 8. Nenhum campo em `RunContext` que nada leia.
 9. `go build ./...` e `go vet ./...` verdes em `sdk`, `examples` **e
-   `cmd/bravis`** antes da tag.
+   `cmd/brevis`** antes da tag.
 10. A documentação diz, com estas palavras, que variável de ambiente não é canal
     privado: o fetcher não **precisa** lê-las, não que não **consegue**.
 
@@ -277,7 +277,7 @@ recurso se ninguém olhar.
 | **Função escrita e nunca chamada** | `applyLayout` — `CreateTable` teria sido flag sem efeito, pega pelo linter e não por raciocínio |
 | **Símbolo inalcançável de fora** | três `With*` no `internal/core` sem re-export: compilava, tinha teste, e nenhum consumidor podia chamar |
 | **Teste que prova de dentro** | os contadores passavam usando `data.stats`; o acessor público não existia. Testar de dentro não prova o que o usuário consegue |
-| **CI que não constrói o artefato** | `cmd/bravis` quebrou numa renomeação e o CI ficou verde, porque ninguém o construía |
+| **CI que não constrói o artefato** | `cmd/brevis` quebrou numa renomeação e o CI ficou verde, porque ninguém o construía |
 | **Verificação que não pode falhar** | `|| true` nos examples; URL do proxy sem case-encoding saindo `exit 0` |
 
 **A regra que sai daí:** todo item deste plano precisa de uma prova que

@@ -13,7 +13,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	dominio "github.com/AreteAcademy/bravis/internal/domain/workflow"
+	dominio "github.com/AreteAcademy/brevis/internal/domain/workflow"
 )
 
 // Spec espelha o YAML, e so isso. Campos frouxos aqui, invariantes no dominio.

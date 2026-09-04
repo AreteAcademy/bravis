@@ -2,7 +2,7 @@
 
 ## Principle: No Schema Opinions
 
-The Bravis SDK extracts and loads data, but **does not impose a table schema**.
+The Brevis SDK extracts and loads data, but **does not impose a table schema**.
 
 This is intentional and a core design decision.
 
@@ -68,7 +68,7 @@ When a `Metadata` block is declared, the SDK adds two fields to the record:
   "amount": 100.50,
   "currency": "USD",
   
-  // bravis metadata (injected into payload)
+  // brevis metadata (injected into payload)
   "ingestion_id": "550e8400-e29b-41d4-a716-446655440000",
   "ingestion_loaded_at": "2026-01-02T15:30:45Z",
   "# provider/entity/source_key stay provenance; you add them if you want them"
@@ -211,7 +211,7 @@ WHEN NOT MATCHED THEN INSERT (...) VALUES (...);
 
 ## Comparison: SDK vs Opinionated Alternative
 
-| Aspect | Bravis | Opinionated SDK |
+| Aspect | Brevis | Opinionated SDK |
 |--------|--------|-----------------|
 | Schema | You define | SDK enforces |
 | Flexibility | High (any JSON shape) | Low (must fit mold) |

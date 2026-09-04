@@ -13,14 +13,14 @@ import (
 	"github.com/a-h/templ"
 	"github.com/google/uuid"
 
-	"github.com/AreteAcademy/bravis/internal/auth"
-	"github.com/AreteAcademy/bravis/internal/branding"
-	"github.com/AreteAcademy/bravis/internal/domain/run"
-	sch "github.com/AreteAcademy/bravis/internal/domain/schedule"
-	wf "github.com/AreteAcademy/bravis/internal/domain/workflow"
-	"github.com/AreteAcademy/bravis/internal/infrastructure/postgres"
-	"github.com/AreteAcademy/bravis/web/assets"
-	"github.com/AreteAcademy/bravis/web/pages"
+	"github.com/AreteAcademy/brevis/internal/auth"
+	"github.com/AreteAcademy/brevis/internal/branding"
+	"github.com/AreteAcademy/brevis/internal/domain/run"
+	sch "github.com/AreteAcademy/brevis/internal/domain/schedule"
+	wf "github.com/AreteAcademy/brevis/internal/domain/workflow"
+	"github.com/AreteAcademy/brevis/internal/infrastructure/postgres"
+	"github.com/AreteAcademy/brevis/web/assets"
+	"github.com/AreteAcademy/brevis/web/pages"
 )
 
 // janelaOverview e o horizonte do dashboard. Vinte e quatro horas cobrem o ciclo

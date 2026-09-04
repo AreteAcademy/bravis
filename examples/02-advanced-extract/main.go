@@ -12,8 +12,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/AreteAcademy/bravis/sdk"
-	"github.com/AreteAcademy/bravis/sdk/from"
+	"github.com/AreteAcademy/brevis/sdk"
+	"github.com/AreteAcademy/brevis/sdk/from"
 )
 
 // throttle is anything with Wait(ctx) error, so *rate.Limiter from

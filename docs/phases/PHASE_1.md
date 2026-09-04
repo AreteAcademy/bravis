@@ -16,7 +16,7 @@ O que foi feito das fases adiante, e o que **não** foi:
 | Phase 3 | `ProcessExecutor` | registry de tasks Go in-process |
 
 Sem fila e sem persistência, uma execução existe só enquanto o processo vive.
-Isso é suficiente para `bravis run` local e insuficiente para qualquer coisa
+Isso é suficiente para `brevis run` local e insuficiente para qualquer coisa
 agendada — que é o que a PHASE 2 resolve.
 
 ## Implemented
@@ -30,7 +30,7 @@ agendada — que é o que a PHASE 2 resolve.
 | Interface `Executor` (§13) | `internal/execution` |
 | `ProcessExecutor` | `internal/execution/local` |
 | Runner local do grafo | `internal/application/execution` |
-| `bravis validate`, `bravis run` | `cmd/bravis` |
+| `brevis validate`, `brevis run` | `cmd/brevis` |
 
 ## Architecture Decisions
 
@@ -50,12 +50,12 @@ paralelos terminam em 1,9s, não em 2s+.
 não ajuda; saber quais steps o fecham, sim.
 
 **A fronteira do `ProcessExecutor` é código.** `New()` recusa-se a construir fora
-de `BRAVIS_ENV=local`, e a recusa é testada. Registrada como emenda à §3 do plano,
+de `BREVIS_ENV=local`, e a recusa é testada. Registrada como emenda à §3 do plano,
 não como exceção silenciosa.
 
 **O executor não herda o ambiente do pai.** O orquestrador carrega credenciais que
 uma task não deve enxergar por acidente. Só `PATH` e `HOME` são repassados pelo
-`bravis run`, e há teste provando que uma variável do processo pai não vaza.
+`brevis run`, e há teste provando que uma variável do processo pai não vaza.
 
 **stdout e stderr chegam separados.** Juntá-los perde de onde a mensagem veio —
 foi exatamente isso que fez o resumo final do dbt aparecer como erro no Leoflow.
@@ -80,9 +80,9 @@ o trabalho.
 Validação manual ponta a ponta:
 
 ```
-bravis run pipeline.yaml   -> 4 steps, 2 em paralelo, 1,9s
-bravis run falha.yaml      -> para no step 2, o 3 nao roda
-bravis validate examples/  -> ok nos dois arquivos
+brevis run pipeline.yaml   -> 4 steps, 2 em paralelo, 1,9s
+brevis run falha.yaml      -> para no step 2, o 3 nao roda
+brevis validate examples/  -> ok nos dois arquivos
 ```
 
 ## Benchmarks
@@ -105,5 +105,5 @@ fazer sentido na PHASE 2, com fila e concorrência — a §34 define o que medir
 ## Next Phase
 
 **PHASE 2 — QUEUE + RUN ENGINE**: `runs` e `task_runs` persistidos, fila, máquina
-de estados da §7, retries e idempotência. É o que transforma `bravis run` numa
+de estados da §7, retries e idempotência. É o que transforma `brevis run` numa
 execução observável e recuperável.

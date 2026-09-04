@@ -8,23 +8,23 @@ import (
 	"time"
 )
 
-// Environment the Bravis engine injects into a step it runs. A fetcher never
+// Environment the Brevis engine injects into a step it runs. A fetcher never
 // reads these itself: sdk.Run picks them up, and Pipeline.Run exposes what is
 // useful.
 //
-// The prefix is deliberately not BRAVIS_SDK_. Those say what the SDK does;
+// The prefix is deliberately not BREVIS_SDK_. Those say what the SDK does;
 // these say what this particular execution is. Two categories, two prefixes.
 //
 // This is not a private channel. The process can read its own environment,
 // and someone will. What is promised is that a fetcher does not *have* to --
 // not that it cannot.
 const (
-	EnvRunID          = "BRAVIS_RUN_ID"
-	EnvRunFirst       = "BRAVIS_RUN_FIRST"
-	EnvRunAttempt     = "BRAVIS_RUN_ATTEMPT"
-	EnvRunTrigger     = "BRAVIS_RUN_TRIGGER"
-	EnvRunLogicalDate = "BRAVIS_RUN_LOGICAL_DATE"
-	EnvRunParams      = "BRAVIS_RUN_PARAMS"
+	EnvRunID          = "BREVIS_RUN_ID"
+	EnvRunFirst       = "BREVIS_RUN_FIRST"
+	EnvRunAttempt     = "BREVIS_RUN_ATTEMPT"
+	EnvRunTrigger     = "BREVIS_RUN_TRIGGER"
+	EnvRunLogicalDate = "BREVIS_RUN_LOGICAL_DATE"
+	EnvRunParams      = "BREVIS_RUN_PARAMS"
 )
 
 // ParamCreateTable, when the engine passes it as "true" in the run params,
@@ -115,8 +115,8 @@ func RunContextFromEnv() RunContext {
 }
 
 // fromEngine reports whether anything at all arrived, which is how the log
-// tells "run by hand" apart from "run by Bravis".
-// FromEngine reports whether this run came from the Bravis engine.
+// tells "run by hand" apart from "run by Brevis".
+// FromEngine reports whether this run came from the Brevis engine.
 func (r RunContext) FromEngine() bool {
 	return r.ID != ""
 }

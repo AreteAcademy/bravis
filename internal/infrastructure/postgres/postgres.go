@@ -15,7 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
 
-	"github.com/AreteAcademy/bravis/migrations"
+	"github.com/AreteAcademy/brevis/migrations"
 )
 
 // Pool envolve o pgxpool. O tipo existe para que o resto do sistema dependa de
@@ -29,7 +29,7 @@ type Pool struct {
 func New(ctx context.Context, url string) (*Pool, error) {
 	cfg, err := pgxpool.ParseConfig(url)
 	if err != nil {
-		return nil, fmt.Errorf("parse da BRAVIS_DATABASE_URL: %w", err)
+		return nil, fmt.Errorf("parse da BREVIS_DATABASE_URL: %w", err)
 	}
 	cfg.MaxConnLifetime = time.Hour
 	cfg.HealthCheckPeriod = 30 * time.Second
@@ -56,13 +56,13 @@ func (p *Pool) Check(ctx context.Context) error {
 	return p.Ping(ctx)
 }
 
-// Migrate aplica as migrations embutidas. Roda pelo subcomando `bravis migrate`,
+// Migrate aplica as migrations embutidas. Roda pelo subcomando `brevis migrate`,
 // nunca no `serve`: subir a aplicacao e migrar o schema tem blast radius
 // diferente, e juntar as duas faz um restart casual virar um DDL.
 func Migrate(ctx context.Context, url, direcao string) error {
 	cfg, err := pgx.ParseConfig(url)
 	if err != nil {
-		return fmt.Errorf("parse da BRAVIS_DATABASE_URL: %w", err)
+		return fmt.Errorf("parse da BREVIS_DATABASE_URL: %w", err)
 	}
 
 	db := stdlib.OpenDB(*cfg)

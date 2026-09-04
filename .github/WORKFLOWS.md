@@ -1,6 +1,6 @@
 # GitHub Actions Workflows
 
-Automação de CI/CD para o projeto Bravis.
+Automação de CI/CD para o projeto Brevis.
 
 ## 🔄 Workflows Disponíveis
 
@@ -38,7 +38,7 @@ Executa em: `push` com tag `sdk/v*`
 **Resultado:**
 ```
 ✅ GitHub Release criada
-📍 Disponível em: https://pkg.go.dev/github.com/AreteAcademy/bravis/sdk@v0.1.0
+📍 Disponível em: https://pkg.go.dev/github.com/AreteAcademy/brevis/sdk@v0.1.0
 🔗 Go proxy atualizado
 ```
 
@@ -59,7 +59,7 @@ Executa em: `push` (main) e `pull_request` quando `site/` muda
 - ✅ **Docker**: Build e push para Docker Hub (em main)
 
 **Resultado:**
-- 🐳 Docker image: `username/bravis-site:latest`
+- 🐳 Docker image: `username/brevis-site:latest`
 - 📊 Lighthouse scores
 - 🔍 Link validation
 
@@ -85,7 +85,7 @@ Executa em: `release` (SDK releases)
 # 🚀 SDK v0.1.0
 
 ## Installation
-go get github.com/AreteAcademy/bravis/sdk@v0.1.0
+go get github.com/AreteAcademy/brevis/sdk@v0.1.0
 
 ## Recent Changes
 - feat(extract): add retry with backoff
@@ -137,10 +137,10 @@ Executa: Semanalmente (segundas, 03:00 UTC)
 Adicione ao README.md:
 
 ```markdown
-[![Tests](https://github.com/AreteAcademy/bravis/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/AreteAcademy/bravis/actions/workflows/test.yml)
-[![SDK Version](https://img.shields.io/github/v/tag/AreteAcademy/bravis?filter=sdk/*&label=SDK)](https://github.com/AreteAcademy/bravis/releases)
-[![Go Report Card](https://goreportcard.com/badge/github.com/AreteAcademy/bravis/sdk)](https://goreportcard.com/report/github.com/AreteAcademy/bravis/sdk)
-[![codecov](https://codecov.io/gh/AreteAcademy/bravis/branch/main/graph/badge.svg)](https://codecov.io/gh/AreteAcademy/bravis)
+[![Tests](https://github.com/AreteAcademy/brevis/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/AreteAcademy/brevis/actions/workflows/test.yml)
+[![SDK Version](https://img.shields.io/github/v/tag/AreteAcademy/brevis?filter=sdk/*&label=SDK)](https://github.com/AreteAcademy/brevis/releases)
+[![Go Report Card](https://goreportcard.com/badge/github.com/AreteAcademy/brevis/sdk)](https://goreportcard.com/report/github.com/AreteAcademy/brevis/sdk)
+[![codecov](https://codecov.io/gh/AreteAcademy/brevis/branch/main/graph/badge.svg)](https://codecov.io/gh/AreteAcademy/brevis)
 ```
 
 ---
@@ -188,16 +188,16 @@ act push -l
 ### Verificar status
 ```bash
 # CLI GitHub
-gh run list --repo AreteAcademy/bravis
+gh run list --repo AreteAcademy/brevis
 
 # Ver detalhes de uma run
-gh run view <RUN_ID> --repo AreteAcademy/bravis
+gh run view <RUN_ID> --repo AreteAcademy/brevis
 ```
 
 ### Rerun um workflow
 ```bash
 # Re-executar
-gh run rerun <RUN_ID> --repo AreteAcademy/bravis
+gh run rerun <RUN_ID> --repo AreteAcademy/brevis
 ```
 
 ---
@@ -211,10 +211,10 @@ gh run rerun <RUN_ID> --repo AreteAcademy/bravis
 → Each workflow tem badge próprio
 
 ### Codecov
-→ https://codecov.io/gh/AreteAcademy/bravis
+→ https://codecov.io/gh/AreteAcademy/brevis
 
 ### pkg.go.dev
-→ https://pkg.go.dev/github.com/AreteAcademy/bravis/sdk
+→ https://pkg.go.dev/github.com/AreteAcademy/brevis/sdk
 
 ---
 
@@ -250,7 +250,7 @@ Dependabot cuida disso automaticamente
 **pkg.go.dev não atualiza?**
 - Aguarde 5-10 minutos após tag
 - Verificar tag format: `sdk/v0.1.0`
-- Forçar: `curl https://proxy.golang.org/github.com/AreteAcademy/bravis/sdk/@v/v0.1.0.info`
+- Forçar: `curl https://proxy.golang.org/github.com/AreteAcademy/brevis/sdk/@v/v0.1.0.info`
 
 ---
 

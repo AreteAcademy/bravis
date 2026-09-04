@@ -15,18 +15,18 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	awss3 "github.com/aws/aws-sdk-go-v2/service/s3"
 
-	"github.com/AreteAcademy/bravis/sdk/from"
-	core "github.com/AreteAcademy/bravis/sdk/internal/core"
-	"github.com/AreteAcademy/bravis/sdk/store/gcs"
-	"github.com/AreteAcademy/bravis/sdk/store/s3"
-	"github.com/AreteAcademy/bravis/sdk/to"
+	"github.com/AreteAcademy/brevis/sdk/from"
+	core "github.com/AreteAcademy/brevis/sdk/internal/core"
+	"github.com/AreteAcademy/brevis/sdk/store/gcs"
+	"github.com/AreteAcademy/brevis/sdk/store/s3"
+	"github.com/AreteAcademy/brevis/sdk/to"
 )
 
 // Os testes de object storage rodam contra o MinIO do
 // docker-compose.drivers.yml:
 //
 //	docker compose -f docker-compose.drivers.yml up -d minio
-//	BRAVIS_IT_S3_ENDPOINT=http://localhost:9000 go test ./from/... -run Integration
+//	BREVIS_IT_S3_ENDPOINT=http://localhost:9000 go test ./from/... -run Integration
 //
 // Sem a variável eles pulam, e a suíte normal segue offline. São os únicos que
 // provam que um objeto de verdade entra e sai -- os em memória provam os bytes
@@ -37,16 +37,16 @@ func s3Client(t *testing.T) (*awss3.Client, string) {
 	if testing.Short() {
 		t.Skip("integration test skipped under -short")
 	}
-	endpoint := os.Getenv("BRAVIS_IT_S3_ENDPOINT")
+	endpoint := os.Getenv("BREVIS_IT_S3_ENDPOINT")
 	if endpoint == "" {
-		t.Skip("BRAVIS_IT_S3_ENDPOINT not set; skipping integration test")
+		t.Skip("BREVIS_IT_S3_ENDPOINT not set; skipping integration test")
 	}
 
 	cfg, err := awscfg.LoadDefaultConfig(context.Background(),
 		awscfg.WithRegion("us-east-1"),
 		awscfg.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
-			envOr("BRAVIS_IT_S3_KEY", "bravis"),
-			envOr("BRAVIS_IT_S3_SECRET", "bravis-secret"), "")),
+			envOr("BREVIS_IT_S3_KEY", "brevis"),
+			envOr("BREVIS_IT_S3_SECRET", "brevis-secret"), "")),
 	)
 	if err != nil {
 		t.Fatalf("aws config: %v", err)
@@ -220,14 +220,14 @@ func TestIntegrationS3PaginaAListagem(t *testing.T) {
 // BigQuery já usa, porque não há emulador de GCS bom o bastante para provar
 // o que este teste prova.
 //
-//	BRAVIS_IT_BUCKET=meu-bucket go test ./from/... -run IntegrationGCS
+//	BREVIS_IT_BUCKET=meu-bucket go test ./from/... -run IntegrationGCS
 func TestIntegrationGCSRoundTrip(t *testing.T) {
 	if testing.Short() {
 		t.Skip("integration test skipped under -short")
 	}
-	bucket := os.Getenv("BRAVIS_IT_BUCKET")
+	bucket := os.Getenv("BREVIS_IT_BUCKET")
 	if bucket == "" {
-		t.Skip("BRAVIS_IT_BUCKET not set; skipping integration test")
+		t.Skip("BREVIS_IT_BUCKET not set; skipping integration test")
 	}
 
 	ctx := context.Background()

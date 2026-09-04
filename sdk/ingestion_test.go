@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	core "github.com/AreteAcademy/bravis/sdk/internal/core"
+	core "github.com/AreteAcademy/brevis/sdk/internal/core"
 )
 
 func aplica(t *testing.T, fn Transformer, in map[string]any) map[string]any {

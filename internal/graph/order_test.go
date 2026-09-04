@@ -3,7 +3,7 @@ package graph
 import (
 	"testing"
 
-	wf "github.com/AreteAcademy/bravis/internal/domain/workflow"
+	wf "github.com/AreteAcademy/brevis/internal/domain/workflow"
 )
 
 func TestNiveisEmCadeia(t *testing.T) {

@@ -60,7 +60,7 @@ jobs:
           # version exists, so a bad go.mod can still be fixed by deleting the
           # tag. Once the proxy caches a version it is immutable forever --
           # that is how v0.1.0 was burned.
-          MODULE="github.com/AreteAcademy/bravis/sdk"
+          MODULE="github.com/AreteAcademy/brevis/sdk"
           SDK_DIR="$GITHUB_WORKSPACE/sdk"
           mkdir -p /tmp/pretag && cd /tmp/pretag
           cat > go.mod <<EOF
@@ -173,16 +173,16 @@ jobs:
           tag_name: ${{ github.ref_name }}
           name: SDK ${{ steps.tag.outputs.version }}
           body: |
-            # Bravis SDK ${{ steps.tag.outputs.version }}
+            # Brevis SDK ${{ steps.tag.outputs.version }}
 
             ## Installation
             ```bash
-            go get github.com/AreteAcademy/bravis/sdk@${{ steps.tag.outputs.version }}
+            go get github.com/AreteAcademy/brevis/sdk@${{ steps.tag.outputs.version }}
             ```
 
             ## Documentation
-            - [pkg.go.dev](https://pkg.go.dev/github.com/AreteAcademy/bravis/sdk)
-            - [GitHub](https://github.com/AreteAcademy/bravis/tree/master/sdk)
+            - [pkg.go.dev](https://pkg.go.dev/github.com/AreteAcademy/brevis/sdk)
+            - [GitHub](https://github.com/AreteAcademy/brevis/tree/master/sdk)
 
             ## What's New
             See commit history for details.
@@ -204,7 +204,7 @@ jobs:
         env:
           VERSION: ${{ needs.create-release.outputs.version }}
         run: |
-          MODULE="github.com/AreteAcademy/bravis/sdk"
+          MODULE="github.com/AreteAcademy/brevis/sdk"
           echo "🔔 Asking the Go proxy to fetch $MODULE@$VERSION"
           # go list drives the proxy through the module path's case encoding
           # (AreteAcademy -> !arete!academy); hand-built curl URLs 404 silently.
@@ -237,7 +237,7 @@ jobs:
           # runner has no credentials, and the real answer -- "the proxy does
           # not have it yet" -- is buried under an auth error. The consumer
           # build below runs with verification fully on.
-          MODULE="github.com/AreteAcademy/bravis/sdk"
+          MODULE="github.com/AreteAcademy/brevis/sdk"
           for i in $(seq 1 40); do
             echo "Attempt $i..."
             if GOPROXY=https://proxy.golang.org GOSUMDB=off GOFLAGS=-mod=mod \
@@ -258,7 +258,7 @@ jobs:
           # consumer's build broke while the release itself looked green.
           # Compiling a throwaway module against the published artifact is
           # the only check that catches that.
-          MODULE="github.com/AreteAcademy/bravis/sdk"
+          MODULE="github.com/AreteAcademy/brevis/sdk"
           mkdir -p /tmp/consumer && cd /tmp/consumer
           cat > go.mod <<EOF
           module example.com/consumer

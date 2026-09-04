@@ -1,4 +1,4 @@
-// Package auth fecha a interface do Bravis com uma credencial de operador.
+// Package auth fecha a interface do Brevis com uma credencial de operador.
 //
 // Existe por um motivo concreto: em dev, um `POST /workflows/<slug>/trigger`
 // anonimo respondia 303 e disparava a pipeline. Qualquer pessoa na internet
@@ -46,7 +46,7 @@ const tamanhoChave = 32
 const ValidadeDaSessao = 12 * time.Hour
 
 // NomeDoCookie e o do cookie de sessao.
-const NomeDoCookie = "bravis_sessao"
+const NomeDoCookie = "brevis_sessao"
 
 // ---------------------------------------------------------------------------
 // Hash de senha
@@ -128,17 +128,17 @@ func (c Credencial) Ativa() bool {
 func (c Credencial) Validar() error {
 	if !c.Ativa() {
 		if c.Usuario != "" || c.Hash != "" {
-			return errors.New("credencial pela metade: BRAVIS_AUTH_USUARIO e " +
-				"BRAVIS_AUTH_SENHA_HASH precisam vir juntos")
+			return errors.New("credencial pela metade: BREVIS_AUTH_USUARIO e " +
+				"BREVIS_AUTH_SENHA_HASH precisam vir juntos")
 		}
 		return nil
 	}
 	if !strings.HasPrefix(c.Hash, "pbkdf2-sha256$") {
-		return errors.New("BRAVIS_AUTH_SENHA_HASH nao esta no formato esperado; " +
-			"gere com `bravis hash`")
+		return errors.New("BREVIS_AUTH_SENHA_HASH nao esta no formato esperado; " +
+			"gere com `brevis hash`")
 	}
 	if len(c.Segredo) < 32 {
-		return errors.New("BRAVIS_AUTH_SEGREDO precisa de ao menos 32 bytes " +
+		return errors.New("BREVIS_AUTH_SEGREDO precisa de ao menos 32 bytes " +
 			"(gere com `openssl rand -base64 48`)")
 	}
 	return nil

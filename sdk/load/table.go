@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/bigquery"
-	core "github.com/AreteAcademy/bravis/sdk/internal/core"
+	core "github.com/AreteAcademy/brevis/sdk/internal/core"
 	"google.golang.org/api/googleapi"
 )
 
@@ -191,9 +191,9 @@ func text(v any) string {
 }
 
 func tableDescription(cfg *core.LoadConfig, prov provenance) string {
-	who := "the Bravis SDK"
+	who := "the Brevis SDK"
 	if prov.Provider != "" && prov.Entity != "" {
-		who = fmt.Sprintf("%s/%s via the Bravis SDK", prov.Provider, prov.Entity)
+		who = fmt.Sprintf("%s/%s via the Brevis SDK", prov.Provider, prov.Entity)
 	}
 	if declares(cfg.Columns, core.MetadataID) {
 		return fmt.Sprintf("Written by %s since %s. Rows carry ingestion_id; deduplicate "+
@@ -341,7 +341,7 @@ func (l *Loader) inferSchema(ctx context.Context, data []byte) (bigquery.Schema,
 		return nil, err
 	}
 
-	tmp := l.bq.Dataset(l.cfg.Dataset).Table(fmt.Sprintf("_bravis_schema_%d", time.Now().UnixNano()))
+	tmp := l.bq.Dataset(l.cfg.Dataset).Table(fmt.Sprintf("_brevis_schema_%d", time.Now().UnixNano()))
 	// The expiration matters: an interrupted run must not leave a table
 	// behind forever.
 	if err := tmp.Create(ctx, &bigquery.TableMetadata{

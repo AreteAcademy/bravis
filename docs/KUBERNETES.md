@@ -67,11 +67,11 @@ correto e que não diz nada sobre a causa.
 
 ## O mesmo YAML roda local
 
-`BRAVIS_PODS=auto` (padrão): sem service account montada, o passo roda como
+`BREVIS_PODS=auto` (padrão): sem service account montada, o passo roda como
 processo na própria instância e o `image:` é **ignorado com aviso no log** —
 silenciar faria parecer que rodou na imagem declarada.
 
-No deploy do cluster use `BRAVIS_PODS=on`: ali, ficar sem cluster tem de ser erro
+No deploy do cluster use `BREVIS_PODS=on`: ali, ficar sem cluster tem de ser erro
 de boot. Com `auto`, uma falha de montagem da service account faria o scheduler
 executar tudo dentro do próprio pod de 128Mi, em silêncio.
 
@@ -95,27 +95,27 @@ adotar npm.
   criar o pod e registrar isso, a tentativa seguinte adota o pod existente em vez
   de subir um segundo rodando o mesmo dbt em paralelo.
 - **`activeDeadlineSeconds`** espelha o timeout. É a rede de segurança do lado do
-  cluster: se o Bravis morrer, o pod ainda para sozinho.
+  cluster: se o Brevis morrer, o pod ainda para sozinho.
 - **Motivo da espera vira log.** `ImagePullBackOff` e `CreateContainerConfigError`
   não produzem saída nenhuma; sem reportá-los, o passo pareceria travado até o
   timeout, sem uma linha explicando.
 - **O log é drenado depois do fim**, além de seguido ao vivo. Fechar o canal com
   linhas no buffer perderia justamente as últimas — as que explicam a falha.
-- **Pod de sucesso é apagado; o que falha pode ficar** (`BRAVIS_POD_MANTER_EM_FALHA`).
+- **Pod de sucesso é apagado; o que falha pode ficar** (`BREVIS_POD_MANTER_EM_FALHA`).
   Milhares de pods `Completed` poluem o namespace e não dizem nada que o
-  histórico do Bravis não diga melhor.
+  histórico do Brevis não diga melhor.
 - **O `reason` do cluster entra na mensagem de falha.** `OOMKilled` e
   `DeadlineExceeded` pedem ações opostas de "o código falhou".
 
 ## Variáveis dentro da task
 
-A task não herda o ambiente do orquestrador — ele carrega `BRAVIS_DATABASE_URL`
+A task não herda o ambiente do orquestrador — ele carrega `BREVIS_DATABASE_URL`
 com credencial, e um workflow é um comando arbitrário escrito por outra pessoa.
 
 | modo | mecanismo |
 |---|---|
-| pod | `BRAVIS_POD_ENV_FROM_SECRETS=meu-secret` → vira `envFrom.secretRef` no pod. As variáveis vão do Secret direto para a task, **sem passar pelo scheduler**. |
-| local | `BRAVIS_TASK_ENV=GOOGLE_PROJECT_ID,STAGE` → repassa essas do ambiente do processo. `NOME=valor` define literal; `*` repassa tudo menos as `BRAVIS_*`. |
+| pod | `BREVIS_POD_ENV_FROM_SECRETS=meu-secret` → vira `envFrom.secretRef` no pod. As variáveis vão do Secret direto para a task, **sem passar pelo scheduler**. |
+| local | `BREVIS_TASK_ENV=GOOGLE_PROJECT_ID,STAGE` → repassa essas do ambiente do processo. `NOME=valor` define literal; `*` repassa tudo menos as `BREVIS_*`. |
 
 Em ambos, `PATH` e `HOME` entram sempre: sem `PATH` nenhum comando resolve, e o
 erro seria um "not found" que não explica nada.
@@ -126,14 +126,14 @@ Duas contas, e é a separação que importa:
 
 | conta | permissão |
 |---|---|
-| `bravis-scheduler` | criar, ler, listar, observar e apagar pods; ler logs. Sem `update`, sem `patch`. |
-| `bravis-task` | **nenhuma** |
+| `brevis-scheduler` | criar, ler, listar, observar e apagar pods; ler logs. Sem `update`, sem `patch`. |
+| `brevis-task` | **nenhuma** |
 
 O pod de task executa comandos vindos de um YAML. Se herdasse a conta do
 scheduler, qualquer workflow poderia criar pods, ler secrets e escalar sozinho.
 Com uma conta sem role, o pior que um comando arbitrário faz é usar as
 credenciais que a instalação deu explicitamente a ele — via
-`BRAVIS_POD_ENV_FROM_SECRETS`, que vem do ambiente do scheduler e **nunca do
+`BREVIS_POD_ENV_FROM_SECRETS`, que vem do ambiente do scheduler e **nunca do
 YAML do workflow**.
 
 ## Concorrência: três limites
@@ -201,18 +201,18 @@ O que lá era um arquivo de empacotamento por DAG (`schema_version`, `dag_id`,
 lugares, por uma razão: **o que é do pipeline fica no YAML; o que é da
 instalação fica no ambiente do scheduler.**
 
-| Leoflow (por DAG) | Bravis | onde |
+| Leoflow (por DAG) | Brevis | onde |
 |---|---|---|
 | `dag_id`, `description`, `tags` | `name`, `tags` | workflow |
 | `base_image` | `image:` | workflow (por passo, com padrão) |
 | `tasks.run.resources` | `resources:` | workflow (por passo) |
-| `variables: [...]` | `BRAVIS_POD_ENV_FROM_SECRETS` | instalação |
-| `execution.service_account` | `BRAVIS_POD_SERVICE_ACCOUNT` | instalação |
-| `execution.node_selector` | `BRAVIS_POD_NODE_SELECTOR` | instalação |
-| `execution.tolerations` | `BRAVIS_POD_TOLERATIONS` | instalação |
+| `variables: [...]` | `BREVIS_POD_ENV_FROM_SECRETS` | instalação |
+| `execution.service_account` | `BREVIS_POD_SERVICE_ACCOUNT` | instalação |
+| `execution.node_selector` | `BREVIS_POD_NODE_SELECTOR` | instalação |
+| `execution.tolerations` | `BREVIS_POD_TOLERATIONS` | instalação |
 | `build.platforms` | — | a imagem é construída fora, uma vez |
 | `params.get('x')` (Airflow) | `params:` + `{{ .x }}` | workflow |
-| `alerts.on_failure` | `BRAVIS_SLACK_WEBHOOK` | instalação |
+| `alerts.on_failure` | `BREVIS_SLACK_WEBHOOK` | instalação |
 | `connections` | **não existe** | — |
 
 Service account no YAML do pipeline seria a inversão perigosa: um arquivo de
@@ -221,7 +221,7 @@ ficam no ambiente do scheduler.
 
 **Não há registro nem build por DAG.** No Leoflow, publicar um DAG novo passava
 por `leoflow deploy`; aqui a pasta é o artefato — um ConfigMap com os YAMLs e um
-Job que roda `bravis publish --prune`. Ver `publish-job.yaml`.
+Job que roda `brevis publish --prune`. Ver `publish-job.yaml`.
 
 **A ausência que sobra é *connection*** — não há conexão nomeada. O alerta de
 falha existe (ver abaixo).
@@ -229,7 +229,7 @@ falha existe (ver abaixo).
 ## Alerta de falha
 
 ```bash
-kubectl -n dados create secret generic bravis-slack \
+kubectl -n dados create secret generic brevis-slack \
   --from-literal=webhook='https://hooks.slack.com/services/...'
 ```
 
@@ -258,10 +258,10 @@ alerta chegue.
 
 ```bash
 kubectl apply -f deployments/kubernetes/rbac.yaml
-kubectl -n dados create secret generic bravis-db --from-literal=url='postgres://...'
-kubectl -n dados create secret generic bravis-task-env \
+kubectl -n dados create secret generic brevis-db --from-literal=url='postgres://...'
+kubectl -n dados create secret generic brevis-task-env \
   --from-literal=STAGE=prod --from-literal=GOOGLE_PROJECT_ID=zarv-...
-kubectl -n dados create configmap bravis-brand --from-file=brand.yaml
+kubectl -n dados create configmap brevis-brand --from-file=brand.yaml
 kubectl apply -f deployments/kubernetes/api.yaml -f deployments/kubernetes/scheduler.yaml
 ```
 

@@ -8,7 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
-	dom "github.com/AreteAcademy/bravis/internal/domain/run"
+	dom "github.com/AreteAcademy/brevis/internal/domain/run"
 )
 
 // Este arquivo fecha uma divida aberta desde a PHASE 2: a tabela `task_runs`

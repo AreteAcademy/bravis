@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/AreteAcademy/bravis/sdk/from"
+	"github.com/AreteAcademy/brevis/sdk/from"
 )
 
 // destinoFalso é um Writer que devolve resultado e erro juntos, que é o que

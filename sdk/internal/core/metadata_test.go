@@ -57,26 +57,26 @@ func TestColumnsAceitaAsColunasDoMetadata(t *testing.T) {
 }
 
 func TestResolvePrecedencia(t *testing.T) {
-	t.Setenv("BRAVIS_TESTE_X", "do-ambiente")
+	t.Setenv("BREVIS_TESTE_X", "do-ambiente")
 
-	if got := Resolve("explicito", "BRAVIS_TESTE_X", "padrao"); got.Value != "explicito" || got.Where != "explicit" {
+	if got := Resolve("explicito", "BREVIS_TESTE_X", "padrao"); got.Value != "explicito" || got.Where != "explicit" {
 		t.Errorf("o explícito tem de vencer: %+v", got)
 	}
-	if got := Resolve("", "BRAVIS_TESTE_X", "padrao"); got.Value != "do-ambiente" || got.Where != "BRAVIS_TESTE_X" {
+	if got := Resolve("", "BREVIS_TESTE_X", "padrao"); got.Value != "do-ambiente" || got.Where != "BREVIS_TESTE_X" {
 		t.Errorf("o ambiente vem depois, e o log nomeia a variável: %+v", got)
 	}
-	if got := Resolve("", "BRAVIS_TESTE_AUSENTE", "padrao"); got.Value != "padrao" || got.Where != "default" {
+	if got := Resolve("", "BREVIS_TESTE_AUSENTE", "padrao"); got.Value != "padrao" || got.Where != "default" {
 		t.Errorf("o padrão fecha a lista: %+v", got)
 	}
 }
 
 func TestEnvIntCaiNoPadraoEmVezDeQuebrar(t *testing.T) {
-	t.Setenv("BRAVIS_TESTE_N", "nao-e-numero")
-	if got := EnvInt("BRAVIS_TESTE_N", 7); got != 7 {
+	t.Setenv("BREVIS_TESTE_N", "nao-e-numero")
+	if got := EnvInt("BREVIS_TESTE_N", 7); got != 7 {
 		t.Errorf("um valor ilegível não pode derrubar a pipeline: %d", got)
 	}
-	t.Setenv("BRAVIS_TESTE_N", "42")
-	if got := EnvInt("BRAVIS_TESTE_N", 7); got != 42 {
+	t.Setenv("BREVIS_TESTE_N", "42")
+	if got := EnvInt("BREVIS_TESTE_N", 7); got != 42 {
 		t.Errorf("EnvInt = %d", got)
 	}
 }

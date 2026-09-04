@@ -11,10 +11,10 @@ import (
 	"testing"
 	"time"
 
-	app "github.com/AreteAcademy/bravis/internal/application/execution"
-	wf "github.com/AreteAcademy/bravis/internal/domain/workflow"
-	"github.com/AreteAcademy/bravis/internal/execution"
-	"github.com/AreteAcademy/bravis/internal/execution/local"
+	app "github.com/AreteAcademy/brevis/internal/application/execution"
+	wf "github.com/AreteAcademy/brevis/internal/domain/workflow"
+	"github.com/AreteAcademy/brevis/internal/execution"
+	"github.com/AreteAcademy/brevis/internal/execution/local"
 )
 
 type coletor struct {
@@ -450,7 +450,7 @@ func TestVagasSaoCompartilhadasEntreRuns(t *testing.T) {
 	}
 }
 
-// Sem vagas configuradas, nada muda — o modo local de `bravis run` nao deve
+// Sem vagas configuradas, nada muda — o modo local de `brevis run` nao deve
 // ganhar um limite que ninguem pediu.
 func TestSemVagasNaoHaLimite(t *testing.T) {
 	reg := execution.NewRegistry()

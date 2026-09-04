@@ -6,11 +6,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/AreteAcademy/bravis/internal/domain/run"
-	wf "github.com/AreteAcademy/bravis/internal/domain/workflow"
-	"github.com/AreteAcademy/bravis/internal/infrastructure/postgres"
-	"github.com/AreteAcademy/bravis/web/components"
-	"github.com/AreteAcademy/bravis/web/layouts"
+	"github.com/AreteAcademy/brevis/internal/domain/run"
+	wf "github.com/AreteAcademy/brevis/internal/domain/workflow"
+	"github.com/AreteAcademy/brevis/internal/infrastructure/postgres"
+	"github.com/AreteAcademy/brevis/web/components"
+	"github.com/AreteAcademy/brevis/web/layouts"
 )
 
 // ---------------------------------------------------------------------------
@@ -103,7 +103,7 @@ templ Overview(d DadosOverview) {
 			}
 			@components.Cartao("Próximas execuções") {
 				if len(d.Proximas) == 0 {
-					@components.Vazio("Nenhuma agenda ativa.", "bravis publish arquivo.yaml")
+					@components.Vazio("Nenhuma agenda ativa.", "brevis publish arquivo.yaml")
 				} else {
 					<table class="w-full text-sm">
 						<thead>
@@ -421,7 +421,7 @@ templ Workflows(ws []postgres.ResumoWorkflow, tags []string, f Filtro, total, fi
 			}
 		</p>
 		if len(ws) == 0 {
-			@components.Vazio("Nenhum workflow com esses filtros.", "bravis publish arquivo.yaml")
+			@components.Vazio("Nenhum workflow com esses filtros.", "brevis publish arquivo.yaml")
 		} else {
 			<div class="overflow-hidden rounded-[20px] border border-line bg-surface shadow-warm-sm">
 				<table class="w-full text-sm">
@@ -675,7 +675,7 @@ templ filtroAplicado(rotulo, valor, remover string) {
 templ Projetos(ps []postgres.ResumoProjeto) {
 	@layouts.Base(layouts.Pagina{Titulo: "Projetos", Kicker: "Organização", Ativo: "projects"}) {
 		if len(ps) == 0 {
-			@components.Vazio("Nenhum projeto ainda.", "bravis publish --project meu-projeto")
+			@components.Vazio("Nenhum projeto ainda.", "brevis publish --project meu-projeto")
 		} else {
 			<div class="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
 				for _, p := range ps {
@@ -702,7 +702,7 @@ templ Projetos(ps []postgres.ResumoProjeto) {
 
 templ tabelaRuns(runs []postgres.ResumoRun, p Paginacao) {
 	if len(runs) == 0 {
-		@components.Vazio("Nenhuma execução ainda.", "bravis scheduler")
+		@components.Vazio("Nenhuma execução ainda.", "brevis scheduler")
 	} else {
 		<div class="overflow-hidden rounded-[20px] border border-line bg-surface shadow-warm-sm">
 			<table class="w-full text-sm">

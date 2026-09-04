@@ -17,7 +17,7 @@ Comece por aqui. Estes cinco descrevem o SDK como ele está hoje
 | [`SDK_CONSUMIDOR.md`](SDK_CONSUMIDOR.md) | **como cada defeito apareceu** — os onze achados pelo primeiro consumidor, e as seis classes que se repetiram |
 | [`SDK_DECISOES.md`](SDK_DECISOES.md) | **por quê** — cada decisão, o que se tentou antes e o que aquilo custou |
 
-A referência da API é o [godoc](https://pkg.go.dev/github.com/AreteAcademy/bravis/sdk)
+A referência da API é o [godoc](https://pkg.go.dev/github.com/AreteAcademy/brevis/sdk)
 e o [`sdk/README.md`](../sdk/README.md); o histórico versão a versão é o
 [`CHANGELOG.md`](../CHANGELOG.md).
 
