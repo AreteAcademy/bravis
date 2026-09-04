@@ -114,7 +114,6 @@ func (b BigQuery) config(opt core.WriteOptions) (*core.LoadConfig, map[string]co
 	create, createOrigin := b.resolveCreate(opt.Run)
 
 	cfg := &core.LoadConfig{
-		Driver:                 core.DriverBigQuery,
 		ProjectID:              project.Value,
 		Dataset:                dataset.Value,
 		Table:                  table.Value,

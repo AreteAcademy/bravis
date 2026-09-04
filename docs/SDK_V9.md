@@ -1,5 +1,11 @@
 # SDK — dois defeitos no `load` da `v0.9.1`, e uma decisão de produto
 
+> **HISTÓRICO — não é o estado atual.** Este documento vale para `sdk/v0.9.x`.
+> É um relatório do consumidor sobre a `v0.9.x`. Os dois defeitos que ele levanta foram corrigidos na `v0.12.0`.
+>
+> Para o SDK como ele é hoje: [`SDK_ARQUITETURA.md`](SDK_ARQUITETURA.md),
+> [`SDK_NOVO_DRIVER.md`](SDK_NOVO_DRIVER.md) e [`SDK_DECISOES.md`](SDK_DECISOES.md).
+
 **Aberto em** 2026-09-03 · **Versões analisadas** `sdk/v0.9.0`, `sdk/v0.9.1`,
 `sdk/v0.10.0` · **Alvo** `sdk/v0.10.1`
 

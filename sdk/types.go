@@ -56,9 +56,6 @@ type (
 	// Format names the wire format of a response.
 	Format = core.Format
 
-	// Driver selects which implementation carries out an extract or a load.
-	Driver = core.Driver
-
 	// Stats counts what an extract actually did.
 	Stats = core.Stats
 
@@ -71,16 +68,6 @@ type (
 //
 //	Target{CreateTable: sdk.Bool(false)}   // never, not even on a first run
 func Bool(b bool) *bool { return &b }
-
-// Drivers. One of each exists today; an empty Driver takes the default for
-// its side, so nothing has to be set for the common case.
-const (
-	// DriverHTTP fetches over HTTP. The default for a Source.
-	DriverHTTP = core.DriverHTTP
-
-	// DriverBigQuery writes to BigQuery. The default for a Target.
-	DriverBigQuery = core.DriverBigQuery
-)
 
 // Wire formats accepted by Source.Format.
 const (
@@ -123,7 +110,6 @@ var (
 	WithAutoID                 = core.WithAutoID
 	WithColumns                = core.WithColumns
 	WithClusterBy              = core.WithClusterBy
-	WithDriver                 = core.WithDriver
 	WithCreateTable            = core.WithCreateTable
 	WithCreateSQL              = core.WithCreateSQL
 	WithPartitionExpiration    = core.WithPartitionExpiration

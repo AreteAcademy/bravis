@@ -1,5 +1,11 @@
 # SDK v2 — levar a lógica para dentro
 
+> **HISTÓRICO — não é o estado atual.** Este documento vale para `sdk/v0.2`.
+> Descreve a evolução pedida para a `v0.2`.
+>
+> Para o SDK como ele é hoje: [`SDK_ARQUITETURA.md`](SDK_ARQUITETURA.md),
+> [`SDK_NOVO_DRIVER.md`](SDK_NOVO_DRIVER.md) e [`SDK_DECISOES.md`](SDK_DECISOES.md).
+
 **Aberto em** 2026-09-02 · **Base** `sdk/v0.2.1` · **Alvo** `sdk/v0.3.0`
 
 > **CONCLUÍDA em 2026-09-02.** Métricas do §6: o `exemplo_go` caiu de **156 para

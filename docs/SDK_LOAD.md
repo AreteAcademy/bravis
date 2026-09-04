@@ -1,5 +1,11 @@
 # SDK — conserto do `load`
 
+> **HISTÓRICO — não é o estado atual.** Este documento vale para `sdk/v0.2.1`.
+> Descreve o conserto do load da `v0.2.1`.
+>
+> Para o SDK como ele é hoje: [`SDK_ARQUITETURA.md`](SDK_ARQUITETURA.md),
+> [`SDK_NOVO_DRIVER.md`](SDK_NOVO_DRIVER.md) e [`SDK_DECISOES.md`](SDK_DECISOES.md).
+
 **Aberto em** 2026-09-02 · **Versão analisada** `v0.1.1` · **Alvo** `v0.1.2`
 
 > **CONCLUÍDA em 2026-09-02, entregue na `sdk/v0.2.1`.** Os itens 1 e 6 saíram

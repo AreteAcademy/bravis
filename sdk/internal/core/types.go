@@ -103,10 +103,6 @@ type LoadConfig struct {
 	// objects left behind, one per run.
 	KeepStagedFile bool
 
-	// Driver selects the destination. Empty means DriverBigQuery, the only
-	// one implemented today.
-	Driver Driver
-
 	// Dedup selects how repeated records are handled; see Dedup.
 	// Zero value is DedupNone.
 	Dedup Dedup
@@ -190,21 +186,6 @@ type LoadConfig struct {
 	Entity   string
 }
 
-// Driver selects which implementation carries out an extract or a load.
-//
-// Only one of each exists today; the type is here so that adding a second
-// does not change any signature. An empty Driver takes the default for its
-// side, so nothing has to be set for the common case.
-type Driver string
-
-const (
-	// DriverHTTP fetches over HTTP. The default for a Source.
-	DriverHTTP Driver = "http"
-
-	// DriverBigQuery writes to BigQuery. The default for a Target.
-	DriverBigQuery Driver = "bigquery"
-)
-
 // Stats counts what an extract actually did.
 //
 // Pass a pointer in Source.Stats and it is filled in as the walk proceeds.
@@ -251,10 +232,6 @@ type Limiter interface {
 
 // Source describes where and how to extract.
 type Source struct {
-	// Driver selects the transport. Empty means DriverHTTP, the only one
-	// implemented today.
-	Driver Driver
-
 	URL          string    // required
 	Method       string    // default: GET
 	Body         io.Reader // for POST/PUT
@@ -361,13 +338,6 @@ func WithFormat(format string) LoadOption {
 func WithThresholdForGCS(threshold int) LoadOption {
 	return func(cfg *LoadConfig) {
 		cfg.ThresholdForGCS = threshold
-	}
-}
-
-// WithDriver selects the destination implementation.
-func WithDriver(d Driver) LoadOption {
-	return func(cfg *LoadConfig) {
-		cfg.Driver = d
 	}
 }
 

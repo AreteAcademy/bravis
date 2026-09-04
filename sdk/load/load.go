@@ -101,14 +101,6 @@ func resolveConfig(cfg *core.LoadConfig, opts ...core.LoadOption) (*core.LoadCon
 		return nil, err
 	}
 
-	switch c.Driver {
-	case "", core.DriverBigQuery:
-		c.Driver = core.DriverBigQuery
-	default:
-		return nil, fmt.Errorf("load driver %q is not implemented; use %q",
-			c.Driver, core.DriverBigQuery)
-	}
-
 	if c.RequirePartitionFilter && c.Dedup == core.DedupMerge {
 		return nil, fmt.Errorf("RequirePartitionFilter and DedupMerge cannot both apply: " +
 			"the merge matches on ingestion_id across every partition, and it cannot be " +
