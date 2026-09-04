@@ -1,6 +1,6 @@
 # SDK — a arquitetura como ela é
 
-**Vale para** `sdk/v0.20.0` · **Atualizado em** 2026-09-04
+**Vale para** `sdk/v0.21.0` · **Atualizado em** 2026-09-04
 
 Este é o mapa. Para *por que* cada peça é assim, veja
 [`SDK_DECISOES.md`](SDK_DECISOES.md); para *como acrescentar um driver*, veja
@@ -32,7 +32,7 @@ sdk.Run(sdk.Pipeline{
 
     // 3. Para onde vai, 4. com que colunas.
     Target: sdk.Target{
-        To:      to.BigQuery{Dataset: "bronze", Table: "hourly_temperatures"},
+        To:      bigquery.Table{Dataset: "bronze", Table: "hourly_temperatures"},
         Columns: []string{"ingestion_id", "ingestion_loaded_at", "time", "temperature_celsius"},
         Metadata: &sdk.Metadata{
             Provider: "open_meteo", Entity: "hourly",
@@ -63,8 +63,8 @@ sdk/
 │                         WriteOptions, Response, Reading, Stats, Dedup,
 │                         LoadConfig, Origin, Reject
 ├── from/                 as origens: HTTP, Files  (Postgres e MySQL a caminho)
-├── to/                   os destinos: BigQuery, Files  (Postgres, MySQL e
-│                         Redshift a caminho)
+├── to/                   os destinos sem dependência: Files
+├── to/bigquery/          o destino BigQuery, em pacote próprio
 ├── store/                os backends de object storage: s3, gcs
 ├── extract/              a implementação HTTP: retry, paginação, decoders,
 │                         preview
@@ -125,7 +125,7 @@ type Writer interface {
 
 Tudo o mais. `from.HTTP` tem URL, headers, retry, `RateLimiter`, paginação,
 `Format` e `Records`; `from.Files` tem caminho, formato e `Store`.
-`to.BigQuery` tem projeto, dataset, tabela, staging em GCS, `ClusterBy`,
+`bigquery.Table` tem projeto, dataset, tabela, staging em GCS, `ClusterBy`,
 particionamento e `CreateSQL`; `to.Files` tem caminho, `PartitionBy` e
 `Compress`. **Nenhum desses campos aparece
 num driver que não os tem** — é essa a diferença entre um tipo por driver e uma
@@ -198,7 +198,8 @@ Medido na `v0.19.0`:
 |---|---|---|---|
 | `sdk` | 190 | não | não |
 | `sdk` + `from` | 194 | não | não |
-| `sdk` + `to` | 456 | não | sim |
+| `sdk` + `from` + `to` (arquivos) | 195 | não | não |
+| `sdk` + `to/bigquery` | 456 | não | sim |
 | `sdk` + `from` + `store/s3` | 265 | sim | não |
 | `sdk` + `from` + `store/gcs` | 392 | não | sim |
 
@@ -212,8 +213,18 @@ Há teste afirmando isso em `examples/consumer/pruning_test.go`, **com o
 controle junto**: quem importa `to` tem de receber o BigQuery, senão o teste
 passaria com um SDK que não carrega nada.
 
-> Ao acrescentar um driver: se a raiz passar a importá-lo, essa propriedade
-> morre em silêncio e o teste acusa. Não conserte o teste; conserte o import.
+**A regra, em uma linha: um driver com SDK de fornecedor atrás mora no próprio
+pacote.** Por isso o BigQuery é `to/bigquery` e os object stores são
+`store/s3` e `store/gcs`, enquanto `from` e `to` guardam os que só precisam da
+biblioteca padrão.
+
+Isso foi aprendido caro na `v0.20.0`: `to.BigQuery` e `to.Files` saíram no
+mesmo pacote, e escrever um arquivo compilava o Google — 461 pacotes e 21 MB
+onde deviam ser 195. O teste de poda não pegou porque só cobria o lado `from`.
+
+> Ao acrescentar um driver: se a raiz passar a importá-lo, ou se ele dividir
+> pacote com um driver caro, a propriedade morre em silêncio. Cubra o caso no
+> teste de poda — **inclusive o pipeline completo, dos dois lados.**
 
 ---
 

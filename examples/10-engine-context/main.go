@@ -22,7 +22,7 @@ import (
 
 	"github.com/AreteAcademy/bravis/sdk"
 	"github.com/AreteAcademy/bravis/sdk/from"
-	"github.com/AreteAcademy/bravis/sdk/to"
+	"github.com/AreteAcademy/bravis/sdk/to/bigquery"
 )
 
 func main() {
@@ -70,7 +70,7 @@ func main() {
 		},
 
 		Target: sdk.Target{
-			To: to.BigQuery{
+			To: bigquery.Table{
 				ClusterBy: []string{"latitude", "longitude"},
 
 				// Left nil on purpose. Inside Bravis the engine decides; outside,

@@ -25,7 +25,7 @@ import (
 
 	"github.com/AreteAcademy/bravis/sdk"
 	"github.com/AreteAcademy/bravis/sdk/from"
-	"github.com/AreteAcademy/bravis/sdk/to"
+	"github.com/AreteAcademy/bravis/sdk/to/bigquery"
 )
 
 func main() {
@@ -82,7 +82,7 @@ func main() {
 		},
 
 		Target: sdk.Target{
-			To: to.BigQuery{},
+			To: bigquery.Table{},
 			Metadata: &sdk.Metadata{
 				Provider: "open_meteo",
 				Entity:   "hourly_temperature",

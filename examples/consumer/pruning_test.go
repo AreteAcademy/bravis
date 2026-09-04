@@ -24,11 +24,21 @@ func TestQuemNaoUsaBigQueryNaoCompilaBigQuery(t *testing.T) {
 			"github.com/AreteAcademy/bravis/sdk",
 			"github.com/AreteAcademy/bravis/sdk/from",
 		}, true},
+		// Um pipeline de arquivos inteiro -- from e to -- ainda não traz o
+		// BigQuery. Este caso faltava na v0.20.0, e sem ele o defeito passou:
+		// to.BigQuery e to.Files viviam no mesmo pacote, então escrever um
+		// arquivo compilava o Google.
+		{"raiz + from + to (arquivos)", []string{
+			"github.com/AreteAcademy/bravis/sdk",
+			"github.com/AreteAcademy/bravis/sdk/from",
+			"github.com/AreteAcademy/bravis/sdk/to",
+		}, true},
+
 		// E o controle: quem pede o BigQuery recebe o BigQuery. Sem isto, o
 		// teste passaria com um SDK que não carrega nada.
-		{"raiz + to", []string{
+		{"raiz + to/bigquery", []string{
 			"github.com/AreteAcademy/bravis/sdk",
-			"github.com/AreteAcademy/bravis/sdk/to",
+			"github.com/AreteAcademy/bravis/sdk/to/bigquery",
 		}, false},
 	}
 

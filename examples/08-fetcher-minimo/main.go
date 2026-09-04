@@ -13,7 +13,7 @@ import (
 
 	"github.com/AreteAcademy/bravis/sdk"
 	"github.com/AreteAcademy/bravis/sdk/from"
-	"github.com/AreteAcademy/bravis/sdk/to"
+	"github.com/AreteAcademy/bravis/sdk/to/bigquery"
 )
 
 func main() {
@@ -51,8 +51,8 @@ func main() {
 		// Where it goes, and the columns it has -- the two the SDK fills in
 		// included, so nothing lands in the table without being written here.
 		Target: sdk.Target{
-			To: to.BigQuery{
-				Table: "events",
+			To: bigquery.Table{
+				Name: "events",
 			},
 			Columns: []string{
 				"ingestion_id",        // from Metadata

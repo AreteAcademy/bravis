@@ -23,7 +23,7 @@ Requires Go 1.23 or newer (the SDK streams rows as `iter.Seq2`).
 import (
 	"github.com/AreteAcademy/bravis/sdk"
 	"github.com/AreteAcademy/bravis/sdk/from"
-	"github.com/AreteAcademy/bravis/sdk/to"
+	"github.com/AreteAcademy/bravis/sdk/to/bigquery"
 )
 
 dados, err := sdk.Extract(ctx, sdk.Source{
@@ -47,7 +47,7 @@ dados = sdk.Transform(dados, sdk.Accept("time", "temperature_2m", "latitude", "l
 
 // Where it goes, and the columns it has.
 res, err := sdk.Load(ctx, dados, sdk.Target{
-	To:      to.BigQuery{Dataset: "bronze", Table: "hourly_temperatures"},
+	To:      bigquery.Table{Dataset: "bronze", Name: "hourly_temperatures"},
 	Columns: []string{"time", "temperature_2m", "latitude", "longitude"},
 })
 ```
@@ -65,11 +65,15 @@ never by field used:
 |---|---|---|---|
 | `sdk` | 190 | no | no |
 | `sdk` + `from` | 194 | no | no |
-| `sdk` + `to` | 456 | no | yes |
+| `sdk` + `from` + `to` (files) | 195 | no | no |
+| `sdk` + `to/bigquery` | 456 | no | yes |
 | `sdk` + `from` + `store/s3` | 265 | yes | no |
 | `sdk` + `from` + `store/gcs` | 392 | no | yes |
 
-Reading local CSV costs 194 packages and no cloud SDK at all.
+A whole file pipeline — read and write — costs 195 packages and no cloud SDK
+at all. **A driver with a vendor SDK behind it lives in its own package**, which
+is why BigQuery is `to/bigquery` and the object stores are `store/s3` and
+`store/gcs`.
 
 `Source` and `Target` hold what every driver honours: the preview and counters
 on one side, the declared columns, metadata and deduplication on the other.
@@ -92,7 +96,7 @@ result you log.
 
 | write to | |
 |---|---|
-| `to.BigQuery` | a table: GCS staging, `MERGE`, typed creation, partitioning, clustering |
+| `bigquery.Table` | a table: GCS staging, `MERGE`, typed creation, partitioning, clustering |
 | `to.Files` | files on disk, S3 or GCS: NDJSON or CSV, partitioned, compressed |
 
 ### Files, and the three backends

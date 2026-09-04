@@ -1,6 +1,6 @@
 # SDK — as decisões, e o que cada uma custou
 
-**Vale para** `sdk/v0.20.0` · **Atualizado em** 2026-09-04
+**Vale para** `sdk/v0.21.0` · **Atualizado em** 2026-09-04
 
 Cada linha aqui já foi decidida ao contrário uma vez. Este documento existe
 para que a próxima sessão não desfaça uma lição paga — e para que, quando
@@ -92,6 +92,13 @@ importasse os três backends, ler um CSV local compilaria a AWS **e** o Google �
 contradizendo a razão 1. Então o backend virou valor também: `core.Store`,
 passado de fora, morando em `store/s3` e `store/gcs`. Um driver, três
 backends, e quem lê disco paga 194 pacotes.
+
+**E a `v0.20.0` errou o lado de baixo disso**, o que vale registrar: `to.BigQuery`
+e `to.Files` saíram no mesmo pacote, então escrever um arquivo compilava o
+Google — 461 pacotes e 21 MB onde deviam ser 195. O teste de poda não pegou
+porque só cobria o lado `from`. Consertado na `v0.21.0`, com a regra escrita:
+**um driver com SDK de fornecedor atrás mora no próprio pacote**, e o teste
+cobre o pipeline completo, dos dois lados.
 
 **Consequência assumida:** `Records` voltou para `from.HTTP` na `v0.19.0`,
 desfazendo parte da `v0.18.0`. Lá ele subira para `Pipeline` porque `Source` era

@@ -1,4 +1,4 @@
-package to
+package bigquery
 
 import (
 	"strings"
@@ -20,7 +20,7 @@ func run(first bool, params map[string]string) core.WriteOptions {
 // The tri-state exists because two states cannot carry "I did not say".
 func TestCreateTableUnsetLetsTheEngineDecide(t *testing.T) {
 	t.Setenv(core.EnvProject, "p")
-	dest := BigQuery{Table: "t"}
+	dest := Table{Name: "t"}
 
 	// Outside the engine: nothing is created.
 	cfg, origins, err := dest.config(run(false, nil))
@@ -50,7 +50,7 @@ func TestCreateTableUnsetLetsTheEngineDecide(t *testing.T) {
 func TestCreateTableParamAsksWithoutFakingAFirstRun(t *testing.T) {
 	t.Setenv(core.EnvProject, "p")
 
-	cfg, origins, err := BigQuery{Table: "t"}.config(
+	cfg, origins, err := Table{Name: "t"}.config(
 		run(false, map[string]string{core.ParamCreateTable: "true"}))
 	if err != nil {
 		t.Fatal(err)
@@ -68,7 +68,7 @@ func TestCreateTableParamAsksWithoutFakingAFirstRun(t *testing.T) {
 func TestExplicitRefusalBeatsTheEngine(t *testing.T) {
 	t.Setenv(core.EnvProject, "p")
 
-	cfg, origins, err := BigQuery{Table: "t", CreateTable: boolp(false)}.config(
+	cfg, origins, err := Table{Name: "t", CreateTable: boolp(false)}.config(
 		run(true, map[string]string{core.ParamCreateTable: "true"}))
 	if err != nil {
 		t.Fatal(err)
@@ -84,7 +84,7 @@ func TestExplicitRefusalBeatsTheEngine(t *testing.T) {
 func TestExplicitTrueWorksWithoutTheEngine(t *testing.T) {
 	t.Setenv(core.EnvProject, "p")
 
-	cfg, _, err := BigQuery{Table: "t", CreateTable: boolp(true)}.config(run(false, nil))
+	cfg, _, err := Table{Name: "t", CreateTable: boolp(true)}.config(run(false, nil))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +98,7 @@ func TestConfigPrecedenceAndOrigin(t *testing.T) {
 	t.Setenv(core.EnvProject, "from-the-environment")
 	t.Setenv(core.EnvDataset, "dataset-from-the-environment")
 
-	cfg, origins, err := BigQuery{Table: "t", Dataset: "explicit"}.config(run(false, nil))
+	cfg, origins, err := Table{Name: "t", Dataset: "explicit"}.config(run(false, nil))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,7 +117,7 @@ func TestConfigPrecedenceAndOrigin(t *testing.T) {
 
 	// And the default, when neither said anything.
 	t.Setenv(core.EnvDataset, "")
-	cfg, origins, _ = BigQuery{Table: "t"}.config(run(false, nil))
+	cfg, origins, _ = Table{Name: "t"}.config(run(false, nil))
 	if cfg.Dataset != "landing" {
 		t.Errorf("dataset default = %q", cfg.Dataset)
 	}
@@ -131,7 +131,7 @@ func TestConfigPrecedenceAndOrigin(t *testing.T) {
 func TestConfigRefusesWithoutAProject(t *testing.T) {
 	t.Setenv(core.EnvProject, "")
 
-	_, _, err := BigQuery{Table: "t"}.config(run(false, nil))
+	_, _, err := Table{Name: "t"}.config(run(false, nil))
 	if err == nil {
 		t.Fatal("a destination with no project must not resolve")
 	}
@@ -143,7 +143,7 @@ func TestConfigRefusesWithoutAProject(t *testing.T) {
 func TestConfigRefusesWithoutATable(t *testing.T) {
 	t.Setenv(core.EnvProject, "p")
 
-	_, _, err := BigQuery{}.config(run(false, nil))
+	_, _, err := Table{}.config(run(false, nil))
 	if err == nil {
 		t.Fatal("a destination with no table must not resolve")
 	}
@@ -156,10 +156,10 @@ func TestConfigRefusesWithoutATable(t *testing.T) {
 // table anyone would grep for.
 func TestDescribeNamesTheTable(t *testing.T) {
 	t.Setenv(core.EnvDataset, "")
-	if got := (BigQuery{Dataset: "bronze", Table: "pedidos"}).Describe(); got != "bronze.pedidos" {
+	if got := (Table{Dataset: "bronze", Name: "pedidos"}).Describe(); got != "bronze.pedidos" {
 		t.Errorf("Describe() = %q", got)
 	}
-	if got := (BigQuery{Table: "pedidos"}).Describe(); got != "landing.pedidos" {
+	if got := (Table{Name: "pedidos"}).Describe(); got != "landing.pedidos" {
 		t.Errorf("Describe() with the default dataset = %q", got)
 	}
 }

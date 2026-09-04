@@ -1,9 +1,10 @@
-// Package to holds the destinations a pipeline writes.
+// Package bigquery writes to BigQuery.
 //
-// One type per destination, each carrying its own configuration and knowing
-// how to write itself. Importing this package costs you the drivers you name
-// and nothing else.
-package to
+// It lives in its own package because it carries the Google client, and Go
+// prunes dependencies by package imported: a fetcher that only writes files
+// must not compile this. That is the rule for every driver with a vendor SDK
+// behind it.
+package bigquery
 
 import (
 	"context"
@@ -15,23 +16,23 @@ import (
 	"github.com/AreteAcademy/bravis/sdk/load"
 )
 
-// BigQuery writes to a BigQuery table.
+// Table writes to a BigQuery table.
 //
-//	To: to.BigQuery{
+//	To: bigquery.Table{
 //		Dataset: "bronze",
-//		Table:   "vendors_open_meteo_hourly_temperatures",
+//		Name:    "vendors_open_meteo_hourly_temperatures",
 //	}
 //
 // Project, Dataset and StagingBucket read the environment when left empty;
 // see the Env constants. Everything here is BigQuery's -- partitioning,
 // clustering, the GCS staging threshold -- and none of it appears on a
 // destination that has no such thing.
-type BigQuery struct {
-	// Project, Dataset and Table. Project and Dataset default from the
-	// environment; Table has no default.
+type Table struct {
+	// Project, Dataset and Name. Project and Dataset default from the
+	// environment; Name has no default.
 	Project string
 	Dataset string
-	Table   string
+	Name    string
 
 	// StagingBucket is used above InlineLimit rows. Defaults to
 	// <project>-bravis-staging.
@@ -68,7 +69,7 @@ type BigQuery struct {
 }
 
 // Write satisfies core.Writer.
-func (b BigQuery) Write(ctx context.Context, records []core.Envelope, opt core.WriteOptions) (*core.LoadResult, error) {
+func (b Table) Write(ctx context.Context, records []core.Envelope, opt core.WriteOptions) (*core.LoadResult, error) {
 	cfg, origins, err := b.config(opt)
 	if err != nil {
 		return nil, err
@@ -83,26 +84,26 @@ func (b BigQuery) Write(ctx context.Context, records []core.Envelope, opt core.W
 }
 
 // Describe satisfies core.Writer.
-func (b BigQuery) Describe() string {
+func (b Table) Describe() string {
 	dataset := core.Resolve(b.Dataset, core.EnvDataset, "landing").Value
-	return fmt.Sprintf("%s.%s", dataset, b.Table)
+	return fmt.Sprintf("%s.%s", dataset, b.Name)
 }
 
 // config applies the documented precedence -- what you set, then the engine,
 // then the environment, then the default, then an error -- and reports where
 // each value came from, because "why did it write there?" is a question
 // somebody asks at three in the morning.
-func (b BigQuery) config(opt core.WriteOptions) (*core.LoadConfig, map[string]core.Origin, error) {
+func (b Table) config(opt core.WriteOptions) (*core.LoadConfig, map[string]core.Origin, error) {
 	project := core.Resolve(b.Project, core.EnvProject, "")
 	if project.Value == "" {
-		return nil, nil, fmt.Errorf("project not set: pass to.BigQuery.Project or define %s",
+		return nil, nil, fmt.Errorf("project not set: pass bigquery.Table.Project or define %s",
 			core.EnvProject)
 	}
 
 	dataset := core.Resolve(b.Dataset, core.EnvDataset, "landing")
-	table := core.Resolve(b.Table, "", "")
+	table := core.Resolve(b.Name, "", "")
 	if table.Value == "" {
-		return nil, nil, fmt.Errorf("table not set: pass to.BigQuery.Table")
+		return nil, nil, fmt.Errorf("table not set: pass bigquery.Table.Name")
 	}
 	bucket := core.Resolve(b.StagingBucket, core.EnvBucket, project.Value+"-bravis-staging")
 
@@ -142,7 +143,7 @@ func (b BigQuery) config(opt core.WriteOptions) (*core.LoadConfig, map[string]co
 }
 
 // resolveCreate settles the tri-state, and says where the answer came from.
-func (b BigQuery) resolveCreate(run core.RunContext) (bool, core.Origin) {
+func (b Table) resolveCreate(run core.RunContext) (bool, core.Origin) {
 	if b.CreateTable != nil {
 		return *b.CreateTable, core.Origin{
 			Value: strconv.FormatBool(*b.CreateTable), Where: "explicit",

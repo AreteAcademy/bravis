@@ -14,7 +14,7 @@ import (
 
 	"github.com/AreteAcademy/bravis/sdk"
 	"github.com/AreteAcademy/bravis/sdk/from"
-	"github.com/AreteAcademy/bravis/sdk/to"
+	"github.com/AreteAcademy/bravis/sdk/to/bigquery"
 )
 
 const (
@@ -70,10 +70,10 @@ func main() {
 		},
 
 		Target: sdk.Target{
-			To: to.BigQuery{
+			To: bigquery.Table{
 				Project: project,
 				Dataset: "landing",
-				Table:   "vendors_" + provider + "_" + entity + "s",
+				Name:    "vendors_" + provider + "_" + entity + "s",
 
 				// First run creates the table. Clustering has to be named:
 				// the SDK does not know what is in your payload.

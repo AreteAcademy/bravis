@@ -7,7 +7,7 @@
 ## SDK
 
 Comece por aqui. Estes três descrevem o SDK como ele está hoje
-(`sdk/v0.20.0`) e respondem perguntas diferentes:
+(`sdk/v0.21.0`) e respondem perguntas diferentes:
 
 | documento | responde |
 |---|---|

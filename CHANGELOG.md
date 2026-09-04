@@ -8,6 +8,47 @@ A tag de um módulo aninhado leva o prefixo do diretório: `sdk/v0.2.1`.
 
 ---
 
+## [0.21.0] — 2026-09-04
+
+**BREAKING**, e é o conserto de um defeito que a `v0.20.0` publicou.
+
+### Corrigido
+- **`to.BigQuery` e `to.Files` viviam no mesmo pacote**, então escrever um
+  arquivo compilava o cliente do Google: **461 pacotes e 21 MB** onde deviam
+  ser 195. Achado por um consumidor de fora, medindo o binário — que é
+  exatamente a quarta pergunta da prova do §8 do plano dos drivers.
+
+  O teste de poda não pegou porque só cobria o lado `from`, onde HTTP e Files
+  são ambos de biblioteca padrão. O buraco era do teste.
+
+### Alterado
+- **`to.BigQuery` vira `bigquery.Table`, em `sdk/to/bigquery`.** O campo
+  `Table` vira `Name`, porque `Table.Table` não se lê.
+
+  ```go
+  // antes
+  To: to.BigQuery{Dataset: "bronze", Table: "pedidos"}
+
+  // depois
+  To: bigquery.Table{Dataset: "bronze", Name: "pedidos"}
+  ```
+
+- A regra, escrita: **um driver com SDK de fornecedor atrás mora no próprio
+  pacote.** `from` e `to` guardam os que só precisam da biblioteca padrão; o
+  BigQuery é `to/bigquery`, os object stores são `store/s3` e `store/gcs`, e
+  `to/postgres` seguirá o mesmo caminho.
+
+```
+o que se importa                    pacotes   Google
+sdk + from + to  (arquivos)             195   não
+sdk + to/bigquery                       456   sim
+```
+
+O teste de poda passa a cobrir o **pipeline completo, dos dois lados** — que é
+o caso que faltava.
+
+---
+
 ## [0.20.0] — 2026-09-04
 
 Fase 1 de [`docs/plan/2026-09-04-sdk-drivers-mvp.md`](docs/plan/2026-09-04-sdk-drivers-mvp.md):
@@ -812,6 +853,7 @@ Primeira versão que compila.
 > versão de `proxy.golang.org`, então ela permanece publicada e quebrada para
 > sempre. Comece pela `v0.1.1`.
 
+[0.21.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.21.0
 [0.20.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.20.0
 [0.19.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.19.0
 [0.18.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.18.0

@@ -10,7 +10,7 @@ import (
 
 	"github.com/AreteAcademy/bravis/sdk"
 	"github.com/AreteAcademy/bravis/sdk/from"
-	"github.com/AreteAcademy/bravis/sdk/to"
+	"github.com/AreteAcademy/bravis/sdk/to/bigquery"
 )
 
 // Escrito de fora do módulo do SDK de propósito.
@@ -62,9 +62,9 @@ func pipeline(url string) sdk.Pipeline {
 		Name:   "proof/entity",
 		Source: sdk.Source{From: from.HTTP{URL: url}},
 		Target: sdk.Target{
-			To: to.BigQuery{
+			To: bigquery.Table{
 				Project: "p",
-				Table:   "prova",
+				Name:    "prova",
 				// nil: quem decide é o engine, ou ninguém.
 				CreateTable: nil,
 			},
@@ -214,7 +214,7 @@ func TestConsumidorCarregaSemProvenienciaNenhuma(t *testing.T) {
 	}
 
 	// Nem Provider, nem Entity, nem Key. Só onde escrever.
-	_, err = sdk.Load(context.Background(), data, sdk.Target{To: to.BigQuery{Table: "minha_tabela"}})
+	_, err = sdk.Load(context.Background(), data, sdk.Target{To: bigquery.Table{Name: "minha_tabela"}})
 
 	// Sem credencial o load não chega ao BigQuery, e isso basta: o que este
 	// teste prova é que a validação da fachada deixa passar. Um erro citando
@@ -238,7 +238,7 @@ func TestConsumidorComMetadataPrecisaDeProveniencia(t *testing.T) {
 		t.Fatalf("Extract: %v", err)
 	}
 
-	_, err = sdk.Load(context.Background(), data, sdk.Target{To: to.BigQuery{Table: "minha_tabela"}, Metadata: &sdk.Metadata{Entity: "e", Key: sdk.Key("id")}})
+	_, err = sdk.Load(context.Background(), data, sdk.Target{To: bigquery.Table{Name: "minha_tabela"}, Metadata: &sdk.Metadata{Entity: "e", Key: sdk.Key("id")}})
 	if err == nil || !strings.Contains(err.Error(), "Metadata.Provider") {
 		t.Errorf("um bloco Metadata sem Provider deveria falhar nomeando o campo: %v", err)
 	}
@@ -306,7 +306,7 @@ func TestConsumidorUsaAutoIDSozinho(t *testing.T) {
 		t.Fatalf("Extract: %v", err)
 	}
 
-	_, err = sdk.Load(context.Background(), data, sdk.Target{To: to.BigQuery{Table: "minha_tabela"}, Metadata: &sdk.Metadata{AutoID: true}})
+	_, err = sdk.Load(context.Background(), data, sdk.Target{To: bigquery.Table{Name: "minha_tabela"}, Metadata: &sdk.Metadata{AutoID: true}})
 	if err != nil {
 		for _, proibido := range []string{"Provider", "Entity", "Key"} {
 			if strings.Contains(err.Error(), proibido) {

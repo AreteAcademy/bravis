@@ -1,6 +1,6 @@
 # SDK — como acrescentar um driver
 
-**Vale para** `sdk/v0.20.0` · **Atualizado em** 2026-09-04
+**Vale para** `sdk/v0.21.0` · **Atualizado em** 2026-09-04
 
 O roteiro das fases 2 a 4 de
 [`plan/2026-09-04-sdk-drivers-mvp.md`](plan/2026-09-04-sdk-drivers-mvp.md). A
@@ -49,9 +49,19 @@ O mesmo nome nos dois pacotes é de propósito: `from.Postgres` tem `Query`,
 
 ---
 
-## 2. As oito regras
+## 2. As nove regras
 
-### 2.1 A raiz não pode importar o seu pacote
+### 2.1 Um driver com dependência mora no próprio pacote
+
+`from` e `to` guardam os drivers que só precisam da biblioteca padrão. Qualquer
+um com SDK de fornecedor atrás — BigQuery, Postgres, Redshift — vai para o seu
+próprio pacote: `to/bigquery`, `to/postgres`.
+
+Dividir pacote com um driver caro tem o mesmo efeito que a raiz importá-lo.
+Aconteceu na `v0.20.0`: `to.BigQuery` e `to.Files` juntos faziam escrever um
+arquivo compilar o Google, 461 pacotes onde deviam ser 195.
+
+### 2.2 A raiz não pode importar o seu pacote
 
 Se `sdk` passar a importar `from/postgres`, todo consumidor compila o `pgx` — e
 a propriedade que a fase 0 comprou morre. `examples/consumer/pruning_test.go`
@@ -61,7 +71,7 @@ Acrescente o seu caso lá, com o controle: quem importa o seu pacote *tem* de
 receber a sua dependência, senão o teste passaria com um driver que não carrega
 nada.
 
-### 2.2 O backend de nuvem também é um valor
+### 2.3 O backend de nuvem também é um valor
 
 Se `from.Files` importasse S3 e GCS, ler um CSV local compilaria os dois. Por
 isso `core.Store` é passado em vez de escolhido dentro do driver, e mora em
@@ -70,7 +80,7 @@ isso `core.Store` é passado em vez de escolhido dentro do driver, e mora em
 Vale para qualquer driver que fale com mais de um backend: **o que varia vira
 valor, e o valor mora no seu próprio pacote.**
 
-### 2.3 Streaming, sempre
+### 2.4 Streaming, sempre
 
 `Read` devolve um `iter.Seq2` que **produz sob demanda**. Um driver que
 materializa a origem inteira antes de devolver põe um export de 5 GB na
@@ -80,7 +90,7 @@ Escreva o teste que falha se você bufferizar — o do HTTP é
 `extract.TestBodyStreamsFully`, e ele existe porque essa regressão já aconteceu:
 um `cancelAttempt()` cedo demais truncava o corpo, e nenhum teste via.
 
-### 2.4 Nada de inferir tipo
+### 2.5 Nada de inferir tipo
 
 O SDK não adivinha o tipo de uma coluna. No BigQuery a `v0.16.0` resolve isso
 delegando a inferência ao próprio BigQuery — carrega numa tabela descartável com
@@ -94,7 +104,7 @@ Um `CreateTable: true` sem `CreateSQL` num destino SQL é **erro nomeando a
 limitação**, e a mensagem lista as colunas que o lote traz, para o DDL sair de
 uma leitura. Não é uma lacuna a preencher depois com inferência: é a decisão.
 
-### 2.5 Opção que o driver não suporta é erro, não silêncio
+### 2.6 Opção que o driver não suporta é erro, não silêncio
 
 `Dedup` num destino de arquivos, `ClusterBy` no Postgres, `RateLimiter` numa
 origem de disco: erro nomeando a opção e o driver.
@@ -103,7 +113,7 @@ origem de disco: erro nomeando a opção e o driver.
 escrita e nunca lida, então é recusada nomeando os campos. Um campo aceito e
 ignorado é o defeito que este SDK mais achou em si mesmo.
 
-### 2.6 SQL gerado é função pura
+### 2.7 SQL gerado é função pura
 
 Monte o SQL fora do método que precisa de conexão:
 
@@ -120,7 +130,7 @@ dentro de um método com cliente.
 E **crase ou aspas em todo identificador**: `full`, `range` e `comment` são
 reservadas e aparecem em coluna de consumidor de verdade.
 
-### 2.7 A reconciliação é assimétrica
+### 2.8 A reconciliação é assimétrica
 
 Ao casar o registro com o destino, use a mesma regra que o `reconcile` já usa:
 
@@ -136,7 +146,7 @@ fica NULL é legítima numa landing.
 Na fase 2 o `reconcile` sobe de `sdk/load` para `internal/core` e passa a servir
 os três destinos SQL.
 
-### 2.8 Não altere nem apague nada
+### 2.9 Não altere nem apague nada
 
 Vale para todos os drivers o princípio escrito no godoc de `load.prepareTable`: um loader que sabe
 fazer `ALTER` sabe apagar história. Divergência é erro, não migração. E não crie
@@ -233,7 +243,9 @@ antes de dar por bom. Esta é a regra que mais achou defeito neste projeto.
 ## 7. Checklist de pronto
 
 - [ ] `Read`/`Write` e `Describe` implementados
-- [ ] a raiz continua sem importar o pacote — teste de poda com o controle
+- [ ] driver com dependência está no próprio pacote
+- [ ] a raiz continua sem importar o pacote — teste de poda com o controle,
+      **incluindo o pipeline completo dos dois lados**
 - [ ] backend que varia mora no próprio pacote, passado como valor
 - [ ] streaming provado por um teste que falharia sem ele
 - [ ] tipos mapeados por tabela escrita, com teste por linha
