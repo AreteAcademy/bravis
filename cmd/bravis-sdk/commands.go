@@ -110,7 +110,7 @@ Examples:
 			Dataset:   dataset,
 			Table:     table,
 			Format:    "ndjson",
-			Metadata:  addMetadata,
+			Columns:   columnsFor(addMetadata),
 		})
 		if err != nil {
 			log.Fatalf("Create loader failed: %v", err)
@@ -208,7 +208,7 @@ Examples:
 			ProjectID: projectID,
 			Dataset:   dataset,
 			Table:     table,
-			Metadata:  addMetadata,
+			Columns:   columnsFor(addMetadata),
 		})
 		if err != nil {
 			log.Fatalf("Create loader failed: %v", err)
@@ -255,4 +255,17 @@ func init() {
 	runCmd.Flags().StringP("table", "t", "raw_data", "BigQuery table")
 	runCmd.Flags().BoolP("metadata", "m", false, "Add ingestion_id and ingestion_loaded_at to each row")
 	runCmd.Flags().Bool("dry-run", false, "Extract only, don't load")
+}
+
+// columnsFor traduz a flag --metadata para a declaração que o SDK espera
+// desde a v0.24.0: as duas colunas de ingestão deixaram de ser um interruptor
+// e passaram a ser declaradas como qualquer outra.
+//
+// O CLI não compõe linha nenhuma, então ele só declara o que o chamador
+// mandou; um lote sem essas colunas é recusado com o erro que as nomeia.
+func columnsFor(metadata bool) []string {
+	if !metadata {
+		return nil
+	}
+	return []string{sdk.ColumnIngestionID, sdk.ColumnIngestionLoadedAt}
 }
