@@ -51,32 +51,109 @@ As duas primeiras resolveram o mesmo problema de formas diferentes, e nenhuma é
 
 ### 3.1 Credencial com ciclo de vida — apaga 183 linhas
 
-O eixo que ninguém trata igual duas vezes: **a credencial pode viver mais que a
-execução.** O `gabriel` guarda no BigQuery porque o cookie rotaciona e o próximo
-run precisa do valor novo; o `ana` guarda em memória porque o token vale 1h e a
-execução inteira cabe nisso.
+#### Para que serve a sessão, afinal
 
-Uma forma possível:
+A pergunta é justa e a resposta é específica deste vendor: **a API do Gabriel não
+tem login programático.** Conferido no cliente em Python — não há `POST /login`,
+nem usuário e senha, nem `client_credentials`. O único lever é o subcomando
+`seed_cookie`, onde **um humano cola um cookie** obtido no navegador.
+
+Esse cookie é um `__Secure-authjs.session-token` do NextAuth, com expiração
+deslizante de 30 dias. Só `/api/auth/session` o reemite — o endpoint de dados
+nunca o faz, verificado contra a API pelo autor do vendor em Python.
+
+Então a sessão faz uma coisa só, e ela é real:
+
+> **mantém viva uma credencial que um humano emitiu**, chamando o endpoint de
+> renovação a cada execução para empurrar a janela de 30 dias.
+
+Sem ela, alguém cola um cookie novo por mês, e a pipeline morre calada no dia 31.
+Com ela, a credencial se mantém indefinidamente enquanto o pipeline rodar.
+
+**A sessão faz sentido. O lugar onde ela estava guardada é que não.**
+
+#### Por que o BigQuery está errado, e o motivo mais forte não é o óbvio
+
+O argumento imediato é de propósito: um warehouse analítico é para dado que se
+analisa, e estado de sessão não é. Verdade, e suficiente para mudar.
+
+Mas o motivo mais forte é outro. Medido em dev, hoje:
+
+```sql
+SELECT id, LENGTH(cookie), REGEXP_CONTAINS(cookie, r'authjs\.session-token'), updated_at
+FROM bronze.vendors_gabriel_session
+```
+```
+11 linhas · 1017 caracteres cada · contém authjs.session-token = true
+```
+
+São **onze credenciais vivas** num dataset cujo acesso é concedido para análise.
+Quem tem `bigquery.dataViewer` em `bronze` — analista, dashboard, notebook,
+serviço de exportação — pode ler o token e assumir a sessão. O dataset foi
+liberado para ver dado de vendor, não para guardar segredo, e ninguém que
+concedeu esse acesso sabe que ele passou a incluir isto.
+
+E está no dataset `bronze`, cujo significado é "dado bruto do fornecedor". Não é
+só o banco errado: é a camada errada dentro do banco errado.
+
+#### Correção do que este documento dizia antes
+
+A primeira versão desta análise juntou quatro vendors sob "autenticação com
+estado". Olhando de novo, **só um precisa de estado que sobreviva à execução**:
+
+| vendor | tem login programático? | precisa persistir entre runs? |
+|---|---|---|
+| `gabriel` | **não** — cookie colado por humano | **sim**, ou a credencial morre em 30 dias |
+| `ana` | sim, `POST /OAUth/v1` com id+senha | não — o token vale 1h e a execução cabe nisso |
+| `fogocruzado` | sim, `_login()` com e-mail+senha | não |
+| `meteosat_frp` | Bearer | não |
+
+Isso muda o desenho. O caso **comum** é credencial em memória com TTL e trava —
+o que o `ana` já faz, e cujo motivo está escrito lá: *"a ANA monitora a
+FREQUÊNCIA de auth e bloqueia o IP em rajada"*. O caso **raro** é a credencial
+rotativa sem login, e é só ele que precisa de armazenamento.
+
+Vale o armazenamento por um vendor? Sim — mas com peso de caso raro: interface
+pequena, um store de verdade, e nada obrigatório para os outros três.
+
+#### Onde a credencial deve viver
+
+**No Secret Manager, e o SDK já tem o padrão para isso.** `store/gcs`, `store/s3`
+e `to/bigquery` estabeleceram a regra: *um driver com SDK de fornecedor atrás
+mora no próprio pacote*. Um `sdk/secret/gcp` segue a mesma, e quem não usa não
+paga.
+
+O encaixe é bom por três razões, não só por não ser o warehouse:
+
+- **IAM separado.** `secretmanager.secretAccessor` é concedido a quem roda o
+  pipeline, não a quem analisa dado. É a separação que hoje não existe.
+- **Versão é rotação.** Cada renovação é uma versão nova do segredo — nativo, e
+  entrega de graça o histórico que o `INSERT` no BigQuery existia para dar. "Desde
+  quando a sessão parou de rotacionar?" vira "qual a data da última versão".
+- **Auditoria.** Acesso a segredo é logado; `SELECT` num dataset analítico, não.
+
+Uma forma possível, com o caso comum simples e o raro explícito:
 
 ```go
-From: from.HTTP{
-    URL: "...",
-    Auth: from.Rolling{
-        // Onde a credencial vive entre execuções. Nil = só em memória.
-        Store: store.BigQuery{Table: "bronze.vendors_gabriel_session"},
+// O comum: credencial obtida por login, viva só durante a execução.
+Auth: from.Login{
+    Obtain: func(ctx context.Context) (string, error) { ... },
+    TTL:    time.Hour,   // renova quando faltar menos que isto
+}
 
-        // Como renovar. Roda ANTES do fetch, e o valor novo é persistido na
-        // hora — não depois da carga.
-        Refresh: func(ctx context.Context, atual string) (string, error) { ... },
-
-        // Semente para o primeiro uso, quando não há nada guardado.
-        Seed: os.Getenv("GABRIEL_SESSION_COOKIE"),
-
-        // Renova só quando falta menos que isto para expirar.
-        TTL: 30 * 24 * time.Hour,
-    },
+// O raro: credencial rotativa que precisa sobreviver ao processo.
+Auth: from.Rolling{
+    Store:   secret.GCP{Name: "gabriel-session-cookie"},
+    Refresh: func(ctx context.Context, atual string) (string, error) { ... },
+    Seed:    os.Getenv("GABRIEL_SESSION_COOKIE"),  // o humano, uma vez
+    TTL:     30 * 24 * time.Hour,
 }
 ```
+
+**O SDK não deve trazer um store que escreva no warehouse do cliente.** Nem como
+opção: um campo `Store: bigquery.Table{...}` seria copiado do exemplo por quem
+não pensou no assunto, e é assim que uma credencial acaba num dataset de
+análise. Se alguém precisar mesmo, a interface é pública e ele implementa.
 
 Três decisões que o SDK deve **tomar**, porque cada consumidor as toma diferente
 e uma delas é sutil:
@@ -85,11 +162,11 @@ e uma delas é sutil:
    Python explica: a chamada de renovação é o que move a janela, e ela não pode
    ser perdida porque a busca falhou depois. Persistir num `finally` depois da
    carga — que foi o que o Python fez — é mais frágil e mais código.
-2. **Serializar a renovação.** O `ana` precisou de um lock porque a API bloqueia
+2. **Serializar a renovação.** O `ana` precisou de uma trava porque a API bloqueia
    IP em rajada de autenticação. Isso não é detalhe do vendor, é propriedade de
    qualquer API com login.
-3. **Histórico, não sobrescrita.** O `gabriel` faz `INSERT` e não `UPDATE`, para
-   responder "desde quando a sessão está parada?" quando a ingestão silencia.
+3. **Nunca logar a credencial.** Nem truncada. O `Describe()` do driver já
+   redige a URL; o mesmo cuidado vale aqui, e é fácil esquecer num log de debug.
 
 ### 3.2 Cookie jar — apaga 36 linhas e uma armadilha
 
@@ -149,13 +226,17 @@ nisso — `Columns` diz "add them to Columns, or drop them in Transform"; o
 
 ## 5. Critério de pronto para a `sdk/v0.26.0`
 
-1. `from.HTTP.Auth` cobre os dois eixos: credencial em memória (TTL) e
-   credencial persistida entre execuções.
+1. `from.HTTP.Auth` cobre os dois casos, e o comum é o simples: credencial
+   obtida por login e viva só durante a execução (3 dos 4 vendors), e credencial
+   rotativa que sobrevive ao processo (1 dos 4).
 2. A renovação roda **antes** do fetch e persiste imediatamente. Teste que prova
    que uma falha no fetch **não** desfaz a rotação.
 3. A renovação é serializada. Teste com concorrência.
-4. O store é um valor com interface pequena — BigQuery primeiro, porque é o que
-   existe; arquivo e memória saem de graça e servem aos testes.
+4. O store é um valor com interface pequena, e o SDK **não** traz nenhum que
+   escreva no warehouse do cliente. `sdk/secret/gcp` (Secret Manager) primeiro,
+   no próprio pacote, como `store/gcs`; memória e arquivo saem de graça e servem
+   aos testes.
+   4.1. A credencial nunca aparece em log, nem truncada.
 5. Cookie jar no cliente HTTP, e o header final acessível. O teste do
    consumidor sobre o `=` do JWT passa a viver aqui.
 6. `PageKey` + `FirstPage` como paginação de primeira classe, e o `PageSize: 1`
