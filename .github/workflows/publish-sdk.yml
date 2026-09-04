@@ -55,94 +55,11 @@ jobs:
           go test -v -race ./...
 
       - name: Gate - a clean consumer must compile against this tree
-        run: |
-          # This runs BEFORE create-release and before the proxy is told the
-          # version exists, so a bad go.mod can still be fixed by deleting the
-          # tag. Once the proxy caches a version it is immutable forever --
-          # that is how v0.1.0 was burned.
-          MODULE="github.com/AreteAcademy/brevis/sdk"
-          SDK_DIR="$GITHUB_WORKSPACE/sdk"
-          mkdir -p /tmp/pretag && cd /tmp/pretag
-          cat > go.mod <<EOF
-          module example.com/pretag
-
-          go 1.23
-
-          require $MODULE v0.0.0
-
-          replace $MODULE => $SDK_DIR
-          EOF
-          cat > main.go <<EOF
-          package main
-
-          import (
-            "context"
-            "fmt"
-
-            "$MODULE"
-            "$MODULE/from"
-            "$MODULE/to"
-            "$MODULE/to/bigquery"
-          )
-
-          // Toca a porta da frente e um driver de cada lado, para que um
-          // rename que quebre quem chama falhe aqui e não depois da release.
-          //
-          // Este programa é a única coisa no repositório escrita do ponto de
-          // vista de quem importa o SDK sem nenhum replace para os testes --
-          // então ele tem de acompanhar a API. Ele ficou parado da v0.17.1 à
-          // v0.23.0 e reprovou oito publicações seguidas sem que ninguém
-          // olhasse: um gate que sempre falha ensina a ignorá-lo, do mesmo
-          // jeito que um que nunca falha.
-          func main() {
-            env := sdk.Envelope{Provider: "p", Entity: "e", SourceKey: "k"}
-            id, err := env.IngestionID()
-            fmt.Println(id, err)
-
-            dados, err := sdk.Extract(context.Background(), sdk.Source{
-              From: from.HTTP{
-                URL: "http://x",
-                Records: func(r sdk.Response) ([]any, error) {
-                  doc, err := r.Object()
-                  if err != nil {
-                    return nil, err
-                  }
-                  return sdk.ArrayAt("results")(doc)
-                },
-              },
-              Preview: 5,
-            })
-            if err != nil {
-              return
-            }
-
-            dados = sdk.Transform(dados,
-              sdk.Accept("id"),
-              sdk.Rename(map[string]string{"id": "chave"}),
-              sdk.Compute("provider", func(map[string]any) (any, error) { return "p", nil }),
-              sdk.Compute("entity", func(map[string]any) (any, error) { return "e", nil }),
-              sdk.Compute("source_key", func(r map[string]any) (any, error) { return sdk.Key("chave")(r) }),
-              sdk.IngestionID("provider", "entity", "source_key", "chave"),
-              sdk.IngestionLoadedAt(),
-            )
-
-            _, _ = sdk.Load(context.Background(), dados, sdk.Target{
-              To:      bigquery.Table{Dataset: "bronze", Name: "t"},
-              Columns: []string{"ingestion_id", "ingestion_loaded_at", "provider", "entity", "source_key", "chave"},
-              Dedup:   sdk.DedupNone,
-            })
-
-            // E o outro destino, que não pode arrastar o BigQuery junto.
-            _, _ = sdk.Load(context.Background(), dados, sdk.Target{
-              To: to.Files{Path: "./saida/"},
-            })
-
-            fmt.Println(sdk.LogLevel())
-          }
-          EOF
-          go mod tidy
-          go build ./...
-          echo "✅ Consumer gate passed"
+        # Roda ANTES do create-release e antes de avisar o proxy, para que um
+        # go.mod ruim ainda possa ser consertado apagando a tag. Depois que o
+        # proxy guarda uma versão ela é imutável para sempre -- foi assim que a
+        # v0.1.0 se queimou.
+        run: .github/scripts/consumer-check.sh local
 
   create-release:
     name: Create GitHub Release
@@ -219,6 +136,10 @@ jobs:
     timeout-minutes: 30
 
     steps:
+      # O consumidor vive num script do repositório, então este job precisa
+      # dele -- antes ele não fazia checkout porque o programa era inline.
+      - uses: actions/checkout@v4
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
@@ -251,54 +172,6 @@ jobs:
           exit 1
 
       - name: Build a real consumer against the published module
-        env:
-          VERSION: ${{ needs.create-release.outputs.version }}
-        run: |
-          # v0.1.0 shipped a go.mod pinning a nonexistent revision, so every
-          # consumer's build broke while the release itself looked green.
-          # Compiling a throwaway module against the published artifact is
-          # the only check that catches that.
-          MODULE="github.com/AreteAcademy/brevis/sdk"
-          mkdir -p /tmp/consumer && cd /tmp/consumer
-          cat > go.mod <<EOF
-          module example.com/consumer
-
-          go 1.23
-          EOF
-          cat > main.go <<EOF
-          package main
-
-          import (
-            "context"
-            "fmt"
-
-            "$MODULE"
-            "$MODULE/extract"
-            "$MODULE/load"
-          )
-
-          // Touches the front door and both lower-level packages, so a rename
-          // that breaks callers fails here rather than after the release.
-          func main() {
-            _ = load.Loader{}
-            env := sdk.Envelope{Provider: "p", Entity: "e", SourceKey: "k"}
-            id, err := env.IngestionID()
-            fmt.Println(id, err)
-
-            _, _ = extract.CSV(context.Background(), sdk.Source{URL: "http://x"})
-
-            _, _ = sdk.Extract(context.Background(), sdk.Source{
-              URL:    "http://x",
-              Guard:  sdk.RejectIf("error"),
-              Expand: sdk.ArrayAt("results"),
-            })
-          }
-          EOF
-          # go mod tidy, not go get: go get resolves dependencies for the
-          # named package only, so importing sdk/load leaves its bigquery and
-          # storage deps out of go.sum. tidy is what a real user runs.
-          GOPROXY=https://proxy.golang.org go mod tidy
-          GOPROXY=https://proxy.golang.org go get "$MODULE@$VERSION"
-          GOPROXY=https://proxy.golang.org go mod tidy
-          GOPROXY=https://proxy.golang.org go build ./...
-          echo "✅ A clean consumer compiles against $MODULE@$VERSION"
+        # A prova de que o proxy serve o que dissemos que serve: módulo limpo,
+        # sem replace, do jeito que alguém que faz go get o vê.
+        run: .github/scripts/consumer-check.sh "${{ needs.create-release.outputs.version }}"
