@@ -6,7 +6,7 @@
 
 ## SDK
 
-Comece por aqui. Estes quatro descrevem o SDK como ele está hoje
+Comece por aqui. Estes cinco descrevem o SDK como ele está hoje
 (`sdk/v0.21.0`) e respondem perguntas diferentes:
 
 | documento | responde |
@@ -14,6 +14,7 @@ Comece por aqui. Estes quatro descrevem o SDK como ele está hoje
 | [`SDK_ARQUITETURA.md`](SDK_ARQUITETURA.md) | **o quê e onde** — as quatro perguntas de um fetcher, o mapa dos pacotes, as duas interfaces, por onde um registro passa |
 | [`SDK_NOVO_DRIVER.md`](SDK_NOVO_DRIVER.md) | **como** — o roteiro para acrescentar Postgres, MySQL e Redshift, com as oito regras e o checklist |
 | [`SDK_MATRIZ.md`](SDK_MATRIZ.md) | **o que suporta o quê** — cada opção por driver, as combinações recusadas, e o que ainda não é verdade |
+| [`SDK_CONSUMIDOR.md`](SDK_CONSUMIDOR.md) | **como cada defeito apareceu** — os onze achados pelo primeiro consumidor, e as seis classes que se repetiram |
 | [`SDK_DECISOES.md`](SDK_DECISOES.md) | **por quê** — cada decisão, o que se tentou antes e o que aquilo custou |
 
 A referência da API é o [godoc](https://pkg.go.dev/github.com/AreteAcademy/bravis/sdk)

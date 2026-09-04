@@ -9,10 +9,22 @@ import (
 )
 
 // KeySelector builds the source_key of a record from its payload.
-type KeySelector func(payload any) (string, error)
-
-// FieldSelector pulls a single value out of a payload.
+// FieldSelector pulls a single value out of a record.
 type FieldSelector func(payload any) (string, error)
+
+// KeySelector builds a record's source_key.
+//
+// An alias of FieldSelector, not a separate type. The two always had the same
+// signature and the same meaning -- read a string out of the record -- and
+// keeping them apart meant the documented way to reuse a key the Transform
+// already computed did not compile:
+//
+//	Transform: []sdk.Transformer{ ..., sdk.Compute("source_key", ...) },
+//	Metadata:  &sdk.Metadata{Key: sdk.Field("source_key")},
+//
+// One place produces the key, so the column and the ingestion_id cannot
+// diverge. That is the pattern; it should not need a conversion.
+type KeySelector = FieldSelector
 
 // keySeparator joins the fields of a composite source_key.
 //

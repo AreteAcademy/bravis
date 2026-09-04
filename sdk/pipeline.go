@@ -142,6 +142,17 @@ func Execute(ctx context.Context, p *Pipeline, args []string) error {
 		return runDryRun(ctx, p, *sample)
 	}
 
+	return runPipeline(ctx, p)
+}
+
+// runPipeline is Execute after the flags: extract, transform, load, and the
+// one line of log that says what happened.
+//
+// Separate from Execute because Execute installs the default logger, and a
+// test that wants to read what was logged cannot do that through a function
+// that replaces the logger first. The log line here is the whole of a
+// fetcher's observability, so it is the part that most needs a test.
+func runPipeline(ctx context.Context, p *Pipeline) error {
 	data, err := Extract(ctx, p.Source)
 	if err != nil {
 		return err
@@ -150,7 +161,18 @@ func Execute(ctx context.Context, p *Pipeline, args []string) error {
 
 	res, err := loadWith(ctx, data, p.Target, p.Run)
 	if res != nil {
-		slog.Info("loaded", append([]any{"pipeline", p.name()}, res.Args()...)...)
+		// The result comes back on the failure path too, by design, so that
+		// RowErrors is readable after a refusal. That makes the message the
+		// one thing that has to tell the two apart: "loaded" on a load that
+		// wrote nothing is a line somebody will grep for and believe, and at
+		// INFO it does not even reach whoever watches for errors.
+		args := append([]any{"pipeline", p.name()}, res.Args()...)
+		if err != nil {
+			slog.Error("load failed", append(args, "error", err)...)
+		} else {
+			slog.Info("loaded", args...)
+		}
+
 		for _, line := range res.RowErrors {
 			slog.Error("row rejected", "detail", line)
 		}

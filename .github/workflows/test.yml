@@ -39,6 +39,74 @@ jobs:
           name: codecov-umbrella
           fail_ci_if_error: false
 
+  integration:
+    name: Integration
+    runs-on: ubuntu-latest
+    # Os testes de integração são os únicos que provam que uma linha realmente
+    # entra e sai. Existiam desde a v0.2.1 e ficaram parados atrás de uma
+    # variável de ambiente até a v0.11.0 -- quando finalmente rodaram, acharam
+    # quatro defeitos numa execução. Um teste atrás de variável é um teste que
+    # não roda.
+    services:
+      minio:
+        image: bitnami/minio:latest
+        env:
+          MINIO_ROOT_USER: bravis
+          MINIO_ROOT_PASSWORD: bravis-secret
+        ports:
+          - 9000:9000
+        options: >-
+          --health-cmd "curl -f http://localhost:9000/minio/health/live"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+
+    env:
+      # O BigQuery exige credencial, então só roda onde ela existe. O S3 roda
+      # sempre: o MinIO sobe aqui do lado e não pede segredo nenhum.
+      BRAVIS_IT_S3_ENDPOINT: http://localhost:9000
+      BRAVIS_IT_S3_KEY: bravis
+      BRAVIS_IT_S3_SECRET: bravis-secret
+      GCP_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: true
+
+      - name: Integration — object storage (MinIO)
+        run: |
+          cd sdk
+          go test -v -timeout 10m -run Integration ./from/...
+
+      # secrets não pode ser usado em if: de step, então vira variável de
+      # ambiente no job e a checagem é sobre ela.
+      - name: Authenticate to Google Cloud
+        if: env.GCP_CREDENTIALS != ''
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
+      - name: Integration — BigQuery and GCS
+        if: env.GCP_CREDENTIALS != ''
+        env:
+          BRAVIS_IT_PROJECT: ${{ vars.BRAVIS_IT_PROJECT }}
+          BRAVIS_IT_DATASET: ${{ vars.BRAVIS_IT_DATASET }}
+          BRAVIS_IT_BUCKET: ${{ vars.BRAVIS_IT_BUCKET }}
+        run: |
+          cd sdk
+          go test -v -timeout 20m -run Integration ./load/... ./from/...
+
+      - name: Say what did not run
+        if: env.GCP_CREDENTIALS == ''
+        run: |
+          echo "::warning::A integração do BigQuery não rodou: falta o secret"
+          echo "::warning::GCP_CREDENTIALS e as variáveis BRAVIS_IT_PROJECT,"
+          echo "::warning::BRAVIS_IT_DATASET e BRAVIS_IT_BUCKET. Dezessete"
+          echo "::warning::testes ficaram em SKIP."
+
   lint:
     name: Lint
     runs-on: ubuntu-latest

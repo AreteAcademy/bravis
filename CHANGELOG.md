@@ -68,6 +68,61 @@ consumidor `zarv-data-pipeline`.
 
 ---
 
+## [0.23.0] — 2026-09-04
+
+Fecha os onze defeitos que o primeiro consumidor achou. O registro completo
+está em [`docs/SDK_CONSUMIDOR.md`](docs/SDK_CONSUMIDOR.md).
+
+### Corrigido
+- **`msg=loaded` numa carga que não carregou.** O resultado volta preenchido no
+  caminho de erro por desenho, para que `ErrorRows` seja legível depois de uma
+  recusa — e a mensagem era a única coisa que distinguia os dois casos. Pior:
+  em `INFO`, onde quem observa `ERROR` nem via a linha que resume.
+
+  Agora a mensagem depende do erro: `load failed` em `ERROR`, com os contadores
+  e o erro junto. Reproduzido antes de consertar.
+
+### Alterado
+- **`KeySelector` virou alias de `FieldSelector`.** Os dois sempre tiveram a
+  mesma assinatura e o mesmo significado — ler uma string do registro — e
+  mantê-los separados fazia o padrão que o próprio consumidor recomenda **não
+  compilar**:
+
+  ```go
+  Transform: []sdk.Transformer{ ..., sdk.Compute("source_key", ...) },
+  Metadata:  &sdk.Metadata{Key: sdk.Field("source_key")},
+  ```
+
+  Um só lugar produz a chave, então a coluna e o `ingestion_id` não podem
+  divergir. Isso não devia precisar de conversão. Achado reproduzindo o fetcher
+  do consumidor de ponta a ponta.
+
+- **`Execute` foi partido em dois.** Ele instala o logger padrão, e nenhum
+  teste conseguia ler o que ele escrevia — a linha de log é a observabilidade
+  inteira de um fetcher, e era a parte sem teste. A fase de execução virou
+  `runPipeline`, testável.
+
+### Adicionado
+- **Job `integration` na CI.** Os testes de S3 rodam **a cada push**, contra um
+  MinIO que sobe ao lado, sem segredo nenhum. Era a lição mais cara do
+  consumidor: `TestIntegrationMergeDoesNotDouble` cobria um defeito desde a
+  `v0.2.1` e nunca rodou, porque estava atrás de uma variável de ambiente —
+  quando finalmente rodou, achou quatro defeitos numa execução.
+
+  O BigQuery precisa de credencial e ainda não roda. O job já está escrito,
+  liga sozinho quando o secret `GCP_CREDENTIALS` e as variáveis
+  `BRAVIS_IT_PROJECT`/`DATASET`/`BUCKET` existirem, e **avisa com
+  `::warning::`** enquanto não existirem — em vez de passar verde em silêncio,
+  que é exatamente como a lição aconteceu da primeira vez.
+
+### Verificação
+O fetcher do consumidor foi **reproduzido inteiro** contra o BigQuery real —
+seis colunas, `payload JSON`, `DedupMerge`, tabela criada por fora — e rodado
+duas vezes: 3 linhas, 3 `ingestion_id` distintos, nenhuma reingerida, e o
+payload navegável com `JSON_VALUE`. 23 testes de integração passando.
+
+---
+
 ## [0.22.0] — 2026-09-04
 
 HTTP e BigQuery fechados. Nenhuma opção declarada nos dois drivers segue sem
@@ -993,6 +1048,7 @@ Primeira versão que compila.
 > versão de `proxy.golang.org`, então ela permanece publicada e quebrada para
 > sempre. Comece pela `v0.1.1`.
 
+[0.23.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.23.0
 [0.22.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.22.0
 [0.21.1]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.21.1
 [0.21.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.21.0

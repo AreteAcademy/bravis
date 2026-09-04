@@ -1,6 +1,6 @@
 # O SDK visto pelo primeiro consumidor
 
-**Vale para** `sdk/v0.23.0` · **Escrito em** 2026-09-04
+**Vale para** `sdk/v0.23.0` · **Escrito em** 2026-09-04 · **Revisado em** 2026-09-04
 
 Registro do que o consumidor `zarv-data-pipeline` achou entre 2026-09-02 e
 2026-09-04, e do que mudou no SDK por causa disso. **31 versões em três dias.**
@@ -60,12 +60,25 @@ Onze defeitos, em dois relatórios: [`SDK_LOAD.md`](SDK_LOAD.md) (`v0.1.1`) e
 | 5 | `Preview` amostrava antes do `Expand`: `1 row` no rodapé, `24 records` na linha seguinte | rodando com `-preview` | `v0.19.0` |
 | 6 | a temporária do merge nascia por autodetect: `JSON` virava `RECORD` | subindo para a `v0.15.0` | `v0.23.0` |
 | 7 | `FormatError.Format` declarado, interpolado e nunca preenchido | dois espaços na mensagem de erro | `v0.23.0` |
+| 3 | `msg=loaded` em INFO numa carga que não carregou | leitura do log de uma falha | `v0.23.0` |
 
-**Aberto: o §3.** `pipeline.go:152` loga `"loaded"` sempre que existe resultado,
-e existe resultado em todo caminho de erro — por desenho, desde a `v0.2.1`, para
-que `ErrorRows` seja legível depois da falha. As duas decisões estão certas
-isoladas; juntas produzem `msg=loaded` numa carga que não carregou. O próprio log
-carrega a verdade ao lado da mentira: `records=24 lines=0`.
+**Os onze estão fechados.** O §3 era o último: `pipeline.go` logava `"loaded"`
+sempre que existia resultado, e existe resultado em todo caminho de erro — por
+desenho, desde a `v0.2.1`, para que `ErrorRows` seja legível depois da falha. As
+duas decisões estavam certas isoladas; juntas produziam `msg=loaded` numa carga
+que não carregou, **em INFO**, onde quem observa `ERROR` nem via.
+
+Reproduzido antes de consertar, com um destino que devolve resultado e erro
+juntos:
+
+```
+level=INFO msg=loaded pipeline=destino.falho records=2 lines=0 ...
+```
+
+A mensagem passou a depender do erro: `load failed` em `ERROR`, com os
+contadores e o erro junto. E `Execute` foi partido em dois, porque ele instala
+o logger padrão e nenhum teste conseguia ler o que ele escrevia — a linha de
+log é a observabilidade inteira de um fetcher, e era a parte sem teste.
 
 ---
 
@@ -205,15 +218,35 @@ Três detalhes que só um consumidor real produz, e que valem para o próximo:
 
 ## 6. O que fica para a próxima versão
 
-1. **O §3** — `msg=loaded` antes de saber se carregou. É o último defeito aberto
-   dos onze, e o único da classe 3.2 que sobrou.
-2. **`BRAVIS_IT_PROJECT` em algo automatizado.** É a lição 3.5. Enquanto a suíte
-   de integração depender de alguém definir a variável à mão, ela volta a ficar
-   parada — e foi ela que achou cinco defeitos quando finalmente rodou.
-3. **`BRAVIS_IT_BUCKET` também.** `TestIntegrationGCSStrategy`,
-   `KeepStagedFile` e os quatro testes de S3 ficam em `SKIP` sem ele — e é onde
-   vive a estratégia dos lotes acima de 5000 linhas.
-4. **Um consumidor que não seja este.** Tudo aqui foi achado por um fetcher HTTP
+1. ~~**O §3**~~ — fechado na `v0.23.0`.
+
+2. **A integração na CI.** Metade feita, e a metade que falta depende de você.
+
+   O job `integration` existe agora e roda **os testes de S3 a cada push**,
+   contra um MinIO que sobe ao lado — sem segredo nenhum. Era a lição 3.5, e
+   essa parte não depende de mais ninguém.
+
+   O BigQuery ainda não roda: precisa de credencial. O job já está escrito e
+   liga sozinho quando existirem, e avisa em voz alta enquanto não existirem:
+
+   | o que criar | onde | o quê |
+   |---|---|---|
+   | secret `GCP_CREDENTIALS` | Settings → Secrets → Actions | o JSON de uma service account com BigQuery Data Editor, Job User e Storage Object Admin |
+   | variable `BRAVIS_IT_PROJECT` | Settings → Variables → Actions | `zarv-development-94b6` |
+   | variable `BRAVIS_IT_DATASET` | idem | `bravis_it` |
+   | variable `BRAVIS_IT_BUCKET` | idem | `zarv-development-94b6-bravis-it` |
+
+   Enquanto não existirem, **dezessete testes ficam em `SKIP`** e o job diz
+   isso com um `::warning::` — em vez de passar verde em silêncio, que é como a
+   lição 3.5 aconteceu na primeira vez.
+
+3. **Um consumidor que não seja este.** Tudo aqui foi achado por um fetcher HTTP
    escrevendo no BigQuery. `from.Files`, `to.Files`, S3 e GCS entraram na
    `v0.20.0` e ainda não têm quem os use de verdade — e a classe 3.6 diz que o
    que não é exercitado é onde o defeito mora.
+
+4. **O `Execute` instala o logger padrão do processo.** Uma biblioteca que
+   chama `slog.SetDefault` decide pelo programa que a importa. Hoje é
+   conveniente — um fetcher ganha log estruturado sem escrever nada — e não
+   incomodou ninguém, mas é uma decisão que o consumidor não tomou. Vale rever
+   antes da `v1.0.0`.
