@@ -28,9 +28,16 @@
 > critérios 2 e 3 da spec por construção: não há um segundo lugar criando
 > tabela, então não há decisão de layout duplicada nem corrida de `409`.
 >
-> **Seguem abertos os itens 3 e 4**, que estavam fora do escopo daquela spec de
-> propósito. O item 4 é hoje a **única** razão pela qual o consumidor
-> `zarv-data-pipeline` continua na `v0.8.0`.
+> **O item 4 foi resolvido na `sdk/v0.15.0`**, por um caminho melhor que o
+> proposto: `sdk.Schema(...)` como Transformer e um bloco `Metadata` que nomeia
+> as duas colunas no ponto de chamada — sem DSL nova, reusando o Transform. O
+> consumidor migrou da `v0.8.0` direto para a `v0.15.0` e compõe as seis colunas
+> explicitamente. Os `ingestion_id` bateram com os das cargas anteriores, então a
+> troca não reingeriu nada.
+>
+> **Seguem abertos o item 3** (`msg=loaded` antes da falha) **e o item 6**
+> (a temporária do merge por autodetect), este último achado na migração e hoje
+> o único motivo de o consumidor rodar sem `DedupMerge`.
 
 Achados ao migrar o consumidor `zarv-data-pipeline` da `v0.8.0` para a `v0.9.x`.
 A migração foi **revertida**: o consumidor está preso na `v0.8.0` e não sobe
@@ -377,7 +384,62 @@ o nome diz qual dos dois é.
 
 ---
 
-## 6. Critério de pronto para a `v0.10.1`
+## 6. A temporária do merge nasce por autodetect, e não cabe no destino — **v0.15.0**
+
+Achado migrando o consumidor para a `v0.15.0`. É o único bloqueio que sobrou, e
+é pequeno.
+
+`dedup.go` cria a temporária sem schema e carrega com `source.AutoDetect = true`.
+O autodetect transforma um objeto JSON aninhado em `RECORD`. Um destino que
+declara essa coluna como `JSON` — que é o tipo certo para payload de vendor, e o
+que as 32 landings deste consumidor usam — não recebe:
+
+```
+type mismatch on payload (destination JSON, incoming RECORD)
+```
+
+A mensagem está **certa**: é a `reconcile` fazendo o trabalho dela, e nomeando os
+dois tipos. O problema é que a temporária foi montada por inferência quando havia
+uma fonte de verdade melhor à mão.
+
+### Isolado nas duas direções
+
+| configuração | resultado |
+|---|---|
+| `Dedup: DedupMerge` | `type mismatch on payload (destination JSON, incoming RECORD)` |
+| sem `Dedup` | `rows=24 ignored=0`, e `JSON_VALUE(payload, '$.temperature_2m')` lê no destino |
+
+Mesmo fetcher, mesma linha, mesmo destino. Só o caminho muda.
+
+### O conserto
+
+A temporária existe para receber exatamente as linhas que vão ao destino, e o
+destino **já existe** nesse ponto — `prepareTable` acabou de lê-lo. Crie a
+temporária com o schema do destino em vez de autodetect:
+
+```go
+destMeta, err := table.Metadata(ctx)          // ja lido em prepareTable; passe-o
+temp.Create(ctx, &bigquery.TableMetadata{
+    Schema:         destMeta.Schema,
+    ExpirationTime: time.Now().Add(6 * time.Hour),
+})
+```
+
+Isso resolve mais do que o tipo. Com o schema do destino, a ordem das colunas da
+temporária deixa de ser inferida — o que remove pela raiz a classe do §2, em vez
+de depender da lista nomeada para compensá-la. E a `reconcile` passa a comparar
+o que as linhas trazem com o destino, que é a comparação que interessa, em vez
+de comparar destino com uma inferência.
+
+### Como provar
+
+Um teste de integração com uma coluna `JSON` no destino e um objeto aninhado no
+payload, com `DedupMerge` ligado. Hoje ele falha. Os testes de merge existentes
+usam colunas escalares, e é por isso que isto passou.
+
+---
+
+## 7. Critério de pronto para a `v0.10.1`
 
 > Os itens 1 e 2 têm spec de execução própria, com implementação e provas:
 > [`plan/2026-09-03-sdk-conserto-do-merge.md`](plan/2026-09-03-sdk-conserto-do-merge.md).
