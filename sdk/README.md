@@ -417,6 +417,61 @@ default the SDK would then guess wrong from. `FirstPage` moves the start, and a
 number already in the URL wins over it — which is how a zero-indexed API says
 so: `…?page=0`.
 
+## Authentication
+
+`Auth` is optional. A static key belongs in `Header` and needs none of this:
+
+```go
+from.HTTP{URL: url, Header: http.Header{"Authorization": {"Bearer " + key}}}
+```
+
+What `Auth` buys is the two things consumers kept writing by hand.
+
+**A login that is cached**, for an API that rate-limits authentication attempts
+rather than requests:
+
+```go
+Auth: &from.Credential{
+    Value: func(ctx context.Context) (string, error) { return login(ctx) },
+    Apply: from.AsBearer,
+    TTL:   time.Hour,
+}
+```
+
+`TTL` keeps the value in memory for the process, behind a lock, so concurrent
+callers produce one login and not one each. It never reaches disk.
+
+**A session that would otherwise expire in silence.** Some vendors have no
+programmatic login at all: a human pastes a session cookie, it has a sliding
+expiry, and only the renewal endpoint pushes the window forward.
+
+```go
+Auth: &from.Credential{
+    Value: from.FromEnv("APP_SESSION_COOKIE"),
+    Apply: from.AsCookie,
+    Refresh: &from.Refresh{
+        URL:       "https://api.example.com/auth/session",
+        ExpiresAt: from.JSONField("expires"),
+        WarnAfter: 7 * 24 * time.Hour,
+    },
+}
+```
+
+`Refresh` runs once, before the first page. A `Set-Cookie` in its response
+lands in the same jar the pages use, so the renewed credential applies to this
+run — and to this run only. **The SDK stores nothing.** A rotated token does
+not invalidate the previous one, so the cost is that somebody re-pastes the
+credential once per window; `ExpiresAt` and `WarnAfter` are what make sure they
+know before it lapses, on the log line *and* in `Stats.CredentialExpiry`.
+
+A refresh that fails stops the run. Continuing would send every page out with a
+credential the API has just refused, and the failure would come back blaming
+the data endpoint.
+
+`Value` errors name the environment variable. `Apply` is `AsBearer`,
+`AsCookie` (the whole `name=value`, as copied from a browser),
+`AsCookieNamed(name)` or `AsHeader(name)`.
+
 ## Cookies
 
 A session cookie survives the whole walk. Hand the first one over in `Header`

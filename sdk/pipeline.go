@@ -8,6 +8,8 @@ import (
 	"log/slog"
 	"os"
 	"time"
+
+	"github.com/AreteAcademy/brevis/sdk/internal/core"
 )
 
 // Pipeline is a whole fetcher as a value. Run takes it from here: flags,
@@ -157,6 +159,17 @@ func runPipeline(ctx context.Context, p *Pipeline) error {
 	data = Transform(data, p.Transform...)
 
 	res, err := loadWith(ctx, data, p.Target, p.Run)
+
+	// The credential expiry rides the pipeline's own line, because the one
+	// the extract emits is at the wrong end of a run somebody only reads the
+	// tail of -- and this is the number that says when the fetcher stops
+	// working for a reason no retry fixes.
+	if exp := data.Stats().CredentialExpiry; !exp.IsZero() {
+		slog.Info("credential",
+			"pipeline", p.name(),
+			"expires", exp.Format(time.RFC3339),
+			"left", core.RoundDuration(time.Until(exp)))
+	}
 	if res != nil {
 		// The result comes back on the failure path too, by design, so that
 		// RowErrors is readable after a refusal. That makes the message the

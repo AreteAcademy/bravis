@@ -49,6 +49,24 @@ type HTTP struct {
 	// a Postgres source has no Response to be handed one.
 	Records core.Reading
 
+	// Auth is how this source authenticates, and what keeps the credential
+	// alive. A static key needs none of it -- put it in Header and be done.
+	//
+	// What it buys is the two things consumers were writing by hand: caching
+	// a login so the API is not asked for a token once per run, and renewing
+	// a session that would otherwise expire in silence.
+	//
+	//	Auth: &from.Credential{
+	//	    Value: from.FromEnv("APP_SESSION_COOKIE"),
+	//	    Apply: from.AsCookie,
+	//	    Refresh: &from.Refresh{
+	//	        URL:       "https://api.example.com/auth/session",
+	//	        ExpiresAt: from.JSONField("expires"),
+	//	        WarnAfter: 7 * 24 * time.Hour,
+	//	    },
+	//	}
+	Auth *Credential
+
 	// NoHeader, for CSV: treat every row as data with field_N keys.
 	NoHeader bool
 
@@ -124,6 +142,7 @@ func (h HTTP) source(opt core.ReadOptions) core.Source {
 		RetryConfig:   h.RetryConfig,
 		RateLimiter:   h.RateLimiter,
 		Format:        h.Format,
+		Auth:          h.Auth,
 		NoHeader:      h.NoHeader,
 		FollowLinks:   h.FollowLinks,
 		CursorKey:     h.CursorKey,

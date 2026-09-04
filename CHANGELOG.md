@@ -8,6 +8,70 @@ A tag de um módulo aninhado leva o prefixo do diretório: `sdk/v0.2.1`.
 
 ---
 
+## [0.27.0] — 2026-09-04
+
+O quarto ponto do `2026-09-04-sdk-http-autenticacao.md`, e o maior: `from.HTTP`
+passa a saber manter uma credencial viva.
+
+### Adicionado
+
+**`HTTP.Auth`.** Opcional — uma chave estática continua indo em `Header` e não
+precisa de nada disso. O que ele compra são as duas coisas que os consumidores
+escreviam à mão.
+
+**Um login que fica cacheado**, para uma API que limita a *frequência de
+autenticação* e não a de requisições:
+
+```go
+Auth: &from.Credential{
+    Value: func(ctx context.Context) (string, error) { return login(ctx) },
+    Apply: from.AsBearer,
+    TTL:   time.Hour,
+}
+```
+
+O `TTL` guarda em memória, sob trava, então N goroutines produzem um login e não
+N. Não toca disco e não sobrevive ao processo.
+
+**Uma sessão que morreria calada.** Alguns fornecedores não têm login
+programático: um humano cola o cookie, ele tem expiração deslizante, e só o
+endpoint de renovação empurra a janela.
+
+```go
+Auth: &from.Credential{
+    Value: from.FromEnv("APP_SESSION_COOKIE"),
+    Apply: from.AsCookie,
+    Refresh: &from.Refresh{
+        URL:       "https://api.example.com/auth/session",
+        ExpiresAt: from.JSONField("expires"),
+        WarnAfter: 7 * 24 * time.Hour,
+    },
+}
+```
+
+O `Refresh` roda uma vez, antes da primeira página, no **mesmo cliente** — então
+o `Set-Cookie` cai no jar e vale para as páginas seguintes. **O SDK não guarda
+nada.** Um token rotacionado não invalida o anterior, então o custo é alguém
+recolar a credencial uma vez por janela; `ExpiresAt` e `WarnAfter` existem para
+que essa pessoa saiba antes, e não no dia 31 com um 401.
+
+O aviso vai no log **e** em `Stats.CredentialExpiry`, que sobe até a linha do
+pipeline. Um aviso que ninguém lê é a mesma morte silenciosa com passos a mais.
+
+Uma renovação que falha **para a execução**. Seguir mandaria todas as páginas
+com uma credencial que a API acabou de recusar, e o erro voltaria culpando o
+endpoint de dados.
+
+`Apply` é `AsBearer`, `AsCookie` (o `nome=valor` inteiro, como se copia do
+navegador), `AsCookieNamed(nome)` ou `AsHeader(nome)`. `FromEnv` nomeia a
+variável quando ela falta, em vez de mandar header vazio.
+
+### Recusado na montagem, não como 401
+`Value` nulo, `Apply` nulo, `Refresh.URL` vazio, e `WarnAfter` sem `ExpiresAt` —
+esse último porque o aviso nunca poderia disparar.
+
+---
+
 ## [0.26.0] — 2026-09-04
 
 Três coisas que o `from.HTTP` deveria absorver e o consumidor estava escrevendo

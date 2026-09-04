@@ -37,6 +37,10 @@ e o driver.
 | `MaxPages` | teto da caminhada; cursor repetido também para |
 | `DataKey` | desembrulha o array; **recusado junto de `Records`** |
 | `Header["Cookie"]` | semeia o jar; `Set-Cookie` renova por nome na página seguinte |
+| `Auth.Value` + `Apply` | de onde vem o segredo e como ele entra na requisição |
+| `Auth.TTL` | cacheia o login em memória, sob trava; nunca toca disco |
+| `Auth.Refresh` | um GET antes da primeira página; o jar absorve o `Set-Cookie` |
+| `Auth.Refresh.ExpiresAt` + `WarnAfter` | avisa antes da credencial vencer — no log **e** em `Stats.CredentialExpiry` |
 
 **Duas estratégias de paginação juntas é erro**, não regra de precedência — a
 perdedora seria um campo escrito que não faz nada.

@@ -106,12 +106,25 @@ func fetch(ctx context.Context, source core.Source, records core.Reading) (iter.
 		source.MaxPages = defaultMaxPages
 	}
 
+	// Before the client, so a secret applied as a cookie is seeded into the
+	// jar with the rest.
+	if err := authenticate(ctx, &source); err != nil {
+		return nil, err
+	}
+
 	client, err := newClient(source)
 	if err != nil {
 		return nil, err
 	}
 
 	ctxTotal, cancelTotal := context.WithTimeout(ctx, source.TotalTimeout)
+
+	if source.Auth != nil && source.Auth.Refresh != nil {
+		if err := renew(ctxTotal, client, source, source.Stats); err != nil {
+			cancelTotal()
+			return nil, err
+		}
+	}
 
 	// Counted from the first byte of the first page, which is fetched before
 	// the closure exists -- so the counter has to outlive both.
@@ -177,6 +190,13 @@ func fetch(ctx context.Context, source core.Source, records core.Reading) (iter.
 			}
 			if pages > 0 {
 				args = append(args, "per_page", core.RoundDuration(elapsed/time.Duration(pages)))
+			}
+			// On the summary line too, not only on the warning: the summary
+			// is what people keep, and the credential this renews is the one
+			// a human has to re-paste before it lapses.
+			if source.Stats != nil && !source.Stats.CredentialExpiry.IsZero() {
+				args = append(args, "credential_expires",
+					source.Stats.CredentialExpiry.Format(time.RFC3339))
 			}
 			slog.InfoContext(ctxTotal, "extract complete", args...)
 

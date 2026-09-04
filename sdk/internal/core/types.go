@@ -190,6 +190,16 @@ type Stats struct {
 	// the source sent, not of what survived Transform -- the two differ, and
 	// the one that explains a slow extract is this one.
 	Bytes int64
+
+	// CredentialExpiry is when the credential stops working, read from the
+	// Refresh response. Zero when the source has no Refresh, or none that
+	// says.
+	//
+	// It is here and not only in a log line because the credential this
+	// exists for is renewed by a human, and the failure it prevents is the
+	// pipeline dying silently the day the window closes. A warning nobody
+	// reads is the same failure with extra steps.
+	CredentialExpiry time.Time
 }
 
 // Format names the wire format of a response.
@@ -254,6 +264,10 @@ type Source struct {
 	// line of \n. The counters do go through slog, where a structured number
 	// belongs.
 	PreviewWriter io.Writer
+
+	// Auth is how the source authenticates, and what keeps the credential
+	// alive across runs. Nil means the request goes as Header describes it.
+	Auth *Credential
 
 	// NoHeader, for CSV: treat every row as data with field_N keys. The
 	// default uses the first row as column names. Ignored for other formats.

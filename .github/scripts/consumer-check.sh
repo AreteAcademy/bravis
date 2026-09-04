@@ -49,6 +49,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"$MODULO"
 	"$MODULO/from"
@@ -61,7 +62,21 @@ import (
 func main() {
 	dados, err := sdk.Extract(context.Background(), sdk.Source{
 		From: from.HTTP{
-			URL: "http://x",
+			URL:     "http://x",
+			PageKey: "page",
+			DataKey: "results",
+			// Um Applier declarado como func em vez de var nao seria
+			// atribuivel aqui -- e so um consumidor de fora pega isso.
+			Auth: &from.Credential{
+				Value: from.FromEnv("APP_SESSION"),
+				Apply: from.AsCookie,
+				TTL:   time.Hour,
+				Refresh: &from.Refresh{
+					URL:       "http://x/session",
+					ExpiresAt: from.JSONField("expires"),
+					WarnAfter: 7 * 24 * time.Hour,
+				},
+			},
 			Records: func(r sdk.Response) ([]any, error) {
 				doc, err := r.Object()
 				if err != nil {
