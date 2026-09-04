@@ -445,7 +445,49 @@ usam colunas escalares, e é por isso que isto passou.
 
 ---
 
-## 7. Critério de pronto para a `v0.10.1`
+## 7. `FormatError.Format` é declarado e nunca preenchido — **v0.22.0**
+
+`errors.go:54` declara o campo e `errors.go:61-63` o imprime:
+
+```go
+return fmt.Sprintf("formato %s from %s: %v", e.Format, e.URL, e.Cause)
+```
+
+**Nenhum dos quatro sites que constroem o erro preenche `Format`** —
+`sdk.go:199`, `sdk.go:207`, `sdk.go:249` e `transform.go:79` passam `URL`,
+`Line` e `Cause` e nada mais. Conferido com
+`grep -A4 'FormatError{' | grep 'Format:'`: vazio.
+
+O resultado é que todo erro de formato sai com um buraco no lugar do formato:
+
+```
+error="formato  from http://…/erro200: open-meteo recusou: parametro invalido"
+        ^^^^^^^^ dois espaços
+```
+
+E a mesma execução loga `format=json` no `extract complete`, porque ali o valor
+vem do `core.Source` já normalizado (`from/http.go:70-71`). Um run diz duas
+coisas sobre o mesmo formato: `json` no sucesso, nada no erro.
+
+É a mesma família de `LoadResult.ErrorRows` (declarado, nunca preenchido, e o
+README mandava lê-lo), do `CursorKey`/`PageSize`/`HasHeader` da `v0.1.1`, e do
+`DeleteAfterLoad` documentado como `default: true` que um `bool` não conseguia
+ser. **Campo público que não faz nada é pior que campo ausente**, e aqui ele
+chega ao operador de plantão como uma frase truncada.
+
+Menor, no mesmo lugar: a mensagem mistura idiomas — `formato %s from %s,
+registro %d`.
+
+**Conserto:** preencher nos quatro sites a partir do formato **normalizado**, o
+mesmo que o `extract complete` reporta — ou remover o campo e a interpolação.
+Qualquer um dos dois é honesto; o estado atual não.
+
+**Como provar:** um teste que afirma a string do `Error()` de cada um dos quatro
+sites. Hoje nenhum teste olha a mensagem, e é por isso que dois espaços passaram.
+
+---
+
+## 8. Critério de pronto para a `v0.10.1`
 
 > Os itens 1 e 2 têm spec de execução própria, com implementação e provas:
 > [`plan/2026-09-03-sdk-conserto-do-merge.md`](plan/2026-09-03-sdk-conserto-do-merge.md).
