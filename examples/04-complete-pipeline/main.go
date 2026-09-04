@@ -48,7 +48,7 @@ func main() {
 		URL:          *source,
 		FollowLinks:  true,
 		TotalTimeout: 30 * time.Minute,
-	})
+	}, nil)
 	if err != nil {
 		log.Fatalf("extract: %v", err)
 	}

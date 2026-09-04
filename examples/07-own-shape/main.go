@@ -30,23 +30,27 @@ func main() {
 			fs.StringVar(&project, "project", "", "GCP project")
 		},
 
+		// Configuration, and only that.
 		Source: sdk.Source{
 			URL: "https://api.open-meteo.com/v1/forecast" +
 				"?latitude=-23.55&longitude=-46.63&hourly=temperature_2m",
-			Records: func(r sdk.Response) ([]any, error) {
-				if err := sdk.RejectIf("error")(r); err != nil {
-					return nil, err
-				}
-				doc, err := r.Object()
-				if err != nil {
-					return nil, err
-				}
-				return sdk.ParallelArrays("hourly", "time", "temperature_2m")(doc)
-			},
+		},
+
+		// What a response means.
+		Records: func(r sdk.Response) ([]any, error) {
+			if err := sdk.RejectIf("error")(r); err != nil {
+				return nil, err
+			}
+			doc, err := r.Object()
+			if err != nil {
+				return nil, err
+			}
+			return sdk.ParallelArrays("hourly", "time", "temperature_2m")(doc)
 		},
 
 		Transform: []sdk.Transformer{
-			sdk.Schema("time", "temperature_2m", "latitude", "longitude"),
+			// What we take from the source. Not the table -- that is below.
+			sdk.Accept("time", "temperature_2m", "latitude", "longitude"),
 
 			// The contract, built here because it is yours, not the SDK's.
 			// ingestion_id and ingestion_loaded_at arrive on top of this from
@@ -62,10 +66,29 @@ func main() {
 		},
 
 		Target: sdk.Target{
-			// The two columns the SDK adds -- ingestion_id STRING NOT
-			// NULL and ingestion_loaded_at TIMESTAMP NOT NULL -- named here
-			// so they are not a surprise in the table. Everything else above
-			// came from Transform.
+			// The table, in the order of its DDL:
+			//
+			//	CREATE TABLE ... (
+			//	  ingestion_id        STRING NOT NULL,
+			//	  ingestion_loaded_at TIMESTAMP NOT NULL,
+			//	  provider            STRING NOT NULL,
+			//	  entity              STRING NOT NULL,
+			//	  source_key          STRING,
+			//	  payload             JSON   NOT NULL
+			//	)
+			//
+			// One list, and it names the two the SDK fills in too. Put this
+			// next to the DDL and the question "do these describe the same
+			// table?" is answered by reading, not by tracing.
+			Columns: []string{
+				"ingestion_id",        // from Metadata
+				"ingestion_loaded_at", // from Metadata
+				"provider",
+				"entity",
+				"source_key",
+				"payload",
+			},
+
 			Metadata: &sdk.Metadata{
 				Provider: provider,
 				Entity:   entity,

@@ -172,6 +172,12 @@ type LoadConfig struct {
 	// exists to prevent.
 	AutoID bool
 
+	// Columns declares the destination's columns, in DDL order, including
+	// the two Metadata fills in. Nil declares nothing.
+	//
+	// See sdk.Target.Columns for what it checks and when.
+	Columns []string
+
 	// ClusterBy names the columns the created table is clustered on. The SDK
 	// cannot guess: it does not know your payload. Ignored when the table
 	// already exists.
@@ -257,41 +263,6 @@ type Source struct {
 	TotalTimeout time.Duration // total; default: 5 minutes
 	RetryConfig  *RetryConfig  // nil uses defaults
 	RateLimiter  Limiter       // throttles each attempt; nil disables
-
-	// Records receives every successful response and returns the records it
-	// carries -- or refuses it, saying why.
-	//
-	// This is where a fetcher's knowledge of its source lives. Validating and
-	// slicing are the same question ("what does this response mean?"), and it
-	// is answered once, per response, before anything is decoded:
-	//
-	//	Records: func(r sdk.Response) ([]any, error) {
-	//		if r.Status == http.StatusNoContent {
-	//			return nil, nil // an empty window is a result, not a failure
-	//		}
-	//		doc, err := r.Object()
-	//		if err != nil {
-	//			return nil, err
-	//		}
-	//		if bad, _ := doc["error"].(bool); bad {
-	//			return nil, sdk.Reject("open-meteo refused: %v", doc["reason"])
-	//		}
-	//		return sdk.ParallelArrays("hourly", "time", "temperature_2m")(doc)
-	//	}
-	//
-	// Per response, not per record, and that is the point. A response that is
-	// an error carries zero records, so a per-record check is never called on
-	// it -- the failure would arrive as "0 rows", which says nothing about
-	// what the vendor actually answered.
-	//
-	// Nil leaves the SDK's default: decode the body and treat each document
-	// as one record. That path stays streaming, which matters for a large
-	// NDJSON or CSV; setting Records buffers the response, because a function
-	// that decides what a response means has to see all of it.
-	//
-	// ParallelArrays, ArrayAt, RejectIf and RequireFields are ordinary
-	// functions you call from in here. They are shortcuts, not the interface.
-	Records func(Response) ([]any, error)
 
 	// Format of the response. Empty means FormatJSON.
 	Format Format
@@ -440,6 +411,13 @@ func WithRequirePartitionFilter(enabled bool) LoadOption {
 func WithMetadata(enabled bool) LoadOption {
 	return func(cfg *LoadConfig) {
 		cfg.Metadata = enabled
+	}
+}
+
+// WithColumns declares the destination's columns. See LoadConfig.Columns.
+func WithColumns(columns []string) LoadOption {
+	return func(cfg *LoadConfig) {
+		cfg.Columns = columns
 	}
 }
 

@@ -30,7 +30,7 @@ func TestRetryOn429(t *testing.T) {
 	ctx := context.Background()
 	source := core.Source{URL: server.URL}
 
-	lines, err := NDJSON(ctx, source)
+	lines, err := NDJSON(ctx, source, nil)
 	if err != nil {
 		t.Fatalf("NDJSON() error: %v", err)
 	}
@@ -61,7 +61,7 @@ func TestNoRetryOn400(t *testing.T) {
 	ctx := context.Background()
 	source := core.Source{URL: server.URL}
 
-	_, err := NDJSON(ctx, source)
+	_, err := NDJSON(ctx, source, nil)
 	if err == nil {
 		t.Fatal("Expected error on 400")
 	}
@@ -90,7 +90,7 @@ func TestRetryAfterHeader(t *testing.T) {
 	ctx := context.Background()
 	source := core.Source{URL: server.URL}
 
-	lines, err := NDJSON(ctx, source)
+	lines, err := NDJSON(ctx, source, nil)
 	if err != nil {
 		t.Fatalf("NDJSON() error: %v", err)
 	}
@@ -120,7 +120,7 @@ func TestTimeoutPerAttempt(t *testing.T) {
 		TotalTimeout: 5 * time.Second,        // total
 	}
 
-	_, err := NDJSON(ctx, source)
+	_, err := NDJSON(ctx, source, nil)
 	// Should fail due to per-attempt timeout
 	if err == nil {
 		t.Fatal("Expected timeout error")
@@ -138,18 +138,16 @@ func TestRecordsRunsBeforeDecoding(t *testing.T) {
 	defer server.Close()
 
 	ctx := context.Background()
-	source := core.Source{
-		URL: server.URL,
-		Records: func(r core.Response) ([]any, error) {
-			called = true
-			if !strings.HasPrefix(string(r.Bytes()), "{") {
-				return nil, core.Reject("not json")
-			}
-			return nil, nil
-		},
+	source := core.Source{URL: server.URL}
+	reading := func(r core.Response) ([]any, error) {
+		called = true
+		if !strings.HasPrefix(string(r.Bytes()), "{") {
+			return nil, core.Reject("not json")
+		}
+		return nil, nil
 	}
 
-	_, err := NDJSON(ctx, source)
+	_, err := NDJSON(ctx, source, reading)
 	if err == nil {
 		t.Fatal("Expected Records to reject the response")
 	}
@@ -173,7 +171,7 @@ func TestCSVWithHeader(t *testing.T) {
 	server := csvServer(t)
 	defer server.Close()
 
-	lines, err := CSV(context.Background(), core.Source{URL: server.URL})
+	lines, err := CSV(context.Background(), core.Source{URL: server.URL}, nil)
 	if err != nil {
 		t.Fatalf("CSV() error: %v", err)
 	}
@@ -202,7 +200,7 @@ func TestCSVWithoutHeader(t *testing.T) {
 	server := csvServer(t)
 	defer server.Close()
 
-	lines, err := CSV(context.Background(), core.Source{URL: server.URL, NoHeader: true})
+	lines, err := CSV(context.Background(), core.Source{URL: server.URL, NoHeader: true}, nil)
 	if err != nil {
 		t.Fatalf("CSV() error: %v", err)
 	}
@@ -239,7 +237,7 @@ func TestContextCancellation(t *testing.T) {
 	defer cancel()
 
 	source := core.Source{URL: server.URL}
-	lines, err := NDJSON(ctx, source)
+	lines, err := NDJSON(ctx, source, nil)
 	if err != nil {
 		t.Fatalf("NDJSON() error: %v", err)
 	}
@@ -272,7 +270,7 @@ func TestMalformedStreamTerminates(t *testing.T) {
 	}))
 	defer server.Close()
 
-	lines, err := NDJSON(context.Background(), core.Source{URL: server.URL})
+	lines, err := NDJSON(context.Background(), core.Source{URL: server.URL}, nil)
 	if err != nil {
 		t.Fatalf("NDJSON() error: %v", err)
 	}
@@ -321,7 +319,7 @@ func TestBodyStreamsFully(t *testing.T) {
 	}))
 	defer server.Close()
 
-	lines, err := NDJSON(context.Background(), core.Source{URL: server.URL})
+	lines, err := NDJSON(context.Background(), core.Source{URL: server.URL}, nil)
 	if err != nil {
 		t.Fatalf("NDJSON() error: %v", err)
 	}

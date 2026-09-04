@@ -26,38 +26,38 @@ import (
 
 // CSV fetches and decodes CSV data from the given source.
 // It returns an iterator of Envelopes, one per CSV row.
-func CSV(ctx context.Context, source core.Source) (iter.Seq2[core.Envelope, error], error) {
+func CSV(ctx context.Context, source core.Source, records core.Reading) (iter.Seq2[core.Envelope, error], error) {
 	if source.Format == "" {
 		source.Format = "csv"
 	}
-	return fetch(ctx, source)
+	return fetch(ctx, source, records)
 }
 
 // NDJSON fetches and decodes newline-delimited JSON.
-func NDJSON(ctx context.Context, source core.Source) (iter.Seq2[core.Envelope, error], error) {
+func NDJSON(ctx context.Context, source core.Source, records core.Reading) (iter.Seq2[core.Envelope, error], error) {
 	if source.Format == "" {
 		source.Format = "ndjson"
 	}
-	return fetch(ctx, source)
+	return fetch(ctx, source, records)
 }
 
 // JSON fetches and decodes a JSON array or object stream.
-func JSON(ctx context.Context, source core.Source) (iter.Seq2[core.Envelope, error], error) {
+func JSON(ctx context.Context, source core.Source, records core.Reading) (iter.Seq2[core.Envelope, error], error) {
 	if source.Format == "" {
 		source.Format = "json"
 	}
-	return fetch(ctx, source)
+	return fetch(ctx, source, records)
 }
 
 // XML fetches and decodes XML data.
-func XML(ctx context.Context, source core.Source) (iter.Seq2[core.Envelope, error], error) {
+func XML(ctx context.Context, source core.Source, records core.Reading) (iter.Seq2[core.Envelope, error], error) {
 	if source.Format == "" {
 		source.Format = "xml"
 	}
-	return fetch(ctx, source)
+	return fetch(ctx, source, records)
 }
 
-func fetch(ctx context.Context, source core.Source) (iter.Seq2[core.Envelope, error], error) {
+func fetch(ctx context.Context, source core.Source, records core.Reading) (iter.Seq2[core.Envelope, error], error) {
 	if source.URL == "" {
 		return nil, fmt.Errorf("URL is required")
 	}
@@ -65,8 +65,8 @@ func fetch(ctx context.Context, source core.Source) (iter.Seq2[core.Envelope, er
 	// Both answer "which part of the response holds the records", and with
 	// Records set the decoder never sees the body DataKey unwrapped -- so
 	// DataKey would sit there doing nothing, which is worse than an error.
-	if source.Records != nil && source.DataKey != "" {
-		return nil, fmt.Errorf("Records and DataKey both say where the records are, and " +
+	if records != nil && source.DataKey != "" {
+		return nil, fmt.Errorf("Pipeline.Records and Source.DataKey both say where the records are, and " +
 			"Records wins -- DataKey would be ignored. Read the field inside Records " +
 			"instead: sdk.ArrayAt(\"" + source.DataKey + "\")(doc)")
 	}
@@ -109,7 +109,7 @@ func fetch(ctx context.Context, source core.Source) (iter.Seq2[core.Envelope, er
 	// The first page is fetched eagerly so that an unreachable host, a 404 or
 	// a guard rejection surfaces as an error from CSV/JSON/NDJSON/XML rather
 	// than as the first item of a sequence the caller has to drain to notice.
-	first, err := fetchPage(ctxTotal, source, source.URL, &bytesRead)
+	first, err := fetchPage(ctxTotal, source, records, source.URL, &bytesRead)
 	if err != nil {
 		cancelTotal()
 		return nil, err
@@ -202,7 +202,7 @@ func fetch(ctx context.Context, source core.Source) (iter.Seq2[core.Envelope, er
 			}
 			seen[next] = true
 
-			page, err = fetchPage(ctxTotal, source, next, &bytesRead)
+			page, err = fetchPage(ctxTotal, source, records, next, &bytesRead)
 			if err != nil {
 				yield(core.Envelope{}, fmt.Errorf("page %d: %w", pages+1, err))
 				return
@@ -242,7 +242,7 @@ type page struct {
 	offset   int    // offset this page was fetched at, for offset paging
 	release  func()
 
-	// Set when Source.Records answered for this page. The records then come
+	// Set when the Reading answered for this page. The records then come
 	// from the fetcher rather than the decoder, and hasRecords distinguishes
 	// "the fetcher said none" from "the fetcher was not asked".
 	records    []any
@@ -350,7 +350,7 @@ func withQuery(rawURL, key, value string) (string, error) {
 // fetchPage performs one request, with retry, and prepares the response for
 // decoding. Everything that needs the whole body -- the guard, cursor paging
 // -- buffers it here so the streaming path below stays streaming.
-func fetchPage(ctxTotal context.Context, source core.Source, pageURL string, bytesRead *int64) (*page, error) {
+func fetchPage(ctxTotal context.Context, source core.Source, records core.Reading, pageURL string, bytesRead *int64) (*page, error) {
 	var resp *http.Response
 	// release cancels the context of the attempt that produced resp. The body
 	// is still streaming under that context, so it must stay alive until the
@@ -437,7 +437,7 @@ func fetchPage(ctxTotal context.Context, source core.Source, pageURL string, byt
 
 	// Anything that must see the whole body reads it here and hands the
 	// decoder an equivalent reader.
-	if source.Records != nil || source.CursorKey != "" || source.DataKey != "" {
+	if records != nil || source.CursorKey != "" || source.DataKey != "" {
 		buffered, err := io.ReadAll(body)
 		if err != nil {
 			p.close()
@@ -445,15 +445,15 @@ func fetchPage(ctxTotal context.Context, source core.Source, pageURL string, byt
 		}
 		_ = resp.Body.Close()
 
-		if source.Records != nil {
-			records, err := source.Records(core.NewResponse(
+		if records != nil {
+			found, err := records(core.NewResponse(
 				resp.StatusCode, resp.Header, redactURL(pageURL), buffered))
 			if err != nil {
 				p.body = nil
 				p.close()
 				return nil, err
 			}
-			p.records = records
+			p.records = found
 			p.hasRecords = true
 		}
 

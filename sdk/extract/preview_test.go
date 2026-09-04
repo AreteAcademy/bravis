@@ -200,7 +200,7 @@ func TestExtractPrintsThePreviewItWasAskedFor(t *testing.T) {
 		Preview:       2,
 		PreviewWriter: &out,
 		Stats:         stats,
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("Extract: %v", err)
 	}
@@ -239,7 +239,7 @@ func TestExtractCountsTheBytesItRead(t *testing.T) {
 	defer srv.Close()
 
 	stats := &core.Stats{}
-	records, err := JSON(context.Background(), core.Source{URL: srv.URL, Stats: stats})
+	records, err := JSON(context.Background(), core.Source{URL: srv.URL, Stats: stats}, nil)
 	if err != nil {
 		t.Fatalf("Extract: %v", err)
 	}
@@ -264,13 +264,12 @@ func TestExtractCountsBytesOnTheBufferedPath(t *testing.T) {
 	records, err := JSON(context.Background(), core.Source{
 		URL:   srv.URL,
 		Stats: stats,
-		Records: func(r core.Response) ([]any, error) {
-			var docs []any
-			if err := r.JSON(&docs); err != nil {
-				return nil, err
-			}
-			return docs, nil
-		},
+	}, func(r core.Response) ([]any, error) {
+		var docs []any
+		if err := r.JSON(&docs); err != nil {
+			return nil, err
+		}
+		return docs, nil
 	})
 	if err != nil {
 		t.Fatalf("Extract: %v", err)
@@ -293,7 +292,7 @@ func TestPreviewStillPrintsWhenTheConsumerStopsEarly(t *testing.T) {
 	var out bytes.Buffer
 	records, err := JSON(context.Background(), core.Source{
 		URL: srv.URL, Preview: 5, PreviewWriter: &out,
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("Extract: %v", err)
 	}
@@ -315,7 +314,7 @@ func TestNoPreviewByDefault(t *testing.T) {
 	defer srv.Close()
 
 	var out bytes.Buffer
-	records, err := JSON(context.Background(), core.Source{URL: srv.URL, PreviewWriter: &out})
+	records, err := JSON(context.Background(), core.Source{URL: srv.URL, PreviewWriter: &out}, nil)
 	if err != nil {
 		t.Fatalf("Extract: %v", err)
 	}

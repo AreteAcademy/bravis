@@ -18,7 +18,7 @@ import (
 // FetchAndProcess is the kind of function you would actually write: it uses
 // the SDK and hands each row to your own logic.
 func FetchAndProcess(ctx context.Context, url string, process func(sdk.Envelope) error) (int, error) {
-	lines, err := extract.CSV(ctx, sdk.Source{URL: url})
+	lines, err := extract.CSV(ctx, sdk.Source{URL: url}, nil)
 	if err != nil {
 		return 0, err
 	}

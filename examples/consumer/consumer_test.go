@@ -251,7 +251,7 @@ func TestConsumidorComponeAsColunasNoTransform(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Extract: %v", err)
 	}
-	data = sdk.Transform(data, sdk.Schema("id"))
+	data = sdk.Transform(data, sdk.Accept("id"))
 
 	n := 0
 	for env, err := range data.Records {
@@ -279,7 +279,7 @@ func TestConsumidorVeOSchemaFalharQuandoOCampoSome(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Extract: %v", err)
 	}
-	data = sdk.Transform(data, sdk.Schema("campo_que_a_fonte_parou_de_mandar"))
+	data = sdk.Transform(data, sdk.Accept("campo_que_a_fonte_parou_de_mandar"))
 
 	for _, err := range data.Records {
 		if err == nil {

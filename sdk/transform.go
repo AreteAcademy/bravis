@@ -114,26 +114,29 @@ func applyAll(fns []Transformer, payload any) (any, bool, error) {
 	return payload, false, nil
 }
 
-// Schema declares the record's columns: exactly these fields, and an error
-// naming any that is missing.
-//
-// This is where the destination's shape is decided. Put it last in the
-// Transform chain and the answer to "what columns does this table have?" is
-// one line of the fetcher:
+// Accept names what you take from the source: exactly these fields, and an
+// error naming any that is missing.
 //
 //	Transform: []sdk.Transformer{
-//		sdk.Rename(map[string]string{"temperature_2m": "temperature_celsius"}),
-//		sdk.Schema("time", "temperature_celsius", "latitude", "longitude"),
+//		sdk.Accept("time", "temperature_2m", "latitude", "longitude"),
+//		sdk.Compute("payload", func(r map[string]any) (any, error) { ... }),
 //	}
 //
-// Fields not named are dropped -- that is the composing half, and saying
-// which four you want is saying it out loud. A field that is named and not
-// there is an error, because that one is the source changing shape under you,
-// and it must not reach the warehouse as a column that quietly went NULL.
+// Fields not named are dropped -- saying which four you want is saying it out
+// loud. A field that is named and not there is an error, because that one is
+// the source changing shape under you, and it must not reach the warehouse as
+// a column that quietly went NULL.
+//
+// This is not the destination's shape. Accept answers "does the source still
+// send what I read?"; Target.Columns answers "does the row have the columns
+// the table has?". Both are worth checking and they catch different things,
+// which is why they are two calls with two names -- an earlier version called
+// this one Schema, and a fetcher then had two Schema lines meaning two
+// different things.
 //
 // A record that is not a JSON object is passed through untouched: there are
 // no fields to name.
-func Schema(fields ...string) Transformer {
+func Accept(fields ...string) Transformer {
 	keep := make(map[string]bool, len(fields))
 	for _, f := range fields {
 		keep[f] = true
@@ -157,7 +160,7 @@ func Schema(fields ...string) Transformer {
 		}
 
 		if len(missing) > 0 {
-			return nil, fmt.Errorf("the schema names %s, which this record does not have. "+
+			return nil, fmt.Errorf("Accept names %s, which this record does not have. "+
 				"It has: %s", strings.Join(missing, ", "), availableKeys(obj))
 		}
 

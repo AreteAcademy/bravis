@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -735,5 +736,96 @@ func TestIntegrationAutoIDWritesARandomID(t *testing.T) {
 		if f.Name == "ingestion_id" && !f.Required {
 			t.Error("ingestion_id is nullable even with AutoID")
 		}
+	}
+}
+
+// TestIntegrationColumnsMatchTheDDL is the spec's §7 proof, run against the
+// table it describes.
+//
+// Six columns, one declaration, and the two the SDK fills in are named in it
+// -- which they could never be inside the Transform chain, because that runs
+// before they exist.
+func TestIntegrationColumnsMatchTheDDL(t *testing.T) {
+	env := requireIntegration(t)
+	ctx := context.Background()
+
+	client, err := bigquery.NewClient(ctx, env.project)
+	if err != nil {
+		t.Fatalf("bigquery client: %v", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	name := fmt.Sprintf("it_columns_%d", time.Now().UnixNano())
+	table := client.Dataset(env.dataset).Table(name)
+	t.Cleanup(func() { _ = table.Delete(context.Background()) })
+
+	declared := []string{
+		"ingestion_id", "ingestion_loaded_at", "provider", "entity", "source_key", "payload",
+	}
+
+	loader, err := New(ctx, nil,
+		core.WithProjectID(env.project),
+		core.WithDataset(env.dataset),
+		core.WithTable(name),
+		core.WithCreateTable(true),
+		core.WithMetadata(true),
+		core.WithColumns(declared),
+	)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	// The row the fetcher composes: the four it builds, plus the two the SDK
+	// stamps on top.
+	batch := []core.Envelope{{
+		Provider: "open_meteo", Entity: "hourly", SourceKey: "2026-01-01T00:00",
+		RecordTS: "2026-01-01T00:00:00Z",
+		Payload: map[string]any{
+			"provider":   "open_meteo",
+			"entity":     "hourly",
+			"source_key": "2026-01-01T00:00",
+			"payload":    `{"temperature_2m":14.1}`,
+		},
+	}}
+
+	if _, err := loader.Load(ctx, batch...); err != nil {
+		t.Fatalf("load: %v", err)
+	}
+
+	meta, err := table.Metadata(ctx)
+	if err != nil {
+		t.Fatalf("reading metadata: %v", err)
+	}
+	got := map[string]bool{}
+	for _, f := range meta.Schema {
+		got[f.Name] = true
+	}
+	for _, c := range declared {
+		if !got[c] {
+			t.Errorf("the declared column %q is not in the table", c)
+		}
+	}
+	if len(meta.Schema) != len(declared) {
+		t.Errorf("the table has %d columns, the declaration has %d", len(meta.Schema), len(declared))
+	}
+
+	// And the declaration is checked against the table that is now there:
+	// a second load with a column the table lacks must be refused.
+	loader2, err := New(ctx, nil,
+		core.WithProjectID(env.project),
+		core.WithDataset(env.dataset),
+		core.WithTable(name),
+		core.WithMetadata(true),
+		core.WithColumns(append(append([]string{}, declared...), "coluna_inventada")),
+	)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	_, err = loader2.Load(ctx, batch...)
+	if err == nil {
+		t.Fatal("a declaration naming a column the table lacks must be refused")
+	}
+	if !strings.Contains(err.Error(), "coluna_inventada") {
+		t.Errorf("the error does not name the column: %v", err)
 	}
 }

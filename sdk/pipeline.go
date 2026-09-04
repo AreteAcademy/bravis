@@ -34,7 +34,19 @@ import (
 // Anything this does not cover is still reachable by calling Extract and Load
 // directly.
 type Pipeline struct {
+	// Source is configuration, and only that: URL, headers, timeouts, retry,
+	// pagination, format. Nothing in it decides what the data means.
 	Source Source
+
+	// Records decides what each successful response means -- the records it
+	// carries, or a refusal saying why. Nil decodes the body and treats each
+	// document as one record. See Reading.
+	//
+	// It sits here rather than inside Source because it is the one thing in a
+	// fetcher that is about the data instead of the transport, and it belongs
+	// next to Transform, which is the other step that runs over what was
+	// extracted.
+	Records Reading
 
 	// Transform reshapes each record between Extract and Load, in order. See
 	// Transformer.
@@ -145,7 +157,7 @@ func Execute(ctx context.Context, p *Pipeline, args []string) error {
 		return runDryRun(ctx, p, *sample)
 	}
 
-	data, err := Extract(ctx, p.Source)
+	data, err := Extract(ctx, p.Source, p.Records)
 	if err != nil {
 		return err
 	}
@@ -170,7 +182,7 @@ func Execute(ctx context.Context, p *Pipeline, args []string) error {
 func runDryRun(ctx context.Context, p *Pipeline, n int) error {
 	start := time.Now()
 
-	data, err := Extract(ctx, p.Source)
+	data, err := Extract(ctx, p.Source, p.Records)
 	if err != nil {
 		return err
 	}

@@ -214,6 +214,14 @@ func (l *Loader) Load(ctx context.Context, envelopes ...core.Envelope) (*core.Lo
 		envelopes = stamped
 	}
 
+	// The row is complete now: Transform composed it and Metadata stamped it.
+	// Checking here is what lets a declared ingestion_id be legitimate, which
+	// it could never be inside the Transform chain -- that runs before the
+	// two metadata fields exist.
+	if err := checkColumns(l.cfg.Columns, envelopes); err != nil {
+		return fail(err)
+	}
+
 	table := l.bq.Dataset(l.cfg.Dataset).Table(l.cfg.Table)
 
 	// Encoded before the table is prepared: creating a table with the
@@ -227,6 +235,19 @@ func (l *Loader) Load(ctx context.Context, envelopes ...core.Envelope) (*core.Lo
 	existed, err := l.prepareTable(ctx, table, data)
 	if err != nil {
 		return fail(err)
+	}
+
+	// And the declaration against the table that is actually there. Only when
+	// it already existed: one the SDK just created was created from these very
+	// rows, so checking it would be checking our own arithmetic.
+	if existed && len(l.cfg.Columns) > 0 {
+		meta, err := table.Metadata(ctx)
+		if err != nil {
+			return fail(fmt.Errorf("reading %s to check Columns: %w", nameOf(table), err))
+		}
+		if err := checkDeclaredAgainstTable(l.cfg.Columns, meta.Schema, nameOf(table)); err != nil {
+			return fail(err)
+		}
 	}
 
 	// Checked here rather than left to BigQuery. With autodetect the schema

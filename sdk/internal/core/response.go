@@ -91,3 +91,40 @@ func snippet(b []byte) string {
 	}
 	return fmt.Sprintf("%q", b)
 }
+
+// Reading receives every successful response and returns the records it
+// carries -- or refuses it, saying why.
+//
+// This is where a fetcher's knowledge of its source lives. Validating and
+// slicing are the same question ("what does this response mean?"), and it is
+// answered once, per response, before anything is decoded:
+//
+//	Records: func(r sdk.Response) ([]any, error) {
+//		if r.Status == http.StatusNoContent {
+//			return nil, nil // an empty window is a result, not a failure
+//		}
+//		doc, err := r.Object()
+//		if err != nil {
+//			return nil, err
+//		}
+//		if bad, _ := doc["error"].(bool); bad {
+//			return nil, sdk.Reject("open-meteo refused: %v", doc["reason"])
+//		}
+//		return sdk.ParallelArrays("hourly", "time", "temperature_2m")(doc)
+//	}
+//
+// Per response, not per record, and that is the point. A response that is an
+// error carries zero records, so a per-record check is never called on it --
+// the failure would arrive as "0 rows", which says nothing about what the
+// vendor actually answered.
+//
+// It is not a field of Source, because Source is configuration -- URL,
+// headers, timeouts, retry, pagination -- and this is the one decision in the
+// fetcher that is about the data. It lives on Pipeline, next to Transform,
+// which is the other thing that runs over what was extracted.
+//
+// Nil leaves the SDK's default: decode the body and treat each document as one
+// record. That path stays streaming, which matters for a large NDJSON or CSV;
+// passing a Reading buffers the response, because a function that decides what
+// a response means has to see all of it.
+type Reading func(Response) ([]any, error)

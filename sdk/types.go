@@ -18,8 +18,12 @@ type (
 	// Source describes where and how to extract.
 	Source = core.Source
 
-	// Response is one successful HTTP response, handed to Source.Records.
+	// Response is one successful HTTP response, handed to Pipeline.Records.
 	Response = core.Response
+
+	// Reading decides what a successful response means: the records it
+	// carries, or a refusal saying why. See Pipeline.Records.
+	Reading = core.Reading
 
 	// Rejection is what Reject returns: the source answered, and what it
 	// sent is not data.
@@ -108,6 +112,7 @@ var (
 	WithThresholdForGCS        = core.WithThresholdForGCS
 	WithMetadata               = core.WithMetadata
 	WithAutoID                 = core.WithAutoID
+	WithColumns                = core.WithColumns
 	WithClusterBy              = core.WithClusterBy
 	WithDriver                 = core.WithDriver
 	WithCreateTable            = core.WithCreateTable

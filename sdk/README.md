@@ -20,9 +20,9 @@ Requires Go 1.23 or newer (the SDK streams rows as `iter.Seq2`).
 ## Three lines
 
 ```go
-dados, err := sdk.Extract(ctx, sdk.Source{
-	URL:    "https://api.open-meteo.com/v1/forecast?...",
-	Records: func(r sdk.Response) ([]any, error) {
+dados, err := sdk.Extract(ctx,
+	sdk.Source{URL: "https://api.open-meteo.com/v1/forecast?..."},
+	func(r sdk.Response) ([]any, error) {
 		doc, err := r.Object()
 		if err != nil {
 			return nil, err
@@ -31,13 +31,16 @@ dados, err := sdk.Extract(ctx, sdk.Source{
 			return nil, sdk.Reject("open-meteo refused: %v", doc["reason"])
 		}
 		return sdk.ParallelArrays("hourly", "time", "temperature_2m")(doc)
-	},
+	})
+
+// What we take from the source.
+dados = sdk.Transform(dados, sdk.Accept("time", "temperature_2m", "latitude", "longitude"))
+
+// Where it goes, and the columns it has.
+res, err := sdk.Load(ctx, dados, sdk.Target{
+	Table:   "hourly_temperatures",
+	Columns: []string{"time", "temperature_2m", "latitude", "longitude"},
 })
-
-// The columns. This is where they are decided, and the only place.
-dados = sdk.Transform(dados, sdk.Schema("time", "temperature_2m", "latitude", "longitude"))
-
-res, err := sdk.Load(ctx, dados, sdk.Target{Table: "hourly_temperatures"})
 ```
 
 **The columns come from `Transform`.** Whatever shape your transformers
@@ -141,17 +144,20 @@ exit code for free:
 ```go
 func main() {
 	sdk.Run(sdk.Pipeline{
-		Source: sdk.Source{URL: "...", Records: func(r sdk.Response) ([]any, error) {
+		Source: sdk.Source{URL: "..."},
+		Records: func(r sdk.Response) ([]any, error) {
 			doc, err := r.Object()
 			if err != nil {
 				return nil, err
 			}
 			return sdk.ArrayAt("results")(doc)
-		}},
+		},
 		Target: sdk.Target{
-			Provider: "example", Entity: "events",
-			Key:  sdk.Key("id"),
-			When: sdk.Field("created_at"),
+			Metadata: &sdk.Metadata{
+				Provider: "example", Entity: "events",
+				Key:  sdk.Key("id"),
+				When: sdk.Field("created_at"),
+			},
 		},
 	})
 }
@@ -416,9 +422,14 @@ explains a slow extract. It is also on `Data.Stats().Bytes` and
 
 ### Deciding what a response means
 
-`Records` receives every successful response and returns the records it
-carries — or refuses it, saying why. It replaces `Guard` and `Expand`, which
+`Pipeline.Records` receives every successful response and returns the records
+it carries — or refuses it, saying why. It replaces `Guard` and `Expand`, which
 were the same question ("what does this response mean?") split in two.
+
+It sits on `Pipeline`, next to `Transform`, and not inside `Source`: `Source` is
+configuration — URL, headers, timeouts, retry, pagination — and this is the one
+decision in a fetcher that is about the data. On the two-call API it is
+`Extract`'s optional second argument.
 
 ```go
 Records: func(r sdk.Response) ([]any, error) {
@@ -533,19 +544,64 @@ stats := data.Stats()   // read after the stream is drained
 
 ## What gets written
 
-**The columns you composed in Transform.** The SDK imposes none: what a row
-looks like is decided in the `Transform` chain, and `sdk.Schema` is where you
-say it out loud.
+**The columns you declared.** `Target.Columns` is the destination's shape, in
+the order of its DDL, and it names every column — including the two that
+`Metadata` fills in:
+
+```go
+Target: sdk.Target{
+	Dataset: "bronze",
+	Table:   "vendors_open_meteo_hourly_temperatures",
+
+	Columns: []string{
+		"ingestion_id",        // from Metadata
+		"ingestion_loaded_at", // from Metadata
+		"provider",
+		"entity",
+		"source_key",
+		"payload",
+	},
+
+	Metadata: &sdk.Metadata{Provider: "open_meteo", Entity: "hourly", Key: sdk.Key("source_key")},
+},
+```
+
+Put that next to the table's `CREATE TABLE` and the question *"do these
+describe the same table?"* is answered by reading, not by tracing.
+
+It is checked three ways:
+
+| | |
+|---|---|
+| a declared column neither `Transform` nor `Metadata` delivered | error naming the column |
+| a field the row carries that the list does not declare | error naming the field |
+| a declared column the real table does not have | error naming the column and the table's own |
+
+The row check runs **after** `Metadata` stamps its two fields, which is what
+lets `ingestion_id` be declared at all — inside the `Transform` chain it could
+never be, because that runs before the two exist.
+
+Nil declares nothing and checks nothing. There is no fallback: this list is the
+only place the destination's columns are declared.
+
+### Accept is not Columns
+
+Two checks, two names, and they catch different things:
 
 ```go
 Transform: []sdk.Transformer{
-	sdk.Schema("time", "temperature_2m", "latitude", "longitude"),
+	sdk.Accept("time", "temperature_2m", "latitude", "longitude"),  // from the source
 },
-Target: sdk.Target{Table: "hourly"},
-// four columns, and the fetcher names all four
+Target: sdk.Target{Columns: []string{...}},                         // of the table
 ```
 
-`Metadata` adds two more, and nothing else:
+`Accept` asks *"does the source still send what I read?"* — the vendor drops
+`temperature_2m` and you get an error naming it, instead of a payload that is
+quietly one field short. `Columns` asks *"does the row have the table's
+columns?"*. Losing either one to have a single list would trade clarity for a
+detection hole.
+
+`Metadata` adds two columns, and nothing else:
 
 ```sql
 ingestion_id        STRING    NOT NULL,
@@ -557,8 +613,8 @@ write in the block becomes a column: `Provider`, `Entity`, `Key` and `When` are
 read to build the id and are never written. A record that already owns one of
 the two names is an error naming the field, never a silent overwrite.
 
-Declaring the block is also the only reason the SDK reads your record. Without
-it, `Key` and `When` do not exist to be called.
+`Metadata` is required by `DedupMerge`, which matches on `ingestion_id`, and by
+the partition options, which partition on `ingestion_loaded_at`.
 
 ### Two kinds of id
 

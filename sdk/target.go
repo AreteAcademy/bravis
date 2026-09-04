@@ -33,6 +33,33 @@ type Target struct {
 	Dataset string
 	Table   string
 
+	// Columns declares the destination's columns, in the order of its DDL,
+	// including the ones the SDK fills in:
+	//
+	//	Columns: []string{
+	//		"ingestion_id",         // from the Metadata block
+	//		"ingestion_loaded_at",  // from the Metadata block
+	//		"provider",
+	//		"entity",
+	//		"source_key",
+	//		"payload",
+	//	}
+	//
+	// One declaration, next to the dataset and table name it describes, and
+	// it names every column -- including the two that Metadata produces,
+	// which no fetcher used to have written down anywhere.
+	//
+	// Checked against the row after Transform composed it and Metadata
+	// stamped it, so a column that neither delivered is an error naming the
+	// column, and a field the row carries that this list does not declare is
+	// an error naming the field. Checked again against the real table, where
+	// a declared column the table lacks is an error naming both sides.
+	//
+	// Nil declares nothing and checks nothing, which is what a fetcher that
+	// only wants the payload written does. There is no fallback: this list is
+	// the only place the destination's columns are declared.
+	Columns []string
+
 	// StagingBucket is used above InlineLimit rows. Defaults to
 	// <projeto>-bravis-staging.
 	StagingBucket string
@@ -160,6 +187,7 @@ func (d Target) resolveWith(run RunContext) (*core.LoadConfig, map[string]origin
 		StagingBucket:          bucket.value,
 		ThresholdForGCS:        limite,
 		Format:                 "ndjson",
+		Columns:                d.Columns,
 		Dedup:                  d.Dedup,
 		Metadata:               d.Metadata != nil,
 		AutoID:                 d.Metadata != nil && d.Metadata.AutoID,

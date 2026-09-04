@@ -16,7 +16,7 @@ import (
 func ExampleCSV() {
 	lines, err := extract.CSV(context.Background(), sdk.Source{
 		URL: "https://example.gov/data.csv",
-	})
+	}, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -35,7 +35,7 @@ func ExampleCSV_noHeader() {
 	lines, _ := extract.CSV(context.Background(), sdk.Source{
 		URL:      "https://example.gov/headerless.csv",
 		NoHeader: true,
-	})
+	}, nil)
 	for env := range lines {
 		fmt.Println(env.Payload)
 	}
@@ -54,16 +54,17 @@ func ExampleNDJSON_resilient() {
 			MaxBackoff:     30 * time.Second,
 			JitterFraction: 0.2,
 		},
-		Records: func(r sdk.Response) ([]any, error) {
-			if len(r.Bytes()) == 0 {
-				return nil, sdk.Reject("empty body on %d", r.Status)
-			}
-			var docs []any
-			return docs, r.JSON(&docs)
-		},
 	}
 
-	lines, _ := extract.NDJSON(context.Background(), source)
+	reading := func(r sdk.Response) ([]any, error) {
+		if len(r.Bytes()) == 0 {
+			return nil, sdk.Reject("empty body on %d", r.Status)
+		}
+		var docs []any
+		return docs, r.JSON(&docs)
+	}
+
+	lines, _ := extract.NDJSON(context.Background(), source, reading)
 	for range lines {
 	}
 }
@@ -74,7 +75,7 @@ func ExampleNDJSON_pagination() {
 		URL:         "https://api.example.com/events",
 		FollowLinks: true,
 		MaxPages:    50,
-	})
+	}, nil)
 	for range lines {
 	}
 }
@@ -86,7 +87,7 @@ func ExampleJSON_cursor() {
 		URL:       "https://api.example.com/events",
 		CursorKey: "next_page",
 		DataKey:   "results",
-	})
+	}, nil)
 	for range lines {
 	}
 }
@@ -95,7 +96,7 @@ func ExampleJSON_cursor() {
 func ExampleXML() {
 	lines, _ := extract.XML(context.Background(), sdk.Source{
 		URL: "https://example.gov/feed.xml",
-	})
+	}, nil)
 	for env := range lines {
 		fmt.Println(env.Payload)
 	}

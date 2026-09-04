@@ -73,7 +73,16 @@ func (d *Data) Stats() core.Stats {
 // The returned records carry only Payload. Provider, Entity, SourceKey and
 // RecordTS are provenance, and provenance is decided at Load, where Target
 // says how to derive it.
-func Extract(ctx context.Context, source Source) (*Data, error) {
+func Extract(ctx context.Context, source Source, records ...Reading) (*Data, error) {
+	var reading Reading
+	switch len(records) {
+	case 0:
+	case 1:
+		reading = records[0]
+	default:
+		return nil, fmt.Errorf("Extract takes at most one Reading; got %d", len(records))
+	}
+
 	switch source.Driver {
 	case "", DriverHTTP:
 		source.Driver = DriverHTTP
@@ -99,13 +108,13 @@ func Extract(ctx context.Context, source Source) (*Data, error) {
 	)
 	switch source.Format {
 	case FormatJSON:
-		lines, err = extract.JSON(ctx, source)
+		lines, err = extract.JSON(ctx, source, reading)
 	case FormatNDJSON:
-		lines, err = extract.NDJSON(ctx, source)
+		lines, err = extract.NDJSON(ctx, source, reading)
 	case FormatCSV:
-		lines, err = extract.CSV(ctx, source)
+		lines, err = extract.CSV(ctx, source, reading)
 	case FormatXML:
-		lines, err = extract.XML(ctx, source)
+		lines, err = extract.XML(ctx, source, reading)
 	default:
 		return nil, fmt.Errorf("unknown format %q; use JSON, NDJSON, CSV or XML", source.Format)
 	}

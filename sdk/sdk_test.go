@@ -221,9 +221,8 @@ func TestExtractExpandeEMapeia(t *testing.T) {
 	defer srv.Close()
 
 	data, err := Extract(context.Background(), Source{
-		URL:     srv.URL,
-		Records: records(ParallelArrays("hourly", "time", "temperature_2m")),
-	})
+		URL: srv.URL,
+	}, records(ParallelArrays("hourly", "time", "temperature_2m")))
 	if err != nil {
 		t.Fatalf("Extract: %v", err)
 	}
@@ -272,12 +271,8 @@ func TestExtractRecordsRecusaAntesDeDecodificar(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := Extract(context.Background(), Source{
-		URL: srv.URL,
-		Records: func(r Response) ([]any, error) {
-			return nil, RejectIf("error")(r)
-		},
-	})
+	_, err := Extract(context.Background(), Source{URL: srv.URL},
+		func(r Response) ([]any, error) { return nil, RejectIf("error")(r) })
 	if err == nil {
 		t.Fatal("Records should have rejected a 200 carrying an error")
 	}
@@ -328,9 +323,8 @@ func TestErroDeFormatoEmChaveAusente(t *testing.T) {
 	defer srv.Close()
 
 	data, err := Extract(context.Background(), Source{
-		URL:     srv.URL,
-		Records: records(ParallelArrays("hourly", "time", "temperature_2m")),
-	})
+		URL: srv.URL,
+	}, records(ParallelArrays("hourly", "time", "temperature_2m")))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -525,7 +519,7 @@ func TestSomenteFiltraCamposVolateis(t *testing.T) {
 
 	// Only is a Transformer now: it projects a record, it does not expand a
 	// document, so it belongs between Extract and Load.
-	clean, err := Schema("time", "temperature_2m", "latitude")(raw[0])
+	clean, err := Accept("time", "temperature_2m", "latitude")(raw[0])
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -700,13 +694,13 @@ func TestTransformKeepsTheCounters(t *testing.T) {
 	defer srv.Close()
 
 	data, err := Extract(context.Background(), Source{
-		URL: srv.URL, Records: records(ParallelArrays("hourly", "time", "temperature_2m")),
-	})
+		URL: srv.URL,
+	}, records(ParallelArrays("hourly", "time", "temperature_2m")))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	data = Transform(data, Schema("time", "temperature_2m", "latitude"))
+	data = Transform(data, Accept("time", "temperature_2m", "latitude"))
 	if _, err := collect(data, Target{Metadata: &Metadata{Provider: "p", Entity: "e", Key: Key("time")}}); err != nil {
 		t.Fatal(err)
 	}
@@ -821,9 +815,8 @@ func TestSemMetadataOSDKNaoTocaNoPayload(t *testing.T) {
 	defer srv.Close()
 
 	data, err := Extract(context.Background(), Source{
-		URL:     srv.URL,
-		Records: records(ParallelArrays("hourly", "time", "temperature_2m")),
-	})
+		URL: srv.URL,
+	}, records(ParallelArrays("hourly", "time", "temperature_2m")))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -858,9 +851,8 @@ func TestSemMetadataOPayloadSaiComoEntrou(t *testing.T) {
 	defer srv.Close()
 
 	data, err := Extract(context.Background(), Source{
-		URL:     srv.URL,
-		Records: records(ParallelArrays("hourly", "time", "temperature_2m")),
-	})
+		URL: srv.URL,
+	}, records(ParallelArrays("hourly", "time", "temperature_2m")))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -930,8 +922,8 @@ func TestAutoIDNaoCarimbaProveniencia(t *testing.T) {
 	defer srv.Close()
 
 	data, err := Extract(context.Background(), Source{
-		URL: srv.URL, Records: records(ParallelArrays("hourly", "time", "temperature_2m")),
-	})
+		URL: srv.URL,
+	}, records(ParallelArrays("hourly", "time", "temperature_2m")))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -984,17 +976,15 @@ func TestTodoDoisXXChegaAoRecords(t *testing.T) {
 			defer srv.Close()
 
 			visto := 0
-			data, err := Extract(context.Background(), Source{
-				URL: srv.URL,
-				Records: func(r Response) ([]any, error) {
+			data, err := Extract(context.Background(), Source{URL: srv.URL},
+				func(r Response) ([]any, error) {
 					visto = r.Status
 					if len(r.Bytes()) == 0 {
 						return nil, nil // janela vazia
 					}
 					var docs []any
 					return docs, r.JSON(&docs)
-				},
-			})
+				})
 			if err != nil {
 				t.Fatalf("http %d derrubou a execução: %v", c.status, err)
 			}
@@ -1025,10 +1015,8 @@ func TestNaoDoisXXContinuaFalhando(t *testing.T) {
 	defer srv.Close()
 
 	chamou := false
-	_, err := Extract(context.Background(), Source{
-		URL:     srv.URL,
-		Records: func(Response) ([]any, error) { chamou = true; return nil, nil },
-	})
+	_, err := Extract(context.Background(), Source{URL: srv.URL},
+		func(Response) ([]any, error) { chamou = true; return nil, nil })
 	if err == nil {
 		t.Fatal("um 404 tem de falhar")
 	}
@@ -1070,10 +1058,8 @@ func TestRecusaSobreviveAoExtract(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := Extract(context.Background(), Source{
-		URL:     srv.URL,
-		Records: func(r Response) ([]any, error) { return nil, RejectIf("error")(r) },
-	})
+	_, err := Extract(context.Background(), Source{URL: srv.URL},
+		func(r Response) ([]any, error) { return nil, RejectIf("error")(r) })
 	if err == nil {
 		t.Fatal("a recusa não chegou")
 	}
@@ -1091,8 +1077,7 @@ func TestRecordsComDataKeyERecusado(t *testing.T) {
 	_, err := Extract(context.Background(), Source{
 		URL:     "http://exemplo.invalido",
 		DataKey: "results",
-		Records: func(Response) ([]any, error) { return nil, nil },
-	})
+	}, func(Response) ([]any, error) { return nil, nil })
 	if err == nil {
 		t.Fatal("Records junto de DataKey deixaria o DataKey sem efeito")
 	}

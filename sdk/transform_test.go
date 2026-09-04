@@ -39,10 +39,8 @@ func meteoServer(t *testing.T) *httptest.Server {
 
 func meteoRecords(t *testing.T, srv *httptest.Server) *Data {
 	t.Helper()
-	data, err := Extract(context.Background(), Source{
-		URL:     srv.URL,
-		Records: records(ParallelArrays("hourly", "time", "temperature_2m")),
-	})
+	data, err := Extract(context.Background(), Source{URL: srv.URL},
+		records(ParallelArrays("hourly", "time", "temperature_2m")))
 	if err != nil {
 		t.Fatalf("Extract: %v", err)
 	}
@@ -100,7 +98,7 @@ func TestTransformChainsInOrder(t *testing.T) {
 			}
 			return c*9/5 + 32, nil
 		}),
-		Schema("time", "temp_c", "temp_f"),
+		Accept("time", "temp_c", "temp_f"),
 	)
 
 	rows := drain(t, data)
@@ -193,7 +191,7 @@ func TestTransformWithNoFunctionsIsANoop(t *testing.T) {
 	if Transform(data) != data {
 		t.Error("Transform with no functions should hand back the same Data")
 	}
-	if Transform(nil, Schema("x")) != nil {
+	if Transform(nil, Accept("x")) != nil {
 		t.Error("Transform(nil) should stay nil")
 	}
 }
@@ -264,7 +262,7 @@ func TestComputeReportsTheFieldOnFailure(t *testing.T) {
 func TestTransformersLeaveNonObjectsAlone(t *testing.T) {
 	// A CSV row is a map[string]string, and a scalar payload is possible too.
 	// Projection helpers pass those through rather than failing.
-	for _, fn := range []Transformer{Schema("a"), Without("a"), Rename(map[string]string{"a": "b"})} {
+	for _, fn := range []Transformer{Accept("a"), Without("a"), Rename(map[string]string{"a": "b"})} {
 		got, err := fn("just a string")
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
@@ -285,7 +283,7 @@ func TestTransformFeedsTheKeyAndTimestamp(t *testing.T) {
 	// rename here has to be reflected there.
 	data := Transform(meteoRecords(t, srv),
 		Rename(map[string]string{"time": "observed_at"}),
-		Schema("observed_at", "temperature_2m", "latitude", "longitude"),
+		Accept("observed_at", "temperature_2m", "latitude", "longitude"),
 	)
 
 	envelopes, err := collect(data, Target{
@@ -327,8 +325,8 @@ func TestTransformKeyOnARenamedFieldFailsLoudly(t *testing.T) {
 
 // --- Schema: the columns are composed here ------------------------------
 
-func TestSchemaComposesExactlyTheNamedFields(t *testing.T) {
-	got, err := Schema("time", "temp")(map[string]any{
+func TestAcceptComposesExactlyTheNamedFields(t *testing.T) {
+	got, err := Accept("time", "temp")(map[string]any{
 		"time": "2026-01-01T00:00", "temp": 14.1, "generationtime_ms": 0.02, "elevation": 737,
 	})
 	if err != nil {
@@ -347,8 +345,8 @@ func TestSchemaComposesExactlyTheNamedFields(t *testing.T) {
 // The protection half. A field that vanishes is the source changing shape
 // under you, and it must not reach the warehouse as a column that quietly
 // went NULL.
-func TestSchemaRefusesAMissingFieldAndNamesIt(t *testing.T) {
-	_, err := Schema("time", "temperature_celsius")(map[string]any{
+func TestAcceptRefusesAMissingFieldAndNamesIt(t *testing.T) {
+	_, err := Accept("time", "temperature_celsius")(map[string]any{
 		"time": "2026-01-01T00:00", "temperature_2m": 14.1,
 	})
 	if err == nil {
@@ -365,8 +363,8 @@ func TestSchemaRefusesAMissingFieldAndNamesIt(t *testing.T) {
 
 // The composing half is not an error: naming four fields is saying which four
 // you want, out loud.
-func TestSchemaDropsWhatItDoesNotName(t *testing.T) {
-	got, err := Schema("a")(map[string]any{"a": 1, "b": 2})
+func TestAcceptDropsWhatItDoesNotName(t *testing.T) {
+	got, err := Accept("a")(map[string]any{"a": 1, "b": 2})
 	if err != nil {
 		t.Fatalf("dropping an unnamed field is the point, not an error: %v", err)
 	}
@@ -376,10 +374,10 @@ func TestSchemaDropsWhatItDoesNotName(t *testing.T) {
 }
 
 // A rename before the schema is the ordinary case, and the order has to work.
-func TestSchemaAfterRename(t *testing.T) {
+func TestAcceptAfterRename(t *testing.T) {
 	fns := []Transformer{
 		Rename(map[string]string{"temperature_2m": "temperature_celsius"}),
-		Schema("time", "temperature_celsius"),
+		Accept("time", "temperature_celsius"),
 	}
 
 	var payload any = map[string]any{"time": "t", "temperature_2m": 14.1, "elevation": 737}
@@ -397,8 +395,8 @@ func TestSchemaAfterRename(t *testing.T) {
 }
 
 // Nothing to name, nothing to do.
-func TestSchemaPassesScalarsThrough(t *testing.T) {
-	got, err := Schema("a")("um texto")
+func TestAcceptPassesScalarsThrough(t *testing.T) {
+	got, err := Accept("a")("um texto")
 	if err != nil {
 		t.Fatalf("a scalar record has no fields to name: %v", err)
 	}

@@ -8,6 +8,99 @@ A tag de um módulo aninhado leva o prefixo do diretório: `sdk/v0.2.1`.
 
 ---
 
+## [0.18.0] — 2026-09-04
+
+**BREAKING.** Uma declaração de colunas, no formato do DDL. Executa
+[`docs/plan/2026-09-04-sdk-uma-declaracao-de-colunas.md`](docs/plan/2026-09-04-sdk-uma-declaracao-de-colunas.md).
+
+### Adicionado
+- **`Target.Columns`** — as colunas do destino, na ordem do DDL, **incluindo as
+  duas que o SDK preenche**. É a declaração que faltava: `ingestion_id` e
+  `ingestion_loaded_at` não apareciam escritas em lugar nenhum do fetcher, e
+  dentro da cadeia de `Transform` elas jamais poderiam — o SDK só as acrescenta
+  depois, no load.
+
+  Conferida de três jeitos: coluna declarada que nem o `Transform` nem o
+  `Metadata` entregaram é erro nomeando a coluna; campo que a linha traz e a
+  lista não declara é erro nomeando o campo; coluna declarada que a tabela real
+  não tem é erro nomeando a coluna e as que a tabela tem.
+
+  `nil` não declara e não confere nada. **Não há reserva**: essa lista é o único
+  lugar onde as colunas do destino são declaradas.
+
+### Alterado
+- **`sdk.Schema` vira `sdk.Accept`.** Um fetcher real acabava com duas linhas
+  `sdk.Schema` querendo dizer coisas diferentes — uma sobre o que se aceita da
+  fonte, outra tentando ser a tabela. As duas verificações são legítimas e pegam
+  coisas diferentes, então continuam duas; o que era errado era o nome.
+
+  Não reusei o nome `Only`, que a spec sugere e está livre: ele existiu até a
+  `v0.15.0` **descartando campo ausente em silêncio**, e devolver o mesmo nome
+  com a semântica invertida é a troca silenciosa que a `v0.9.0` custou caro.
+  `Accept` é nome novo, e diz o que a etapa faz.
+
+- **`Records` sai de `Source` e vira campo de `Pipeline`.** `Source` passa a ser
+  configuração e só isso — URL, headers, timeouts, retry, paginação, formato.
+  `Records` era a única coisa lá dentro que decidia o que o dado significa, e
+  agora fica ao lado do `Transform`, que é a outra etapa que roda sobre o
+  extraído.
+
+- `sdk.Extract` recebe a leitura como segundo argumento opcional:
+  `Extract(ctx, source)` ou `Extract(ctx, source, leitura)`. Mais de uma é erro.
+- `extract.JSON`, `extract.NDJSON`, `extract.CSV` e `extract.XML` recebem um
+  `core.Reading` a mais. Passe `nil` para o comportamento padrão.
+
+### Migração
+
+```go
+// antes
+Source: sdk.Source{
+    URL:     "...",
+    Records: func(r sdk.Response) ([]any, error) { ... },
+},
+Transform: []sdk.Transformer{
+    sdk.Schema("time", "temperature_2m", "latitude", "longitude"),
+    sdk.Schema("provider", "entity", "payload", "source_key"),
+},
+Target: sdk.Target{
+    Dataset: "bronze",
+    Table:   "vendors_open_meteo_hourly_temperatures",
+    Metadata: &sdk.Metadata{Provider: provider, Entity: entity, Key: ..., When: ...},
+},
+
+// depois
+Source: sdk.Source{URL: "..."},
+
+Records: func(r sdk.Response) ([]any, error) { ... },
+
+Transform: []sdk.Transformer{
+    sdk.Accept("time", "temperature_2m", "latitude", "longitude"),
+    // os Compute que montam provider, entity, source_key e payload
+},
+
+Target: sdk.Target{
+    Dataset: "bronze",
+    Table:   "vendors_open_meteo_hourly_temperatures",
+
+    Columns: []string{
+        "ingestion_id",        // do Metadata
+        "ingestion_loaded_at", // do Metadata
+        "provider",
+        "entity",
+        "source_key",
+        "payload",
+    },
+
+    Metadata: &sdk.Metadata{Provider: provider, Entity: entity, Key: ..., When: ...},
+},
+```
+
+Um teste de integração carrega essa tabela de seis colunas contra o BigQuery
+real e confere que a declaração e o schema batem — e que uma declaração com
+coluna a mais é recusada nomeando-a.
+
+---
+
 ## [0.17.1] — 2026-09-03
 
 ### Corrigido
@@ -585,6 +678,7 @@ Primeira versão que compila.
 > versão de `proxy.golang.org`, então ela permanece publicada e quebrada para
 > sempre. Comece pela `v0.1.1`.
 
+[0.18.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.18.0
 [0.17.1]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.17.1
 [0.17.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.17.0
 [0.16.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.16.0

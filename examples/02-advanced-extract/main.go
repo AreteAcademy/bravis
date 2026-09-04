@@ -55,22 +55,22 @@ func main() {
 			JitterFraction: 0.2,
 		},
 
-		// Plenty of APIs answer 200 with an error document. Records runs
-		// before decoding, so this refuses loudly instead of loading garbage
-		// -- and Bytes costs nothing, because looking for a marker should not
-		// pay for a full parse of a body already known to be junk.
-		Records: func(r sdk.Response) ([]any, error) {
-			if bytes.Contains(r.Bytes(), []byte(`"error"`)) {
-				return nil, sdk.Reject("api returned an error document: %s", r.Bytes())
-			}
-			var docs []any
-			return docs, r.JSON(&docs)
-		},
-
 		RateLimiter: throttle{every: 200 * time.Millisecond},
 	}
 
-	lines, err := extract.NDJSON(context.Background(), fonte)
+	// Plenty of APIs answer 200 with an error document. The Reading runs
+	// before decoding, so this refuses loudly instead of loading garbage --
+	// and Bytes costs nothing, because looking for a marker should not pay
+	// for a full parse of a body already known to be junk.
+	leitura := func(r sdk.Response) ([]any, error) {
+		if bytes.Contains(r.Bytes(), []byte(`"error"`)) {
+			return nil, sdk.Reject("api returned an error document: %s", r.Bytes())
+		}
+		var docs []any
+		return docs, r.JSON(&docs)
+	}
+
+	lines, err := extract.NDJSON(context.Background(), fonte, leitura)
 	if err != nil {
 		log.Fatalf("extract: %v", err)
 	}
