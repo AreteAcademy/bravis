@@ -4,12 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"iter"
 	"log"
 	"time"
 
 	"github.com/AreteAcademy/bravis/sdk"
-	"github.com/AreteAcademy/bravis/sdk/extract"
+	"github.com/AreteAcademy/bravis/sdk/from"
 	"github.com/AreteAcademy/bravis/sdk/load"
 	"github.com/spf13/cobra"
 )
@@ -37,29 +36,22 @@ Examples:
 
 		ctx := context.Background()
 
-		source := sdk.Source{
+		wire := sdk.Format(format)
+		switch format {
+		case "csv", "json", "ndjson", "xml":
+		default:
+			wire = sdk.FormatCSV
+		}
+
+		lines, err := from.HTTP{
 			URL:          url,
 			Timeout:      timeout,
 			TotalTimeout: totalTimeout,
-			Format:       sdk.Format(format),
+			Format:       wire,
 			RetryConfig: &sdk.RetryConfig{
 				MaxAttempts: maxRetries,
 			},
-		}
-
-		var lines iter.Seq2[sdk.Envelope, error]
-		var err error
-
-		switch format {
-		case "csv":
-			lines, err = extract.CSV(ctx, source, nil)
-		case "json":
-			lines, err = extract.JSON(ctx, source, nil)
-		case "ndjson":
-			lines, err = extract.NDJSON(ctx, source, nil)
-		default:
-			lines, err = extract.CSV(ctx, source, nil)
-		}
+		}.Read(ctx, sdk.ReadOptions{})
 
 		if err != nil {
 			log.Fatalf("Extract failed: %v", err)
@@ -175,8 +167,8 @@ Examples:
 		// Extract
 		fmt.Fprintf(cmd.OutOrStderr(), "📥 Extracting from %s...\n", url)
 
-		source := sdk.Source{URL: url}
-		lines, err := extract.CSV(ctx, source, nil)
+		lines, err := from.HTTP{URL: url, Format: sdk.FormatCSV}.
+			Read(ctx, sdk.ReadOptions{})
 		if err != nil {
 			log.Fatalf("Extract failed: %v", err)
 		}
