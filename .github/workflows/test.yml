@@ -47,25 +47,7 @@ jobs:
     # variável de ambiente até a v0.11.0 -- quando finalmente rodaram, acharam
     # quatro defeitos numa execução. Um teste atrás de variável é um teste que
     # não roda.
-    services:
-      minio:
-        image: minio/minio:latest
-        env:
-          MINIO_ROOT_USER: bravis
-          MINIO_ROOT_PASSWORD: bravis-secret
-          MINIO_ARGS: server /data
-        ports:
-          - 9000:9000
-        # A imagem oficial precisa do argumento "server", e um service
-        # container do Actions não aceita command -- então o health check
-        # espera a porta responder, e o entrypoint vem por MINIO_ARGS.
-        options: >-
-          --health-cmd "curl -f http://localhost:9000/minio/health/live || exit 1"
-          --health-interval 5s --health-timeout 5s --health-retries 30
-
     env:
-      # O BigQuery exige credencial, então só roda onde ela existe. O S3 roda
-      # sempre: o MinIO sobe aqui do lado e não pede segredo nenhum.
       BRAVIS_IT_S3_ENDPOINT: http://localhost:9000
       BRAVIS_IT_S3_KEY: bravis
       BRAVIS_IT_S3_SECRET: bravis-secret
@@ -80,7 +62,28 @@ jobs:
           go-version: '1.25'
           cache: true
 
-      - name: Integration — object storage (MinIO)
+      # docker run, e não um service container: a imagem oficial do MinIO
+      # precisa de "server /data" como comando, e services do Actions não
+      # aceitam command.
+      - name: Start MinIO
+        run: |
+          docker run -d --name minio -p 9000:9000 \
+            -e MINIO_ROOT_USER=bravis \
+            -e MINIO_ROOT_PASSWORD=bravis-secret \
+            minio/minio:latest server /data
+
+          for i in $(seq 1 40); do
+            if curl -fs http://localhost:9000/minio/health/live >/dev/null; then
+              echo "MinIO no ar"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::O MinIO não subiu; os testes de S3 não teriam rodado"
+          docker logs minio
+          exit 1
+
+      - name: Integration - object storage (MinIO)
         run: |
           cd sdk
           go test -v -timeout 10m -run Integration ./from/...
@@ -93,7 +96,7 @@ jobs:
         with:
           credentials_json: ${{ secrets.GCP_CREDENTIALS }}
 
-      - name: Integration — BigQuery and GCS
+      - name: Integration - BigQuery and GCS
         if: env.GCP_CREDENTIALS != ''
         env:
           BRAVIS_IT_PROJECT: ${{ vars.BRAVIS_IT_PROJECT }}
