@@ -8,6 +8,18 @@ A tag de um módulo aninhado leva o prefixo do diretório: `sdk/v0.2.1`.
 
 ---
 
+## [0.17.1] — 2026-09-03
+
+### Corrigido
+- **`Response.Object()` e `Response.JSON()` devolviam erro comum, não recusa.**
+  Achado ao rodar a prova do §8 da spec com um consumidor de fora: uma página
+  HTML de erro servida com 200 saía com `errors.Is(err, sdk.ErrRejected) ==
+  false`. O `RejectIf` classificava certo, mas o exemplo da própria spec não
+  passa por ele — chama `r.Object()` direto. Um corpo que não é o esperado é a
+  fonte mandando algo que não é dado, com ou sem helper no meio.
+
+---
+
 ## [0.17.0] — 2026-09-03
 
 **BREAKING.** A validação é do consumidor, e roda por **resposta**. Executa
@@ -573,6 +585,7 @@ Primeira versão que compila.
 > versão de `proxy.golang.org`, então ela permanece publicada e quebrada para
 > sempre. Comece pela `v0.1.1`.
 
+[0.17.1]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.17.1
 [0.17.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.17.0
 [0.16.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.16.0
 [0.15.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.15.0

@@ -1102,3 +1102,25 @@ func TestRecordsComDataKeyERecusado(t *testing.T) {
 		}
 	}
 }
+
+// Um corpo que não é o esperado é a fonte mandando algo que não é dado, e
+// isso vale também quando o fetcher chama os decodificadores direto -- que é
+// o que o exemplo da própria spec faz.
+func TestDecodificarCorpoErradoEUmaRecusa(t *testing.T) {
+	r := resp(200, `<html>Em manutenção</html>`)
+
+	_, err := r.Object()
+	if err == nil {
+		t.Fatal("HTML não é objeto JSON")
+	}
+	if !errors.Is(err, ErrRejected) {
+		t.Errorf("Object() devolveu erro comum, não recusa: %T %v", err, err)
+	}
+
+	var docs []any
+	if err := r.JSON(&docs); err == nil {
+		t.Fatal("HTML não é o JSON esperado")
+	} else if !errors.Is(err, ErrRejected) {
+		t.Errorf("JSON() devolveu erro comum, não recusa: %T %v", err, err)
+	}
+}

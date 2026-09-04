@@ -161,7 +161,7 @@ func RejectIf(fields ...string) func(Response) error {
 	return func(r Response) error {
 		doc, err := r.Object()
 		if err != nil {
-			return core.Reject("response %d is not a JSON object: %v", r.Status, err)
+			return err
 		}
 		status := r.Status
 
@@ -189,7 +189,7 @@ func RequireFields(fields ...string) func(Response) error {
 	return func(r Response) error {
 		doc, err := r.Object()
 		if err != nil {
-			return core.Reject("response %d is not a JSON object: %v", r.Status, err)
+			return err
 		}
 		for _, campo := range fields {
 			if _, ok := doc[campo]; !ok {

@@ -54,7 +54,11 @@ func (r Response) Bytes() []byte { return r.body }
 //	}
 func (r Response) JSON(v any) error {
 	if err := json.Unmarshal(r.body, v); err != nil {
-		return fmt.Errorf("the response is not the JSON expected: %w", err)
+		// A rejection, not a plain error: the body not matching is the source
+		// sending something that is not data, and that is a different call at
+		// three in the morning than a bug in the fetcher.
+		return Reject("response %d is not the JSON expected: %v (starts with %s)",
+			r.Status, err, snippet(r.body))
 	}
 	return nil
 }
@@ -74,8 +78,8 @@ func (r Response) JSON(v any) error {
 func (r Response) Object() (map[string]any, error) {
 	var doc map[string]any
 	if err := json.Unmarshal(r.body, &doc); err != nil {
-		return nil, fmt.Errorf("the response is not a JSON object: %w (starts with %s)",
-			err, snippet(r.body))
+		return nil, Reject("response %d is not a JSON object: %v (starts with %s)",
+			r.Status, err, snippet(r.body))
 	}
 	return doc, nil
 }
