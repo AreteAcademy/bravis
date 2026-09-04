@@ -214,7 +214,7 @@ func (l *Loader) Load(ctx context.Context, envelopes ...core.Envelope) (*core.Lo
 		return fail(err)
 	}
 
-	existed, err := l.prepareTable(ctx, table, data)
+	existed, err := l.prepareTable(ctx, table, data, provenanceOf(envelopes))
 	if err != nil {
 		return fail(err)
 	}
@@ -287,7 +287,7 @@ func (l *Loader) Load(ctx context.Context, envelopes ...core.Envelope) (*core.Lo
 	// there is nothing to describe until it has run.
 	if l.cfg.CreateTable && !existed {
 		result.TableCreated = true
-		l.describeTable(ctx, table)
+		l.describeTable(ctx, table, provenanceOf(envelopes))
 	}
 
 	result.Duration = time.Since(start)

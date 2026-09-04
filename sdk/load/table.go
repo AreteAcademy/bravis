@@ -27,7 +27,7 @@ import (
 //
 // It never alters a table that already exists. A loader that can ALTER or
 // DROP is a loader that can erase history.
-func (l *Loader) prepareTable(ctx context.Context, table *bigquery.Table, data []byte) (bool, error) {
+func (l *Loader) prepareTable(ctx context.Context, table *bigquery.Table, data []byte, prov provenance) (bool, error) {
 	_, err := table.Metadata(ctx)
 	if err == nil {
 		return true, nil
@@ -65,7 +65,7 @@ func (l *Loader) prepareTable(ctx context.Context, table *bigquery.Table, data [
 	// The SDK still infers no type of its own. Guessing that a float64 out of
 	// encoding/json means FLOAT64 would put the inference back through a side
 	// door, on the columns least suited to it.
-	return false, l.createTyped(ctx, table, data)
+	return false, l.createTyped(ctx, table, data, prov)
 }
 
 // createFromSQL runs the caller's DDL and confirms it produced the table the
@@ -137,7 +137,7 @@ func (l *Loader) applyLayout(loader *bigquery.Loader, file *bigquery.FileConfig)
 // Best effort: a table that loaded fine must not be reported as a failure
 // because a label did not stick. It answers "what writes here?" six months
 // later, which is worth attempting and not worth failing over.
-func (l *Loader) describeTable(ctx context.Context, table *bigquery.Table) {
+func (l *Loader) describeTable(ctx context.Context, table *bigquery.Table, prov provenance) {
 	md, err := table.Metadata(ctx)
 	if err != nil {
 		return
@@ -146,8 +146,8 @@ func (l *Loader) describeTable(ctx context.Context, table *bigquery.Table) {
 		return // someone already said something; leave it
 	}
 
-	update := bigquery.TableMetadataToUpdate{Description: tableDescription(l.cfg)}
-	for k, v := range tableLabels(l.cfg) {
+	update := bigquery.TableMetadataToUpdate{Description: tableDescription(l.cfg, prov)}
+	for k, v := range tableLabels(prov) {
 		update.SetLabel(k, v)
 	}
 
@@ -156,10 +156,25 @@ func (l *Loader) describeTable(ctx context.Context, table *bigquery.Table) {
 	}
 }
 
-func tableDescription(cfg *core.LoadConfig) string {
+// provenance labels the created table, for cost attribution and for answering
+// "what writes here?" six months later.
+//
+// It comes from the batch, not from configuration. There is no second place
+// for a fetcher to say it, and a second place would be a second chance for the
+// two to disagree.
+type provenance struct{ Provider, Entity string }
+
+func provenanceOf(records []core.Envelope) provenance {
+	if len(records) == 0 {
+		return provenance{}
+	}
+	return provenance{Provider: records[0].Provider, Entity: records[0].Entity}
+}
+
+func tableDescription(cfg *core.LoadConfig, prov provenance) string {
 	who := "the Bravis SDK"
-	if cfg.Provider != "" && cfg.Entity != "" {
-		who = fmt.Sprintf("%s/%s via the Bravis SDK", cfg.Provider, cfg.Entity)
+	if prov.Provider != "" && prov.Entity != "" {
+		who = fmt.Sprintf("%s/%s via the Bravis SDK", prov.Provider, prov.Entity)
 	}
 	if cfg.Metadata {
 		return fmt.Sprintf("Written by %s since %s. Rows carry ingestion_id; deduplicate "+
@@ -175,9 +190,9 @@ func tableDescription(cfg *core.LoadConfig) string {
 // BigQuery takes lowercase letters, digits, dashes and underscores, up to 63
 // characters, starting with a letter. A value that does not fit is dropped
 // rather than failing: a naming rule is not worth losing the load over.
-func tableLabels(cfg *core.LoadConfig) map[string]string {
+func tableLabels(prov provenance) map[string]string {
 	labels := map[string]string{}
-	for key, raw := range map[string]string{"provider": cfg.Provider, "entity": cfg.Entity} {
+	for key, raw := range map[string]string{"provider": prov.Provider, "entity": prov.Entity} {
 		if v := sanitiseLabel(raw); v != "" {
 			labels[key] = v
 		}
@@ -230,13 +245,13 @@ var metadataSchema = map[string]*bigquery.FieldSchema{
 // It costs one extra load job, on the run that creates the table and never
 // again. The alternative was to guess the caller's types in Go, which is the
 // one thing this SDK will not do.
-func (l *Loader) createTyped(ctx context.Context, table *bigquery.Table, data []byte) error {
+func (l *Loader) createTyped(ctx context.Context, table *bigquery.Table, data []byte, prov provenance) error {
 	inferred, err := l.inferSchema(ctx, data)
 	if err != nil {
 		return err
 	}
 
-	meta := typedTable(l.cfg, inferred)
+	meta := typedTable(l.cfg, inferred, prov)
 
 	if err := table.Create(ctx, meta); err != nil {
 		// Two loads racing to create the same table is normal, and the loser
@@ -256,7 +271,7 @@ func (l *Loader) createTyped(ctx context.Context, table *bigquery.Table, data []
 //
 // Pure, so a test can read the schema this produces without a BigQuery
 // client -- which is where the NOT NULL either survives or quietly does not.
-func typedTable(cfg *core.LoadConfig, inferred bigquery.Schema) *bigquery.TableMetadata {
+func typedTable(cfg *core.LoadConfig, inferred bigquery.Schema, prov provenance) *bigquery.TableMetadata {
 	schema := make(bigquery.Schema, 0, len(inferred))
 	for _, f := range inferred {
 		if own, mine := metadataSchema[f.Name]; mine {
@@ -268,8 +283,8 @@ func typedTable(cfg *core.LoadConfig, inferred bigquery.Schema) *bigquery.TableM
 
 	meta := &bigquery.TableMetadata{
 		Schema:      schema,
-		Description: tableDescription(cfg),
-		Labels:      tableLabels(cfg),
+		Description: tableDescription(cfg, prov),
+		Labels:      tableLabels(prov),
 		TimePartitioning: &bigquery.TimePartitioning{
 			Type:                   bigquery.DayPartitioningType,
 			Field:                  metadataLoadedAt,

@@ -20,6 +20,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+	"unicode"
 
 	core "github.com/AreteAcademy/bravis/sdk/internal/core"
 )
@@ -579,9 +580,29 @@ func calculateBackoff(attempt int, cfg *core.RetryConfig) time.Duration {
 	return backoff + jitter
 }
 
-// Redact strips secrets from a URL's query string, for logs and errors.
-// Exported so a driver can describe its source without leaking a token.
+// Redact strips secrets out of a URL, for logs and errors. Exported so a
+// driver can describe its source without leaking a token.
 func Redact(urlStr string) string { return redactURL(urlStr) }
+
+// secretMarkers are the substrings that make a query parameter a secret.
+//
+// Matched against the name with case folded and separators stripped, so
+// api_key, API-KEY and apikey are all caught. A vendor invents its own names,
+// so an exact list would only ever cover the vendors we happened to think of.
+//
+// It over-redacts: a parameter called "monkey" contains "key" and comes out
+// redacted. That is the direction to be wrong in -- a log line hiding
+// something harmless costs nothing, and the other mistake puts a live
+// credential in a log aggregator that many people can read.
+// redacted is what a secret becomes. Letters only, because url.Values.Encode
+// percent-escapes anything else -- and "%2A%2A%2A" in a log is exactly the
+// kind of noise that makes people stop reading logs.
+const redacted = "REDACTED"
+
+var secretMarkers = []string{
+	"key", "token", "secret", "password", "passwd", "pwd",
+	"auth", "credential", "signature", "sig", "session", "cookie",
+}
 
 func redactURL(urlStr string) string {
 	u, err := url.Parse(urlStr)
@@ -589,17 +610,41 @@ func redactURL(urlStr string) string {
 		return "[invalid url]"
 	}
 
-	// Redact API keys in query params
+	// The password in https://user:pass@host never reaches a log. url.String
+	// prints it in full, which is how it used to.
+	if u.User != nil {
+		if _, hasPassword := u.User.Password(); hasPassword {
+			u.User = url.UserPassword(u.User.Username(), redacted)
+		}
+	}
+
 	q := u.Query()
-	keys := []string{"key", "api_key", "token", "auth", "password"}
-	for _, k := range keys {
-		if v := q.Get(k); v != "" {
-			q.Set(k, "***")
+	for name := range q {
+		if isSecret(name) {
+			q.Set(name, redacted)
 		}
 	}
 	u.RawQuery = q.Encode()
 
 	return u.String()
+}
+
+// isSecret folds case and drops separators before looking for a marker.
+func isSecret(name string) bool {
+	folded := strings.Map(func(r rune) rune {
+		switch r {
+		case '_', '-', '.', ' ':
+			return -1
+		}
+		return unicode.ToLower(r)
+	}, name)
+
+	for _, marker := range secretMarkers {
+		if strings.Contains(folded, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 // Decoder abstraction

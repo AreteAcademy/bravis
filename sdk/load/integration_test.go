@@ -9,7 +9,9 @@ import (
 	"time"
 
 	"cloud.google.com/go/bigquery"
+	"cloud.google.com/go/storage"
 	core "github.com/AreteAcademy/bravis/sdk/internal/core"
+	"google.golang.org/api/iterator"
 )
 
 // These are the only tests that prove a row actually lands. The in-memory
@@ -827,5 +829,302 @@ func TestIntegrationColumnsMatchTheDDL(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "coluna_inventada") {
 		t.Errorf("the error does not name the column: %v", err)
+	}
+}
+
+// --- as opções que nunca tinham tocado o BigQuery de verdade -------------
+
+// TestIntegrationCreateSQLRunsTheCallersDDL: CreateSQL existia desde a v0.9.0
+// e nunca tinha sido executado contra o BigQuery. É o caminho para quem tem
+// uma DDL que o SDK não sabe expressar.
+func TestIntegrationCreateSQLRunsTheCallersDDL(t *testing.T) {
+	env := requireIntegration(t)
+	ctx := context.Background()
+
+	client, err := bigquery.NewClient(ctx, env.project)
+	if err != nil {
+		t.Fatalf("bigquery client: %v", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	name := fmt.Sprintf("it_createsql_%d", time.Now().UnixNano())
+	table := client.Dataset(env.dataset).Table(name)
+	t.Cleanup(func() { _ = table.Delete(context.Background()) })
+
+	ddl := fmt.Sprintf(`CREATE TABLE `+"`%s.%s.%s`"+` (
+		sku STRING NOT NULL,
+		quantidade INT64,
+		preco NUMERIC
+	)`, env.project, env.dataset, name)
+
+	loader, err := New(ctx, nil,
+		core.WithProjectID(env.project),
+		core.WithDataset(env.dataset),
+		core.WithTable(name),
+		core.WithCreateTable(true),
+		core.WithCreateSQL(ddl),
+	)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	if _, err := loader.Load(ctx, core.Envelope{
+		Payload: map[string]any{"sku": "W-1", "quantidade": 3, "preco": "9.99"},
+	}); err != nil {
+		t.Fatalf("load into a table created by CreateSQL: %v", err)
+	}
+
+	meta, err := table.Metadata(ctx)
+	if err != nil {
+		t.Fatalf("reading metadata: %v", err)
+	}
+	byName := map[string]*bigquery.FieldSchema{}
+	for _, f := range meta.Schema {
+		byName[f.Name] = f
+	}
+	// NUMERIC é o ponto: o autodetect nunca produziria isso a partir de JSON,
+	// e é justamente por isso que CreateSQL existe.
+	if f := byName["preco"]; f == nil || f.Type != bigquery.NumericFieldType {
+		t.Errorf("a DDL do chamador não sobreviveu: preco = %+v", f)
+	}
+	if f := byName["sku"]; f == nil || !f.Required {
+		t.Errorf("o NOT NULL da DDL do chamador se perdeu: %+v", f)
+	}
+	if got := countRows(ctx, t, client, env, name); got != 1 {
+		t.Errorf("%d linhas, esperado 1", got)
+	}
+}
+
+// TestIntegrationPartitionOptionsReachTheTable: duas opções que só têm efeito
+// no metadado da tabela, então uma que não chegasse não apareceria em
+// contagem de linha nenhuma.
+func TestIntegrationPartitionOptionsReachTheTable(t *testing.T) {
+	env := requireIntegration(t)
+	ctx := context.Background()
+
+	client, err := bigquery.NewClient(ctx, env.project)
+	if err != nil {
+		t.Fatalf("bigquery client: %v", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	name := fmt.Sprintf("it_partopts_%d", time.Now().UnixNano())
+	table := client.Dataset(env.dataset).Table(name)
+	t.Cleanup(func() { _ = table.Delete(context.Background()) })
+
+	const expiracao = 30 * 24 * time.Hour
+
+	loader, err := New(ctx, nil,
+		core.WithProjectID(env.project),
+		core.WithDataset(env.dataset),
+		core.WithTable(name),
+		core.WithCreateTable(true),
+		core.WithMetadata(true),
+		core.WithPartitionExpiration(expiracao),
+		core.WithRequirePartitionFilter(true),
+	)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if _, err := loader.Load(ctx, envelopes(2)...); err != nil {
+		t.Fatalf("load: %v", err)
+	}
+
+	meta, err := table.Metadata(ctx)
+	if err != nil {
+		t.Fatalf("reading metadata: %v", err)
+	}
+	if meta.TimePartitioning == nil {
+		t.Fatal("a tabela saiu sem particionamento")
+	}
+	if meta.TimePartitioning.Expiration != expiracao {
+		t.Errorf("PartitionExpiration = %v, esperado %v",
+			meta.TimePartitioning.Expiration, expiracao)
+	}
+	if !meta.TimePartitioning.RequirePartitionFilter {
+		t.Error("RequirePartitionFilter não chegou à tabela")
+	}
+
+	// E a prova do que a opção existe para fazer: uma consulta sem filtro de
+	// partição é recusada. Sem isto, só se provou que uma flag foi copiada.
+	q := client.Query(fmt.Sprintf("SELECT COUNT(*) FROM `%s.%s.%s`", env.project, env.dataset, name))
+	if _, err := q.Read(ctx); err == nil {
+		t.Error("uma consulta sem filtro de partição deveria ser recusada")
+	}
+}
+
+// TestIntegrationKeepStagedFile: o zero value apaga, e é assim porque o
+// contrário já encheu um bucket em silêncio. As duas pontas provadas.
+func TestIntegrationKeepStagedFile(t *testing.T) {
+	env := requireIntegration(t)
+	if env.bucket == "" {
+		t.Skip("BRAVIS_IT_BUCKET not set")
+	}
+	ctx := context.Background()
+
+	for _, c := range []struct {
+		nome    string
+		manter  bool
+		esperar int
+	}{
+		{"o padrão apaga", false, 0},
+		{"KeepStagedFile mantém", true, 1},
+	} {
+		t.Run(c.nome, func(t *testing.T) {
+			client, name := createTable(ctx, t, env, bigquery.Schema{
+				{Name: "amount", Type: bigquery.IntegerFieldType},
+				{Name: "label", Type: bigquery.StringFieldType},
+			})
+
+			prefixo := fmt.Sprintf("it-staged-%d/", time.Now().UnixNano())
+			opts := []core.LoadOption{
+				core.WithProjectID(env.project),
+				core.WithDataset(env.dataset),
+				core.WithTable(name),
+				core.WithStagingBucket(env.bucket),
+				core.WithStagingPrefix(prefixo),
+				core.WithThresholdForGCS(1), // força o caminho do GCS
+			}
+			if c.manter {
+				opts = append(opts, core.WithKeepStagedFile(true))
+			}
+
+			loader, err := New(ctx, nil, opts...)
+			if err != nil {
+				t.Fatalf("New: %v", err)
+			}
+			res, err := loader.Load(ctx, envelopes(3)...)
+			if err != nil {
+				t.Fatalf("load: %v", err)
+			}
+			if res.Strategy != "gcs" {
+				t.Fatalf("estratégia = %q; o teste precisa do caminho do GCS", res.Strategy)
+			}
+
+			gcsClient, err := storage.NewClient(ctx)
+			if err != nil {
+				t.Fatalf("gcs client: %v", err)
+			}
+			defer func() { _ = gcsClient.Close() }()
+
+			it := gcsClient.Bucket(env.bucket).Objects(ctx, &storage.Query{Prefix: prefixo})
+			n := 0
+			for {
+				attrs, err := it.Next()
+				if err == iterator.Done {
+					break
+				}
+				if err != nil {
+					t.Fatalf("listando o bucket: %v", err)
+				}
+				n++
+				t.Cleanup(func() { _ = gcsClient.Bucket(env.bucket).Object(attrs.Name).Delete(context.Background()) })
+			}
+
+			if n != c.esperar {
+				t.Errorf("%d objetos no bucket, esperado %d", n, c.esperar)
+			}
+			_ = client
+		})
+	}
+}
+
+// TestIntegrationInlineLimitPicksTheStrategy: o limite que decide entre
+// escrever direto e passar pelo GCS nunca tinha sido afirmado.
+func TestIntegrationInlineLimitPicksTheStrategy(t *testing.T) {
+	env := requireIntegration(t)
+	if env.bucket == "" {
+		t.Skip("BRAVIS_IT_BUCKET not set")
+	}
+	ctx := context.Background()
+
+	for _, c := range []struct {
+		nome     string
+		limite   int
+		linhas   int
+		esperada string
+	}{
+		{"abaixo do limite vai inline", 10, 3, "inline"},
+		{"acima do limite passa pelo GCS", 2, 3, "gcs"},
+	} {
+		t.Run(c.nome, func(t *testing.T) {
+			_, name := createTable(ctx, t, env, bigquery.Schema{
+				{Name: "amount", Type: bigquery.IntegerFieldType},
+				{Name: "label", Type: bigquery.StringFieldType},
+			})
+
+			loader, err := New(ctx, nil,
+				core.WithProjectID(env.project),
+				core.WithDataset(env.dataset),
+				core.WithTable(name),
+				core.WithStagingBucket(env.bucket),
+				core.WithThresholdForGCS(c.limite),
+			)
+			if err != nil {
+				t.Fatalf("New: %v", err)
+			}
+			res, err := loader.Load(ctx, envelopes(c.linhas)...)
+			if err != nil {
+				t.Fatalf("load: %v", err)
+			}
+			if res.Strategy != c.esperada {
+				t.Errorf("com limite %d e %d linhas a estratégia foi %q, esperada %q",
+					c.limite, c.linhas, res.Strategy, c.esperada)
+			}
+			if res.RowsLoaded != int64(c.linhas) {
+				t.Errorf("%d linhas escritas, esperado %d", res.RowsLoaded, c.linhas)
+			}
+		})
+	}
+}
+
+// TestIntegrationProvenanceLabelsTheTable prova a atribuição de custo.
+//
+// Existe por causa de uma regressão: a fase 0 parou de repassar Provider e
+// Entity da fachada para o loader, e toda tabela criada desde então saiu sem
+// os labels. Nada quebrou, nenhuma contagem mudou -- só a conta do BigQuery
+// deixou de saber quem escreve ali.
+func TestIntegrationProvenanceLabelsTheTable(t *testing.T) {
+	env := requireIntegration(t)
+	ctx := context.Background()
+
+	client, err := bigquery.NewClient(ctx, env.project)
+	if err != nil {
+		t.Fatalf("bigquery client: %v", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	name := fmt.Sprintf("it_labels_%d", time.Now().UnixNano())
+	table := client.Dataset(env.dataset).Table(name)
+	t.Cleanup(func() { _ = table.Delete(context.Background()) })
+
+	loader, err := New(ctx, nil,
+		core.WithProjectID(env.project),
+		core.WithDataset(env.dataset),
+		core.WithTable(name),
+		core.WithCreateTable(true),
+		core.WithMetadata(true),
+	)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if _, err := loader.Load(ctx, envelopes(2)...); err != nil {
+		t.Fatalf("load: %v", err)
+	}
+
+	meta, err := table.Metadata(ctx)
+	if err != nil {
+		t.Fatalf("reading metadata: %v", err)
+	}
+
+	if meta.Labels["provider"] != "integration" {
+		t.Errorf("label provider = %q, esperado o do lote", meta.Labels["provider"])
+	}
+	if meta.Labels["entity"] != "rows" {
+		t.Errorf("label entity = %q, esperado o do lote", meta.Labels["entity"])
+	}
+	// A descrição responde "quem escreve aqui?" seis meses depois.
+	if !strings.Contains(meta.Description, "integration/rows") {
+		t.Errorf("a descrição não nomeia a proveniência: %q", meta.Description)
 	}
 }

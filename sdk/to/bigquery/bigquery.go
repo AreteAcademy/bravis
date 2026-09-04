@@ -64,6 +64,10 @@ type Table struct {
 	// filter on the partition column. Incompatible with DedupMerge.
 	RequirePartitionFilter bool
 
+	// StagingPrefix is where staged objects go inside the bucket. Empty uses
+	// "extracts/".
+	StagingPrefix string
+
 	// KeepStagedFile leaves the staged object in the bucket after a load.
 	KeepStagedFile bool
 }
@@ -119,6 +123,7 @@ func (b Table) config(opt core.WriteOptions) (*core.LoadConfig, map[string]core.
 		Dataset:                dataset.Value,
 		Table:                  table.Value,
 		StagingBucket:          bucket.Value,
+		StagingPrefix:          b.StagingPrefix,
 		ThresholdForGCS:        limit,
 		Format:                 "ndjson",
 		Columns:                opt.Columns,

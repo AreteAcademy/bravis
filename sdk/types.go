@@ -104,6 +104,8 @@ var (
 	WithDataset                = core.WithDataset
 	WithTable                  = core.WithTable
 	WithStagingBucket          = core.WithStagingBucket
+	WithStagingPrefix          = core.WithStagingPrefix
+	WithKeepStagedFile         = core.WithKeepStagedFile
 	WithFormat                 = core.WithFormat
 	WithThresholdForGCS        = core.WithThresholdForGCS
 	WithMetadata               = core.WithMetadata

@@ -8,6 +8,71 @@ A tag de um módulo aninhado leva o prefixo do diretório: `sdk/v0.2.1`.
 
 ---
 
+## [0.22.0] — 2026-09-04
+
+HTTP e BigQuery fechados. Nenhuma opção declarada nos dois drivers segue sem
+prova contra o serviço de verdade.
+
+### Corrigido
+
+- **A redação da URL deixava passar 8 de 10 segredos.** Ela aparece em **toda**
+  linha de log do extract e em **toda** mensagem de erro, e casava só
+  `key`, `api_key`, `token`, `auth` e `password` em minúsculas exatas. Passavam
+  `API_KEY`, `apikey`, `access_token`, `client_secret`, `secret`, `signature`,
+  `sig` — e a pior de todas, a senha em `https://usuario:SENHA@host`, que o
+  `url.String` imprime inteira.
+
+  Agora a comparação dobra a caixa, remove separadores e procura marcador por
+  substring, e o userinfo é redigido. **Erra para o lado seguro**: um parâmetro
+  chamado `monkey` contém `key` e sai redigido — um log escondendo algo inócuo
+  não custa nada, e o outro erro põe credencial viva num agregador de logs.
+  Tinha zero testes; agora tem cinco.
+
+- **A proveniência tinha parado de rotular a tabela criada.** `Provider` e
+  `Entity` alimentam os labels de atribuição de custo e a descrição
+  ("quem escreve aqui?"), e a fase 0 parou de repassá-los — toda tabela criada
+  desde a `v0.19.0` saiu sem eles. Nada quebrou, nenhuma contagem mudou.
+
+  Consertado onde o godoc do `LoadConfig` sempre prometeu: **vêm do lote**, não
+  da configuração. Não há segundo lugar para o fetcher declará-los, e um
+  segundo lugar seria uma segunda chance de os dois discordarem.
+
+### Adicionado
+
+- **`bigquery.Table.StagingPrefix`**, `WithStagingPrefix` e
+  `WithKeepStagedFile` — três ajustes que existiam no `LoadConfig` e que a
+  fachada não alcançava.
+- **Teste de completude do adaptador**: lê os campos do `LoadConfig` e os que o
+  `bigquery.Table` escreve, e falha quando um campo novo não é ligado nem
+  declarado inaplicável. É como a regressão dos labels teria sido pega.
+- **Cinco testes de integração para opções nunca provadas contra o BigQuery**:
+  `CreateSQL` (com uma coluna `NUMERIC`, que o autodetect jamais produziria),
+  `PartitionExpiration` e `RequirePartitionFilter` (incluindo a prova de que
+  uma consulta sem filtro é recusada — sem isso só se provaria que uma flag foi
+  copiada), `KeepStagedFile` nas duas pontas, e `InlineLimit` decidindo entre
+  inline e GCS.
+- **`from.HTTP` ganhou arquivo de teste próprio.** Ele é um adaptador, e um
+  campo esquecido na cópia para a `core.Source` não quebra nada que compile —
+  simplesmente deixa de ter efeito. O teste confere que cada campo chega ao fio.
+- `Method`, `Body` e `TotalTimeout` tinham **zero testes**: um fetcher de API
+  que exige POST nunca tinha sido exercitado.
+- **Testes diretos para `StampMetadata`**, a função que decide o `ingestion_id`
+  e que só era exercitada de lado: determinismo, não mutar o lote do chamador,
+  recusar nome já ocupado, `AutoID` por linha, e recusar sem identidade. Mais a
+  precedência de configuração e o nível de log inválido, que não pode derrubar
+  uma pipeline.
+- **[`docs/SDK_MATRIZ.md`](docs/SDK_MATRIZ.md)** — o que cada driver suporta,
+  as dez combinações recusadas com o motivo, e uma seção do que **ainda não é
+  verdade**, para não ser descoberto em produção.
+
+### Números
+236 testes no módulo, e **80,0% de cobertura** com os de integração ligados —
+medido sobre `extract`, `from`, `to/...`, `load` e `internal/core`. O que puxa
+para baixo é `store/s3` e `store/gcs`, que não têm teste unitário: são provados
+contra MinIO e contra o bucket real, que é onde um cliente de nuvem se prova.
+
+---
+
 ## [0.21.1] — 2026-09-04
 
 ### Corrigido
@@ -868,6 +933,7 @@ Primeira versão que compila.
 > versão de `proxy.golang.org`, então ela permanece publicada e quebrada para
 > sempre. Comece pela `v0.1.1`.
 
+[0.22.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.22.0
 [0.21.1]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.21.1
 [0.21.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.21.0
 [0.20.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.20.0

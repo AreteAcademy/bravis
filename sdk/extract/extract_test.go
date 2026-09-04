@@ -3,6 +3,7 @@ package extract
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -334,5 +335,90 @@ func TestBodyStreamsFully(t *testing.T) {
 
 	if count != rows {
 		t.Errorf("Expected %d rows, got %d (response body truncated)", rows, count)
+	}
+}
+
+// TestPostSendsMethodBodyAndHeaders cobre três campos que existiam sem
+// nenhum teste: um fetcher de API que exige POST nunca foi exercitado.
+func TestPostSendsMethodBodyAndHeaders(t *testing.T) {
+	var (
+		gotMethod string
+		gotBody   string
+		gotHeader string
+		gotType   string
+	)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		b, _ := io.ReadAll(r.Body)
+		gotBody = string(b)
+		gotHeader = r.Header.Get("X-Api-Client")
+		gotType = r.Header.Get("Content-Type")
+		_, _ = fmt.Fprint(w, `[{"id":1}]`)
+	}))
+	defer srv.Close()
+
+	corpo := `{"consulta":"tudo"}`
+	lines, err := JSON(context.Background(), core.Source{
+		URL:    srv.URL,
+		Method: http.MethodPost,
+		Body:   strings.NewReader(corpo),
+		Header: map[string][]string{
+			"X-Api-Client": {"bravis"},
+			"Content-Type": {"application/json"},
+		},
+	}, nil)
+	if err != nil {
+		t.Fatalf("JSON: %v", err)
+	}
+	n := 0
+	for _, err := range lines {
+		if err != nil {
+			t.Fatalf("iterando: %v", err)
+		}
+		n++
+	}
+
+	if gotMethod != http.MethodPost {
+		t.Errorf("método = %q, esperado POST", gotMethod)
+	}
+	if gotBody != corpo {
+		t.Errorf("corpo = %q, esperado %q", gotBody, corpo)
+	}
+	if gotHeader != "bravis" {
+		t.Errorf("o header do fetcher não chegou: %q", gotHeader)
+	}
+	if gotType != "application/json" {
+		t.Errorf("Content-Type = %q", gotType)
+	}
+	if n != 1 {
+		t.Errorf("%d registros, esperado 1", n)
+	}
+}
+
+// TestTotalTimeoutStopsTheWalk: o TotalTimeout cobre a caminhada inteira, não
+// cada tentativa. Uma API que pagina devagar tem de parar nele.
+func TestTotalTimeoutStopsTheWalk(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(40 * time.Millisecond)
+		w.Header().Set("Link", fmt.Sprintf(`<%s/?page=1>; rel="next"`, r.Host))
+		_, _ = fmt.Fprint(w, `[{"id":1}]`)
+	}))
+	defer srv.Close()
+
+	inicio := time.Now()
+	lines, err := JSON(context.Background(), core.Source{
+		URL:          srv.URL,
+		FollowLinks:  true,
+		TotalTimeout: 150 * time.Millisecond,
+		Timeout:      time.Second,
+	}, nil)
+	if err != nil {
+		t.Fatalf("JSON: %v", err)
+	}
+	for range lines {
+	}
+
+	if d := time.Since(inicio); d > 2*time.Second {
+		t.Errorf("a caminhada durou %v; o TotalTimeout não a parou", d)
 	}
 }

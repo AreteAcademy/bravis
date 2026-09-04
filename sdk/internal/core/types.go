@@ -384,6 +384,20 @@ func WithMetadata(enabled bool) LoadOption {
 	}
 }
 
+// WithStagingPrefix sets where staged objects go inside the bucket.
+func WithStagingPrefix(prefix string) LoadOption {
+	return func(cfg *LoadConfig) {
+		cfg.StagingPrefix = prefix
+	}
+}
+
+// WithKeepStagedFile leaves the staged object in the bucket after a load.
+func WithKeepStagedFile(keep bool) LoadOption {
+	return func(cfg *LoadConfig) {
+		cfg.KeepStagedFile = keep
+	}
+}
+
 // WithColumns declares the destination's columns. See LoadConfig.Columns.
 func WithColumns(columns []string) LoadOption {
 	return func(cfg *LoadConfig) {

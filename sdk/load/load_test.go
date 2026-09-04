@@ -638,14 +638,38 @@ func TestClusterByIsCarriedNotGuessed(t *testing.T) {
 }
 
 func TestTableDescriptionNamesTheSource(t *testing.T) {
-	cfg := &core.LoadConfig{Provider: "open_meteo", Entity: "hourly_temperature"}
-	if d := tableDescription(cfg); !strings.Contains(d, "open_meteo/hourly_temperature") {
+	cfg := &core.LoadConfig{}
+	prov := provenance{Provider: "open_meteo", Entity: "hourly_temperature"}
+
+	if d := tableDescription(cfg, prov); !strings.Contains(d, "open_meteo/hourly_temperature") {
 		t.Errorf("description should say what writes here: %q", d)
 	}
 
 	cfg.Metadata = true
-	if d := tableDescription(cfg); !strings.Contains(d, "ingestion_id") {
+	if d := tableDescription(cfg, prov); !strings.Contains(d, "ingestion_id") {
 		t.Errorf("with metadata on it should say how to deduplicate: %q", d)
+	}
+}
+
+// A proveniência vem do lote, não da configuração. É o que o godoc do
+// LoadConfig sempre prometeu e o load nunca fez -- as tabelas criadas saíam
+// sem os labels de atribuição de custo, e nenhuma contagem de linha muda com
+// isso.
+func TestProvenanceComesFromTheBatch(t *testing.T) {
+	got := provenanceOf([]core.Envelope{
+		{Provider: "open_meteo", Entity: "hourly", Payload: map[string]any{"a": 1}},
+	})
+	if got.Provider != "open_meteo" || got.Entity != "hourly" {
+		t.Errorf("provenanceOf = %+v", got)
+	}
+
+	labels := tableLabels(got)
+	if labels["provider"] != "open_meteo" || labels["entity"] != "hourly" {
+		t.Errorf("os labels não saíram do lote: %v", labels)
+	}
+
+	if vazio := provenanceOf(nil); vazio.Provider != "" {
+		t.Errorf("um lote vazio não tem proveniência: %+v", vazio)
 	}
 }
 
@@ -730,7 +754,7 @@ func TestTypedTableDeclaresTheMetadataColumnsNotNull(t *testing.T) {
 		PartitionExpiration:    30 * 24 * time.Hour,
 		RequirePartitionFilter: true,
 		ClusterBy:              []string{"sku"},
-	}, inferred)
+	}, inferred, provenance{})
 
 	byName := map[string]*bigquery.FieldSchema{}
 	for _, f := range meta.Schema {
