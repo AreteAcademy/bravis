@@ -49,18 +49,23 @@ func (e *SourceError) Is(alvo error) bool {
 
 // FormatError means the response arrived but could not be understood: a
 // decode failure, a guard rejection, or an expansion that did not fit.
+// There is deliberately no Format field. One was declared here, interpolated
+// into the message, and never filled at any of the four sites that build this
+// error -- so every format error read "formato  from ..." with a hole where the
+// format should be, while the same run logged format=json on success. The wire
+// format is in the extract complete line; three of the four sites are not about
+// it anyway.
 type FormatError struct {
-	URL    string // already redacted
-	Format string
-	Line   int // -1 when it is not about a specific record
-	Cause  error
+	URL   string // already redacted
+	Line  int    // -1 when it is not about a specific record
+	Cause error
 }
 
 func (e *FormatError) Error() string {
 	if e.Line >= 0 {
-		return fmt.Sprintf("formato %s from %s, registro %d: %v", e.Format, e.URL, e.Line, e.Cause)
+		return fmt.Sprintf("format error in %s, record %d: %v", e.URL, e.Line, e.Cause)
 	}
-	return fmt.Sprintf("formato %s from %s: %v", e.Format, e.URL, e.Cause)
+	return fmt.Sprintf("format error in %s: %v", e.URL, e.Cause)
 }
 
 func (e *FormatError) Unwrap() error { return e.Cause }

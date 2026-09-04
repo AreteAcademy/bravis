@@ -390,7 +390,12 @@ o nome diz qual dos dois é.
 
 ---
 
-## 6. A temporária do merge nasce por autodetect, e não cabe no destino — **v0.15.0**
+## 6. A temporária do merge nasce por autodetect, e não cabe no destino — **RESOLVIDO na v0.23.0**
+
+> Conserto: a encenação passa a tomar o schema do destino, que `prepareTable` já
+> leu. `AutoDetect` sai do caminho do dedup. Teste de integração
+> `TestIntegrationMergeIntoAJSONColumn`, verificado a falhar sem o conserto com o
+> erro exato reportado aqui, e a suíte inteira (14 testes) passando com ele.
 
 Achado migrando o consumidor para a `v0.15.0`. É o único bloqueio que sobrou, e
 é pequeno.
@@ -445,7 +450,11 @@ usam colunas escalares, e é por isso que isto passou.
 
 ---
 
-## 7. `FormatError.Format` é declarado e nunca preenchido — **v0.22.0**
+## 7. `FormatError.Format` é declarado e nunca preenchido — **RESOLVIDO na v0.23.0**
+
+> Conserto: o campo foi **removido**, não preenchido — o formato do fio não é
+> alcançável nos quatro sites, e três deles não são sobre ele. A mensagem passou
+> para inglês, e `errors_test.go` afirma a string, com checagem de espaço duplo.
 
 `errors.go:54` declara o campo e `errors.go:61-63` o imprime:
 

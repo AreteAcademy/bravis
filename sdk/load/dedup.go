@@ -26,12 +26,29 @@ func (l *Loader) loadWithMerge(ctx context.Context, table *bigquery.Table, data 
 		return 0, 0, nil, err
 	}
 
-	// The temporary table carries an expiration so an interrupted run cannot
-	// leave a table behind forever.
+	// The staging table takes the DESTINATION's schema, not one inferred from
+	// the data.
+	//
+	// Autodetect turns a nested JSON object into a RECORD, so a destination
+	// that declares that column as JSON -- the right type for a vendor payload
+	// -- could not receive it: "type mismatch on payload (destination JSON,
+	// incoming RECORD)". Reported by a consumer whose landing has a JSON
+	// column, and reproducible in one line.
+	//
+	// Taking the destination's schema fixes more than the type. The staged
+	// column ORDER stops being inferred too, which removes at the root the
+	// class of bug that the named column list in the MERGE below exists to
+	// compensate for: with both schemas equal by construction, there is no
+	// order to get wrong.
+	destMeta, err := table.Metadata(ctx)
+	if err != nil {
+		return 0, 0, nil, fmt.Errorf("reading the destination schema: %w", err)
+	}
+
 	temp := l.bq.Dataset(l.cfg.Dataset).Table(fmt.Sprintf("_bravis_merge_%d", time.Now().UnixNano()))
-	// It takes its shape from the data, like the destination does, and
-	// expires on its own so an interrupted run cannot leave it behind.
+	// It expires on its own so an interrupted run cannot leave it behind.
 	if err := temp.Create(ctx, &bigquery.TableMetadata{
+		Schema:         destMeta.Schema,
 		ExpirationTime: time.Now().Add(6 * time.Hour),
 	}); err != nil {
 		return 0, 0, nil, fmt.Errorf("creating temporary table: %w", err)
@@ -45,7 +62,10 @@ func (l *Loader) loadWithMerge(ctx context.Context, table *bigquery.Table, data 
 
 	source := bigquery.NewReaderSource(bytes.NewReader(data))
 	source.SourceFormat = format
-	source.AutoDetect = true
+	// No AutoDetect: the schema is the destination's, read above. A field the
+	// rows carry and the destination does not have is refused by the load job
+	// -- which is the right answer, and the same one Target.Columns gives
+	// earlier and better when it is declared.
 
 	stage := temp.LoaderFrom(source)
 	stage.CreateDisposition = bigquery.CreateIfNeeded
@@ -61,11 +81,11 @@ func (l *Loader) loadWithMerge(ctx context.Context, table *bigquery.Table, data 
 	// that is perfectly fine, or -- when the types happen to line up -- writes
 	// each value into the wrong column and says nothing at all.
 	//
-	// So: read both schemas, agree on a column list, and name it.
-	destMeta, err := table.Metadata(ctx)
-	if err != nil {
-		return 0, 0, nil, fmt.Errorf("reading the destination schema: %w", err)
-	}
+	// So: name the columns. The two schemas agree by construction now, so
+	// reconcile is an assertion rather than a negotiation -- it still earns the
+	// call it costs, because it would catch a staging table that came back
+	// different from the one asked for, and it is the one place that derives
+	// the column list.
 	tempMeta, err := temp.Metadata(ctx)
 	if err != nil {
 		return 0, 0, nil, fmt.Errorf("reading the staged schema: %w", err)

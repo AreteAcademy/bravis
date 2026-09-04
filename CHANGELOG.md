@@ -8,6 +8,66 @@ A tag de um módulo aninhado leva o prefixo do diretório: `sdk/v0.2.1`.
 
 ---
 
+## [0.23.0] — 2026-09-04
+
+Fecha o §6 e o §7 de [`docs/SDK_V9.md`](docs/SDK_V9.md), os dois reportados pelo
+consumidor `zarv-data-pipeline`.
+
+### Corrigido
+- **`DedupMerge` não conseguia escrever numa coluna `JSON`.** A tabela de
+  encenação tomava o schema do autodetect, e autodetect transforma objeto
+  aninhado em `RECORD`. O `MERGE` então recusava com `type mismatch on payload
+  (destination JSON, incoming RECORD)` — de forma que uma landing com o tipo
+  **certo** para payload de vendor era justamente a forma que a deduplicação não
+  servia. O consumidor rodou três semanas sem `DedupMerge` por causa disto.
+
+  A encenação passa a tomar o schema **do destino**, que `prepareTable` já leu
+  uma linha acima. Conserta mais que o tipo: a ordem das colunas encenadas deixa
+  de ser inferida, o que remove pela raiz a classe de defeito que a lista nomeada
+  no `MERGE` existe para compensar — com os dois schemas iguais por construção,
+  não há ordem para errar.
+
+  `AutoDetect` sai desse caminho. Um campo que as linhas trazem e o destino não
+  tem passa a ser recusado pelo load job, que é a resposta certa e a mesma que o
+  `Target.Columns` dá antes e melhor quando está declarado.
+
+  Provado nas duas direções: o teste de integração novo falha sem o conserto,
+  com o erro exato que o consumidor reportou, e passa com ele. Ele carrega duas
+  vezes — a primeira prova que o JSON pousa, a segunda que o `MERGE` o reconhece
+  — e lê o valor de volta com `JSON_VALUE`, porque uma string que por acaso
+  contém JSON satisfaria uma contagem de linhas e nada mais.
+
+### Removido
+- **`FormatError.Format`.** O campo era declarado, interpolado na mensagem e
+  **nunca preenchido em nenhum dos quatro sites** que constroem o erro
+  (`sdk.go:199`, `:207`, `:249`, `transform.go:79`). Todo erro de formato saía
+  como `formato  from …`, com dois espaços onde o formato devia estar, enquanto
+  a mesma execução logava `format=json` no `extract complete`.
+
+  Removido em vez de preenchido por dois motivos: o formato do fio não é
+  alcançável nos sites — ele vive dentro do driver, e o `core.Source` normalizado
+  não chega ali —, e três dos quatro sites não são sobre ele (dois são falha de
+  seletor, um é erro de transformer). Quem precisa do formato o tem no
+  `extract complete`.
+
+  É a mesma família de `LoadResult.ErrorRows` e do `DeleteAfterLoad` documentado
+  como `default: true`: **campo público que não faz nada é pior que campo
+  ausente.** Tecnicamente quebra quem lesse `err.Format`, o que ninguém podia
+  fazer de útil, já que era sempre vazio.
+
+### Alterado
+- A mensagem do `FormatError` passa para inglês, como as demais:
+  `format error in %s, record %d: %v`. Ela era a única em português
+  (`formato … registro …`), e quem filtra log estruturado não tem por que saber
+  qual mensagem está em qual idioma.
+
+### Adicionado
+- `errors_test.go` — os primeiros testes que **afirmam a string** das mensagens
+  de erro, incluindo uma checagem de espaço duplo. Nenhum teste olhava a
+  mensagem, e é exatamente por isso que dois espaços viveram nove versões.
+
+---
+
 ## [0.22.0] — 2026-09-04
 
 HTTP e BigQuery fechados. Nenhuma opção declarada nos dois drivers segue sem

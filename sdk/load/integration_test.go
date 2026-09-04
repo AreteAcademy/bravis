@@ -1128,3 +1128,92 @@ func TestIntegrationProvenanceLabelsTheTable(t *testing.T) {
 		t.Errorf("a descrição não nomeia a proveniência: %q", meta.Description)
 	}
 }
+
+// TestIntegrationMergeIntoAJSONColumn is the regression test for a defect a
+// consumer hit and reported: DedupMerge could not write into a destination
+// whose payload column is JSON.
+//
+// The staging table used to take its schema from autodetect, and autodetect
+// turns a nested object into a RECORD. The MERGE then refused with "type
+// mismatch on payload (destination JSON, incoming RECORD)" -- so a landing
+// table with the right type for a vendor payload was the one shape dedup could
+// not serve. Every merge test before this one used scalar columns, which is
+// why it went unnoticed.
+//
+// It loads twice on purpose: the first pass proves the JSON lands, the second
+// proves the MERGE still recognises it and ignores it.
+func TestIntegrationMergeIntoAJSONColumn(t *testing.T) {
+	env := requireIntegration(t)
+	ctx := context.Background()
+
+	client, name := createTable(ctx, t, env, bigquery.Schema{
+		{Name: "ingestion_id", Type: bigquery.StringFieldType, Required: true},
+		{Name: "ingestion_loaded_at", Type: bigquery.TimestampFieldType, Required: true},
+		{Name: "source_key", Type: bigquery.StringFieldType},
+		{Name: "payload", Type: bigquery.JSONFieldType, Required: true},
+	})
+
+	loader, err := New(ctx, nil,
+		core.WithProjectID(env.project),
+		core.WithDataset(env.dataset),
+		core.WithTable(name),
+		core.WithMetadata(true),
+		core.WithDedup(core.DedupMerge),
+	)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	// A nested object is the whole point: a scalar would pass under autodetect
+	// too, and the test would prove nothing.
+	batch := make([]core.Envelope, 6)
+	for i := range batch {
+		batch[i] = core.Envelope{
+			Provider:  "integration",
+			Entity:    "json",
+			SourceKey: fmt.Sprintf("j-%d", i),
+			RecordTS:  "2026-01-01T00:00:00Z",
+			Payload: map[string]any{
+				"source_key": fmt.Sprintf("j-%d", i),
+				"payload":    map[string]any{"reading": i, "unit": "celsius"},
+			},
+		}
+	}
+
+	first, err := loader.Load(ctx, batch...)
+	if err != nil {
+		t.Fatalf("first load into a JSON column: %v", err)
+	}
+	if first.RowsLoaded != 6 {
+		t.Errorf("the first load wrote %d rows, expected 6", first.RowsLoaded)
+	}
+
+	second, err := loader.Load(ctx, batch...)
+	if err != nil {
+		t.Fatalf("second load: %v", err)
+	}
+	if second.RowsIgnored != 6 {
+		t.Errorf("RowsIgnored = %d, expected 6: the merge should have recognised every row", second.RowsIgnored)
+	}
+
+	if got := countRows(ctx, t, client, env, name); got != 6 {
+		t.Errorf("after loading the same batch twice the table has %d rows, expected 6", got)
+	}
+
+	// The value has to be readable AS JSON, not just present: a string that
+	// happens to hold JSON would satisfy a row count and nothing else.
+	q := client.Query(fmt.Sprintf(
+		"SELECT COUNT(*) AS n FROM `%s.%s.%s` WHERE JSON_VALUE(payload, '$.unit') = 'celsius'",
+		env.project, env.dataset, name))
+	it, err := q.Read(ctx)
+	if err != nil {
+		t.Fatalf("JSON_VALUE query: %v", err)
+	}
+	var row struct{ N int64 }
+	if err := it.Next(&row); err != nil {
+		t.Fatalf("reading the JSON_VALUE count: %v", err)
+	}
+	if row.N != 6 {
+		t.Errorf("JSON_VALUE found %d rows, expected 6: the column did not land as JSON", row.N)
+	}
+}
