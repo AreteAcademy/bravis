@@ -258,9 +258,40 @@ type Source struct {
 	RetryConfig  *RetryConfig  // nil uses defaults
 	RateLimiter  Limiter       // throttles each attempt; nil disables
 
-	// Guard inspects a 200 before it is decoded, so a body that is not data
-	// fails loudly instead of landing in the warehouse. See RejectIf.
-	Guard func(status int, body []byte) error
+	// Records receives every successful response and returns the records it
+	// carries -- or refuses it, saying why.
+	//
+	// This is where a fetcher's knowledge of its source lives. Validating and
+	// slicing are the same question ("what does this response mean?"), and it
+	// is answered once, per response, before anything is decoded:
+	//
+	//	Records: func(r sdk.Response) ([]any, error) {
+	//		if r.Status == http.StatusNoContent {
+	//			return nil, nil // an empty window is a result, not a failure
+	//		}
+	//		doc, err := r.Object()
+	//		if err != nil {
+	//			return nil, err
+	//		}
+	//		if bad, _ := doc["error"].(bool); bad {
+	//			return nil, sdk.Reject("open-meteo refused: %v", doc["reason"])
+	//		}
+	//		return sdk.ParallelArrays("hourly", "time", "temperature_2m")(doc)
+	//	}
+	//
+	// Per response, not per record, and that is the point. A response that is
+	// an error carries zero records, so a per-record check is never called on
+	// it -- the failure would arrive as "0 rows", which says nothing about
+	// what the vendor actually answered.
+	//
+	// Nil leaves the SDK's default: decode the body and treat each document
+	// as one record. That path stays streaming, which matters for a large
+	// NDJSON or CSV; setting Records buffers the response, because a function
+	// that decides what a response means has to see all of it.
+	//
+	// ParallelArrays, ArrayAt, RejectIf and RequireFields are ordinary
+	// functions you call from in here. They are shortcuts, not the interface.
+	Records func(Response) ([]any, error)
 
 	// Format of the response. Empty means FormatJSON.
 	Format Format
@@ -292,11 +323,6 @@ type Source struct {
 	// line of \n. The counters do go through slog, where a structured number
 	// belongs.
 	PreviewWriter io.Writer
-
-	// Expand turns one decoded document into the records it holds, for the
-	// common case of an API that wraps its readings. Nil means each decoded
-	// document is one record. See ParallelArrays and ArrayAt.
-	Expand func(payload any) ([]any, error)
 
 	// NoHeader, for CSV: treat every row as data with field_N keys. The
 	// default uses the first row as column names. Ignored for other formats.

@@ -17,7 +17,7 @@ import (
 //		sdk.Run(sdk.Pipeline{
 //			Source: sdk.Source{
 //				URL:    "https://api.example.com/events",
-//				Expand: sdk.ArrayAt("results"),
+//				Records: minhaLeitura,
 //			},
 //			Transform: []sdk.Transformer{
 //				sdk.Without("generationtime_ms"),

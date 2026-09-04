@@ -1,8 +1,9 @@
 package sdk
 
 import (
-	"encoding/json"
 	"fmt"
+
+	core "github.com/AreteAcademy/bravis/sdk/internal/core"
 )
 
 // Expander turns one decoded document into the records it contains.
@@ -135,20 +136,34 @@ func ArrayAt(path ...string) Expander {
 	}
 }
 
-// RejectIf rejects a 200 response whose body carries one of these fields set
-// to a truthy value. Plenty of APIs answer 200 with {"error": true} -- without
-// a guard that document lands in the warehouse as if it were data.
+// RejectIf rejects a response whose body carries one of these fields set to a
+// truthy value. Plenty of APIs answer 200 with {"error": true} -- unchecked,
+// that document lands in the warehouse as if it were data.
+//
+// Call it from Records:
+//
+//	Records: func(r sdk.Response) ([]any, error) {
+//		if err := sdk.RejectIf("error")(r); err != nil {
+//			return nil, err
+//		}
+//		doc, err := r.Object()
+//		...
+//	}
 //
 //	Guard: RejectIf("error")
 //
-// It only inspects top-level fields of a JSON object; a body that is not one
-// passes through, because a non-JSON body is the decoder's problem to report.
-func RejectIf(fields ...string) func(status int, body []byte) error {
-	return func(status int, body []byte) error {
-		var doc map[string]any
-		if err := json.Unmarshal(body, &doc); err != nil {
-			return nil
+// It inspects top-level fields of a JSON object. A body that is not one is
+// itself a rejection: an HTML error page served with 200 -- a portal in
+// maintenance, a WAF, a proxy -- is exactly what this check exists to catch,
+// and letting it through to fail later as "invalid JSON" points at the wrong
+// thing.
+func RejectIf(fields ...string) func(Response) error {
+	return func(r Response) error {
+		doc, err := r.Object()
+		if err != nil {
+			return core.Reject("response %d is not a JSON object: %v", r.Status, err)
 		}
+		status := r.Status
 
 		for _, campo := range fields {
 			v, ok := doc[campo]
@@ -159,10 +174,10 @@ func RejectIf(fields ...string) func(status int, body []byte) error {
 			// between "the API said no" and knowing why.
 			for _, reason := range []string{"reason", "message", "detail", "error_description"} {
 				if m, ok := doc[reason].(string); ok && m != "" {
-					return fmt.Errorf("response %d flagged with %q: %s", status, campo, m)
+					return core.Reject("response %d flagged with %q: %s", status, campo, m)
 				}
 			}
-			return fmt.Errorf("response %d flagged with %q: %v", status, campo, v)
+			return core.Reject("response %d flagged with %q: %v", status, campo, v)
 		}
 		return nil
 	}
@@ -170,16 +185,16 @@ func RejectIf(fields ...string) func(status int, body []byte) error {
 
 // RequireFields rejects a response missing any of the named top-level fields,
 // which catches a truncated or restructured payload before it is decoded.
-func RequireFields(fields ...string) func(status int, body []byte) error {
-	return func(status int, body []byte) error {
-		var doc map[string]any
-		if err := json.Unmarshal(body, &doc); err != nil {
-			return fmt.Errorf("response %d is not a JSON object", status)
+func RequireFields(fields ...string) func(Response) error {
+	return func(r Response) error {
+		doc, err := r.Object()
+		if err != nil {
+			return core.Reject("response %d is not a JSON object: %v", r.Status, err)
 		}
 		for _, campo := range fields {
 			if _, ok := doc[campo]; !ok {
-				return fmt.Errorf("response %d is missing field %q; available: %s",
-					status, campo, availableKeys(doc))
+				return core.Reject("response %d is missing field %q; available: %s",
+					r.Status, campo, availableKeys(doc))
 			}
 		}
 		return nil

@@ -40,8 +40,8 @@ func meteoServer(t *testing.T) *httptest.Server {
 func meteoRecords(t *testing.T, srv *httptest.Server) *Data {
 	t.Helper()
 	data, err := Extract(context.Background(), Source{
-		URL:    srv.URL,
-		Expand: ParallelArrays("hourly", "time", "temperature_2m"),
+		URL:     srv.URL,
+		Records: records(ParallelArrays("hourly", "time", "temperature_2m")),
 	})
 	if err != nil {
 		t.Fatalf("Extract: %v", err)

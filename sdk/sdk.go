@@ -2,8 +2,13 @@
 //
 //	data, err := sdk.Extract(ctx, sdk.Source{
 //		URL:      "https://api.open-meteo.com/v1/forecast?...",
-//		Guard:   sdk.RejectIf("error"),
-//		Expand: sdk.ParallelArrays("hourly", "time", "temperature_2m"),
+//		Records: func(r sdk.Response) ([]any, error) {
+//			doc, err := r.Object()
+//			if err != nil {
+//				return nil, err
+//			}
+//			return sdk.ParallelArrays("hourly", "time", "temperature_2m")(doc)
+//		},
 //	})
 //
 //	res, err := sdk.Load(ctx, data, sdk.Target{
@@ -62,8 +67,8 @@ func (d *Data) Stats() core.Stats {
 	return *d.stats
 }
 
-// Extract fetches, decodes and, when Source.Expand is set, expands the
-// response into one record per reading.
+// Extract fetches and decodes. When Source.Records is set the fetcher decides
+// what each response holds; otherwise each decoded document is one record.
 //
 // The returned records carry only Payload. Provider, Entity, SourceKey and
 // RecordTS are provenance, and provenance is decided at Load, where Target
@@ -108,45 +113,7 @@ func Extract(ctx context.Context, source Source) (*Data, error) {
 		return nil, classifyExtract(source, err)
 	}
 
-	if source.Expand != nil {
-		lines = expandStream(source, lines)
-	}
-
 	return &Data{Records: lines, source: source, start: start, stats: stats}, nil
-}
-
-// expandStream applies the expansor to each decoded document, emitting one
-// record per reading. It stays lazy: page N is not held waiting for page N+1.
-func expandStream(source Source, lines iter.Seq2[Envelope, error]) iter.Seq2[Envelope, error] {
-	return func(yield func(Envelope, error) bool) {
-		doc := 0
-		for env, err := range lines {
-			if err != nil {
-				if !yield(Envelope{}, classifyExtract(source, err)) {
-					return
-				}
-				continue
-			}
-
-			records, err := source.Expand(env.Payload)
-			if err != nil {
-				yield(Envelope{}, &FormatError{
-					URL:    redact(source.URL),
-					Format: string(source.Format),
-					Line:   doc,
-					Cause:  err,
-				})
-				return
-			}
-			doc++
-
-			for _, r := range records {
-				if !yield(Envelope{Payload: r}, nil) {
-					return
-				}
-			}
-		}
-	}
 }
 
 // Load stamps provenance on every record and writes them to BigQuery.

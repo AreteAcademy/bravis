@@ -34,10 +34,23 @@ func main() {
 			URL: "https://api.open-meteo.com/v1/forecast" +
 				"?latitude=-23.55&longitude=-46.63&hourly=temperature_2m",
 			Timeout: 15 * time.Second,
-			Guard:   sdk.RejectIf("error"),
+
 			// One record per hour, with latitude, longitude and the other
 			// top-level scalars copied onto each.
-			Expand: sdk.ParallelArrays("hourly", "time", "temperature_2m"),
+			// Open-Meteo refuses with 200 and {"error": true}, so the
+			// refusal has to be read here -- the response carries zero
+			// records, and a per-record check would never see it.
+			Records: func(r sdk.Response) ([]any, error) {
+				doc, err := r.Object()
+				if err != nil {
+					return nil, err
+				}
+				if bad, _ := doc["error"].(bool); bad {
+					return nil, sdk.Reject("open-meteo refused: %v", doc["reason"])
+				}
+				// One record per hour, with the top-level scalars copied on.
+				return sdk.ParallelArrays("hourly", "time", "temperature_2m")(doc)
+			},
 		},
 
 		// Runs on every record, in order, before anything is written.

@@ -62,6 +62,15 @@ func fetch(ctx context.Context, source core.Source) (iter.Seq2[core.Envelope, er
 		return nil, fmt.Errorf("URL is required")
 	}
 
+	// Both answer "which part of the response holds the records", and with
+	// Records set the decoder never sees the body DataKey unwrapped -- so
+	// DataKey would sit there doing nothing, which is worse than an error.
+	if source.Records != nil && source.DataKey != "" {
+		return nil, fmt.Errorf("Records and DataKey both say where the records are, and " +
+			"Records wins -- DataKey would be ignored. Read the field inside Records " +
+			"instead: sdk.ArrayAt(\"" + source.DataKey + "\")(doc)")
+	}
+
 	if source.Method == "" {
 		source.Method = "GET"
 	}
@@ -232,6 +241,12 @@ type page struct {
 	cursor   string // value at source.CursorKey, when cursor paging
 	offset   int    // offset this page was fetched at, for offset paging
 	release  func()
+
+	// Set when Source.Records answered for this page. The records then come
+	// from the fetcher rather than the decoder, and hasRecords distinguishes
+	// "the fetcher said none" from "the fetcher was not asked".
+	records    []any
+	hasRecords bool
 }
 
 func (p *page) close() {
@@ -246,6 +261,19 @@ func (p *page) close() {
 // drainPage decodes one page, yielding every row. It reports how many rows it
 // emitted and the URL of the next page, if any.
 func drainPage(ctx context.Context, source core.Source, p *page, yield func(core.Envelope, error) bool) (int, string, error) {
+	// The fetcher already said what this response holds, so there is nothing
+	// to decode. Zero records is a legitimate answer -- an empty window --
+	// and it must not be mistaken for a decode that found nothing.
+	if p.hasRecords {
+		for _, r := range p.records {
+			if !yield(core.Envelope{Payload: r}, nil) {
+				return 0, "", errStopped
+			}
+		}
+		next, err := nextPageURL(source, p, len(p.records))
+		return len(p.records), next, err
+	}
+
 	decoder := NewDecoder(p.body, source)
 	if decoder == nil {
 		return 0, "", fmt.Errorf("unsupported format: %s", source.Format)
@@ -370,7 +398,11 @@ func fetchPage(ctxTotal context.Context, source core.Source, pageURL string, byt
 			return nil, fmt.Errorf("fetch failed after %d attempts: %w", attempt+1, err)
 		}
 
-		if resp.StatusCode == http.StatusOK {
+		// Every 2xx, not just 200. A vendor answering 204 on an empty
+		// window, or 206 on a partial page, is answering -- and what that
+		// means is the fetcher's call, made in Records. Failing the run on
+		// "http 204" turns a quiet Tuesday into a red pipeline.
+		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 			release = cancelAttempt
 			break
 		}
@@ -405,7 +437,7 @@ func fetchPage(ctxTotal context.Context, source core.Source, pageURL string, byt
 
 	// Anything that must see the whole body reads it here and hands the
 	// decoder an equivalent reader.
-	if source.Guard != nil || source.CursorKey != "" || source.DataKey != "" {
+	if source.Records != nil || source.CursorKey != "" || source.DataKey != "" {
 		buffered, err := io.ReadAll(body)
 		if err != nil {
 			p.close()
@@ -413,12 +445,16 @@ func fetchPage(ctxTotal context.Context, source core.Source, pageURL string, byt
 		}
 		_ = resp.Body.Close()
 
-		if source.Guard != nil {
-			if err := source.Guard(resp.StatusCode, buffered); err != nil {
+		if source.Records != nil {
+			records, err := source.Records(core.NewResponse(
+				resp.StatusCode, resp.Header, redactURL(pageURL), buffered))
+			if err != nil {
 				p.body = nil
 				p.close()
-				return nil, fmt.Errorf("guard rejected response: %w", err)
+				return nil, err
 			}
+			p.records = records
+			p.hasRecords = true
 		}
 
 		if source.CursorKey != "" || source.DataKey != "" {

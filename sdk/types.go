@@ -18,6 +18,13 @@ type (
 	// Source describes where and how to extract.
 	Source = core.Source
 
+	// Response is one successful HTTP response, handed to Source.Records.
+	Response = core.Response
+
+	// Rejection is what Reject returns: the source answered, and what it
+	// sent is not data.
+	Rejection = core.Rejection
+
 	// RetryConfig tunes the backoff between attempts.
 	RetryConfig = core.RetryConfig
 
@@ -79,6 +86,17 @@ const (
 	// It costs one scan of the destination per load.
 	DedupMerge = core.DedupMerge
 )
+
+// Reject refuses a response, or a record, saying why. See core.Reject.
+//
+//	return nil, sdk.Reject("open-meteo refused: %v", doc["reason"])
+var Reject = core.Reject
+
+// ErrRejected marks an error as "the source answered, and what it sent is not
+// data". Test for it with errors.Is:
+//
+//	if errors.Is(err, sdk.ErrRejected) { ... }
+var ErrRejected = core.ErrRejected
 
 // Low-level load options, re-exported. Target covers the common cases.
 var (

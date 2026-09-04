@@ -33,8 +33,16 @@ func main() {
 		Source: sdk.Source{
 			URL: "https://api.open-meteo.com/v1/forecast" +
 				"?latitude=-23.55&longitude=-46.63&hourly=temperature_2m",
-			Guard:  sdk.RejectIf("error"),
-			Expand: sdk.ParallelArrays("hourly", "time", "temperature_2m"),
+			Records: func(r sdk.Response) ([]any, error) {
+				if err := sdk.RejectIf("error")(r); err != nil {
+					return nil, err
+				}
+				doc, err := r.Object()
+				if err != nil {
+					return nil, err
+				}
+				return sdk.ParallelArrays("hourly", "time", "temperature_2m")(doc)
+			},
 		},
 
 		Transform: []sdk.Transformer{

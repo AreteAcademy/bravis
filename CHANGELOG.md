@@ -8,6 +8,76 @@ A tag de um módulo aninhado leva o prefixo do diretório: `sdk/v0.2.1`.
 
 ---
 
+## [0.17.0] — 2026-09-03
+
+**BREAKING.** A validação é do consumidor, e roda por **resposta**. Executa
+[`docs/plan/2026-09-03-sdk-validacao-do-consumidor.md`](docs/plan/2026-09-03-sdk-validacao-do-consumidor.md).
+
+### Alterado
+- **`Source.Guard` e `Source.Expand` viram `Source.Records`.** Eram a mesma
+  pergunta — "o que esta resposta significa?" — partida em duas. Agora é uma
+  função só, por resposta, que valida e fatia no mesmo lugar.
+
+  ```go
+  // antes
+  Guard:  sdk.RejectIf("error"),
+  Expand: sdk.ParallelArrays("hourly", "time", "temperature_2m"),
+
+  // depois
+  Records: func(r sdk.Response) ([]any, error) {
+      if r.Status == http.StatusNoContent {
+          return nil, nil // janela vazia é resultado, não falha
+      }
+      doc, err := r.Object()
+      if err != nil {
+          return nil, err
+      }
+      if bad, _ := doc["error"].(bool); bad {
+          return nil, sdk.Reject("open-meteo recusou: %v", doc["reason"])
+      }
+      return sdk.ParallelArrays("hourly", "time", "temperature_2m")(doc)
+  },
+  ```
+
+  `Records` **nil** mantém o padrão: decodifica e cada documento é um
+  registro, pelo caminho que continua **streaming** — o que importa num NDJSON
+  ou CSV grande. Defini-lo bufferiza a resposta, porque uma função que decide
+  o que a resposta significa precisa vê-la inteira.
+
+- **Todo 2xx chega ao `Records`.** Antes só o `200` passava: `201`, `204` e
+  `206` derrubavam a execução com `http NNN` — reproduzido antes de consertar.
+  Um vendor que responde `204` numa janela vazia não pode ser pipeline
+  vermelho. Não-2xx continua como estava: erro com status e corpo, e retry
+  onde já havia.
+
+- `RejectIf` e `RequireFields` passam a receber `Response` em vez de
+  `(status, body)`, para serem chamados de dentro do `Records`.
+
+### Adicionado
+- **`sdk.Response`** — `Status`, `Header`, `URL`, `Bytes()`, `Object()` e
+  `JSON(&v)`. `Bytes()` não decodifica: procurar um marcador não paga o parse
+  de um corpo que já se sabe ser lixo.
+- **`sdk.Reject(formato, args...)`** e `sdk.ErrRejected`. Um `fmt.Errorf`
+  também falha a execução, mas não se distingue de um mapa nil ou de um erro
+  de digitação no fetcher — e esses dois pedem coisas diferentes de quem está
+  de plantão. Recusa significa que o vendor mandou algo que não é dado:
+  reexecutar a mesma janela vai dar no mesmo.
+- `Records` junto de `DataKey` é **recusado**: os dois dizem onde estão os
+  registros, e o `DataKey` ficaria sem efeito.
+
+### Corrigido
+- **`RejectIf` aceitava em silêncio corpo que não é JSON.** Uma página HTML de
+  erro servida com 200 — portal em manutenção, WAF, proxy — passava pela
+  guarda e falhava depois como "JSON inválido", apontando para o lugar errado.
+  Era o único caso que a guarda existe para pegar e o único que ela deixava
+  passar.
+
+### Nota sobre a spec
+O critério 8 ("`SkipRecord` aparece em pelo menos um exemplo executável") já
+estava cumprido antes desta versão: `examples/09-transform/main.go:70`.
+
+---
+
 ## [0.16.0] — 2026-09-03
 
 ### Adicionado
@@ -503,6 +573,7 @@ Primeira versão que compila.
 > versão de `proxy.golang.org`, então ela permanece publicada e quebrada para
 > sempre. Comece pela `v0.1.1`.
 
+[0.17.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.17.0
 [0.16.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.16.0
 [0.15.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.15.0
 [0.14.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.14.0

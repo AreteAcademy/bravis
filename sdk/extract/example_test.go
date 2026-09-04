@@ -54,11 +54,12 @@ func ExampleNDJSON_resilient() {
 			MaxBackoff:     30 * time.Second,
 			JitterFraction: 0.2,
 		},
-		Guard: func(status int, body []byte) error {
-			if len(body) == 0 {
-				return fmt.Errorf("empty body on %d", status)
+		Records: func(r sdk.Response) ([]any, error) {
+			if len(r.Bytes()) == 0 {
+				return nil, sdk.Reject("empty body on %d", r.Status)
 			}
-			return nil
+			var docs []any
+			return docs, r.JSON(&docs)
 		},
 	}
 

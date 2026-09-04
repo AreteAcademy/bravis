@@ -27,6 +27,6 @@
 //   - Multiple formats: JSON, NDJSON, CSV, XML
 //   - Pagination via cursor, offset, or Link headers
 //   - Rate limiting via optional rate.Limiter
-//   - Guard function to validate 200-OK-but-wrong-format
+//   - Records: the fetcher decides what each successful response means
 //   - Automatic redaction of sensitive data in logs
 package extract

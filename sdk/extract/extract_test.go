@@ -127,9 +127,9 @@ func TestTimeoutPerAttempt(t *testing.T) {
 	}
 }
 
-// TestGuardFunction verifies guard is called before decoding.
-func TestGuardFunction(t *testing.T) {
-	guardCalled := false
+// TestRecordsRunsBeforeDecoding verifies Records sees the raw body.
+func TestRecordsRunsBeforeDecoding(t *testing.T) {
+	called := false
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusOK)
@@ -140,21 +140,21 @@ func TestGuardFunction(t *testing.T) {
 	ctx := context.Background()
 	source := core.Source{
 		URL: server.URL,
-		Guard: func(status int, body []byte) error {
-			guardCalled = true
-			if !strings.HasPrefix(string(body), "{") {
-				return fmt.Errorf("not json")
+		Records: func(r core.Response) ([]any, error) {
+			called = true
+			if !strings.HasPrefix(string(r.Bytes()), "{") {
+				return nil, core.Reject("not json")
 			}
-			return nil
+			return nil, nil
 		},
 	}
 
 	_, err := NDJSON(ctx, source)
 	if err == nil {
-		t.Fatal("Expected guard to reject response")
+		t.Fatal("Expected Records to reject the response")
 	}
-	if !guardCalled {
-		t.Fatal("Guard was not called")
+	if !called {
+		t.Fatal("Records was not called")
 	}
 }
 

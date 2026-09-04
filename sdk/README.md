@@ -22,8 +22,16 @@ Requires Go 1.23 or newer (the SDK streams rows as `iter.Seq2`).
 ```go
 dados, err := sdk.Extract(ctx, sdk.Source{
 	URL:    "https://api.open-meteo.com/v1/forecast?...",
-	Guard:  sdk.RejectIf("error"),
-	Expand: sdk.ParallelArrays("hourly", "time", "temperature_2m"),
+	Records: func(r sdk.Response) ([]any, error) {
+		doc, err := r.Object()
+		if err != nil {
+			return nil, err
+		}
+		if bad, _ := doc["error"].(bool); bad {
+			return nil, sdk.Reject("open-meteo refused: %v", doc["reason"])
+		}
+		return sdk.ParallelArrays("hourly", "time", "temperature_2m")(doc)
+	},
 })
 
 // The columns. This is where they are decided, and the only place.
@@ -133,7 +141,13 @@ exit code for free:
 ```go
 func main() {
 	sdk.Run(sdk.Pipeline{
-		Source:   sdk.Source{URL: "...", Expand: sdk.ArrayAt("results")},
+		Source: sdk.Source{URL: "...", Records: func(r sdk.Response) ([]any, error) {
+			doc, err := r.Object()
+			if err != nil {
+				return nil, err
+			}
+			return sdk.ArrayAt("results")(doc)
+		}},
 		Target: sdk.Target{
 			Provider: "example", Entity: "events",
 			Key:  sdk.Key("id"),
@@ -339,7 +353,7 @@ It is consulted before every attempt, retries included.
 
 - **Retry with exponential backoff** — 429, 5xx, and network errors only
 - **Timeout** — per-attempt and total, separate
-- **Guard function** — validate 200-OK-but-wrong-content
+- **Records** — you decide what a response means, per response (see below)
 - **Pagination** — Link headers, body cursor, or offset (see below)
 - **Rate limiting** — any `Wait(ctx) error`, including `*rate.Limiter`
 - **Observability** — structured logs with redacted URLs
@@ -399,6 +413,76 @@ INFO extract complete format=json pages=3 rows=6 bytes=960 duration=262µs per_p
 `bytes` is what came off the wire, before `Transform` — the number that
 explains a slow extract. It is also on `Data.Stats().Bytes` and
 `Result.ExtractBytes`.
+
+### Deciding what a response means
+
+`Records` receives every successful response and returns the records it
+carries — or refuses it, saying why. It replaces `Guard` and `Expand`, which
+were the same question ("what does this response mean?") split in two.
+
+```go
+Records: func(r sdk.Response) ([]any, error) {
+	if r.Status == http.StatusNoContent {
+		return nil, nil // an empty window is a result, not a failure
+	}
+
+	doc, err := r.Object()
+	if err != nil {
+		return nil, err
+	}
+	if bad, _ := doc["error"].(bool); bad {
+		return nil, sdk.Reject("open-meteo refused: %v", doc["reason"])
+	}
+
+	return sdk.ParallelArrays("hourly", "time", "temperature_2m")(doc)
+},
+```
+
+**Per response, not per record**, and that is the point. A response that is an
+error carries zero records, so a per-record check is never called on it — the
+failure would arrive as "0 rows", which says nothing about what the vendor
+actually answered.
+
+Every **2xx** reaches it, `204` and `206` included, because what those mean is
+the vendor's convention and only the fetcher knows it. A non-2xx never does:
+that is a transport failure, retried where retrying makes sense and reported
+with its body otherwise.
+
+| on `Response` | |
+|---|---|
+| `Status` | the code, always 2xx |
+| `Header` | the response's headers |
+| `Bytes()` | the body, undecoded — looking for a marker costs no parse |
+| `Object()` | the body as a JSON object, which is what the helpers take |
+| `JSON(&v)` | the body into your own type |
+
+`ParallelArrays`, `ArrayAt`, `RejectIf` and `RequireFields` are ordinary
+functions you call from in here. They are shortcuts, not the interface: when
+the vendor's shape does not fit one, write the function yourself.
+
+Leaving `Records` nil keeps the default — decode the body, one record per
+document — and that path stays **streaming**, which matters for a large NDJSON
+or CSV. Setting `Records` buffers the response, because a function that decides
+what a response means has to see all of it.
+
+### Refusing, and being told apart
+
+```go
+return nil, sdk.Reject("open-meteo refused: %v", doc["reason"])
+```
+
+A plain `fmt.Errorf` also fails the run, but it cannot be told apart from a nil
+map or a typo in the fetcher — and those two want different things from
+whoever is on call. A rejection means the vendor sent something that is not
+data: the fetcher is fine, the source is not, and retrying the same window will
+do the same thing.
+
+```go
+if errors.Is(err, sdk.ErrRejected) { ... }
+```
+
+Per record, `sdk.SkipRecord` from a `Transformer` drops that record without
+failing the run. See `examples/09-transform`.
 
 ## Load Strategy
 
@@ -691,11 +775,12 @@ fonte := sdk.Source{
 		MaxBackoff:     60 * time.Second,
 		JitterFraction: 0.1,
 	},
-	Guard: func(status int, body []byte) error {
-		if !bytes.Contains(body, []byte(`"status":"ok"`)) {
-			return fmt.Errorf("API returned error")
+	Records: func(r sdk.Response) ([]any, error) {
+		if !bytes.Contains(r.Bytes(), []byte(`"status":"ok"`)) {
+			return nil, sdk.Reject("the API answered %d without status:ok", r.Status)
 		}
-		return nil
+		var docs []any
+		return docs, r.JSON(&docs)
 	},
 }
 ```

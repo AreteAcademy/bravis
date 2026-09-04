@@ -12,6 +12,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	core "github.com/AreteAcademy/bravis/sdk/internal/core"
 )
 
 // --- Key e Field ---------------------------------------------------------
@@ -119,32 +121,51 @@ func TestArrayEm(t *testing.T) {
 
 // --- Guardas ---------------------------------------------------------------
 
+func resp(status int, body string) Response {
+	return core.NewResponse(status, nil, "http://exemplo", []byte(body))
+}
+
 func TestRecusarSe(t *testing.T) {
 	guarda := RejectIf("error")
 
-	err := guarda(200, []byte(`{"error": true, "reason": "invalid parameter"}`))
+	err := guarda(resp(200, `{"error": true, "reason": "invalid parameter"}`))
 	if err == nil {
 		t.Fatal("a 200 flagged with error must be rejected")
 	}
 	if !strings.Contains(err.Error(), "invalid parameter") {
 		t.Errorf("o reason da API precisa aparecer: %v", err)
 	}
+	if !errors.Is(err, ErrRejected) {
+		t.Error("uma recusa tem de ser distinguível de um erro de programação")
+	}
 
-	if err := guarda(200, []byte(`{"temperature": 20}`)); err != nil {
+	if err := guarda(resp(200, `{"temperature": 20}`)); err != nil {
 		t.Errorf("response boa foi recusada: %v", err)
 	}
-	// A non-JSON body is the decoder's problem to report, not the guard's.
-	if err := guarda(200, []byte(`nada disso`)); err != nil {
-		t.Errorf("a non-JSON body should pass through: %v", err)
+}
+
+// Uma página HTML de erro servida com 200 -- portal em manutenção, WAF, proxy
+// -- é exatamente o caso para o qual a guarda existe, e era o único que ela
+// deixava passar.
+func TestRecusarSeNaoDeixaPassarCorpoQueNaoEJSON(t *testing.T) {
+	err := RejectIf("error")(resp(200, `<html><body>Em manutenção</body></html>`))
+	if err == nil {
+		t.Fatal("um corpo que não é JSON tem de ser recusado, não aceito")
+	}
+	if !strings.Contains(err.Error(), "not a JSON object") {
+		t.Errorf("o erro precisa dizer que a resposta não é JSON: %v", err)
+	}
+	if !errors.Is(err, ErrRejected) {
+		t.Error("é uma recusa da fonte, não um erro de programação")
 	}
 }
 
 func TestExigirCampos(t *testing.T) {
 	guarda := RequireFields("hourly")
-	if err := guarda(200, []byte(`{"daily": {}}`)); err == nil {
+	if err := guarda(resp(200, `{"daily": {}}`)); err == nil {
 		t.Fatal("a payload missing the required field must be rejected")
 	}
-	if err := guarda(200, []byte(`{"hourly": {}}`)); err != nil {
+	if err := guarda(resp(200, `{"hourly": {}}`)); err != nil {
 		t.Errorf("a correct payload was rejected: %v", err)
 	}
 }
@@ -200,9 +221,8 @@ func TestExtractExpandeEMapeia(t *testing.T) {
 	defer srv.Close()
 
 	data, err := Extract(context.Background(), Source{
-		URL:    srv.URL,
-		Guard:  RejectIf("error"),
-		Expand: ParallelArrays("hourly", "time", "temperature_2m"),
+		URL:     srv.URL,
+		Records: records(ParallelArrays("hourly", "time", "temperature_2m")),
 	})
 	if err != nil {
 		t.Fatalf("Extract: %v", err)
@@ -246,15 +266,20 @@ func TestExtractExpandeEMapeia(t *testing.T) {
 	}
 }
 
-func TestExtractGuardaRecusaAntesDeDecodificar(t *testing.T) {
+func TestExtractRecordsRecusaAntesDeDecodificar(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = fmt.Fprint(w, `{"error": true, "reason": "latitude fora do intervalo"}`)
 	}))
 	defer srv.Close()
 
-	_, err := Extract(context.Background(), Source{URL: srv.URL, Guard: RejectIf("error")})
+	_, err := Extract(context.Background(), Source{
+		URL: srv.URL,
+		Records: func(r Response) ([]any, error) {
+			return nil, RejectIf("error")(r)
+		},
+	})
 	if err == nil {
-		t.Fatal("the guard should have rejected a 200 carrying an error")
+		t.Fatal("Records should have rejected a 200 carrying an error")
 	}
 	// Without this, the error document would land in the warehouse as data.
 	if !strings.Contains(err.Error(), "latitude fora do intervalo") {
@@ -303,8 +328,8 @@ func TestErroDeFormatoEmChaveAusente(t *testing.T) {
 	defer srv.Close()
 
 	data, err := Extract(context.Background(), Source{
-		URL:    srv.URL,
-		Expand: ParallelArrays("hourly", "time", "temperature_2m"),
+		URL:     srv.URL,
+		Records: records(ParallelArrays("hourly", "time", "temperature_2m")),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -675,7 +700,7 @@ func TestTransformKeepsTheCounters(t *testing.T) {
 	defer srv.Close()
 
 	data, err := Extract(context.Background(), Source{
-		URL: srv.URL, Expand: ParallelArrays("hourly", "time", "temperature_2m"),
+		URL: srv.URL, Records: records(ParallelArrays("hourly", "time", "temperature_2m")),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -796,8 +821,8 @@ func TestSemMetadataOSDKNaoTocaNoPayload(t *testing.T) {
 	defer srv.Close()
 
 	data, err := Extract(context.Background(), Source{
-		URL:    srv.URL,
-		Expand: ParallelArrays("hourly", "time", "temperature_2m"),
+		URL:     srv.URL,
+		Records: records(ParallelArrays("hourly", "time", "temperature_2m")),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -833,8 +858,8 @@ func TestSemMetadataOPayloadSaiComoEntrou(t *testing.T) {
 	defer srv.Close()
 
 	data, err := Extract(context.Background(), Source{
-		URL:    srv.URL,
-		Expand: ParallelArrays("hourly", "time", "temperature_2m"),
+		URL:     srv.URL,
+		Records: records(ParallelArrays("hourly", "time", "temperature_2m")),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -905,7 +930,7 @@ func TestAutoIDNaoCarimbaProveniencia(t *testing.T) {
 	defer srv.Close()
 
 	data, err := Extract(context.Background(), Source{
-		URL: srv.URL, Expand: ParallelArrays("hourly", "time", "temperature_2m"),
+		URL: srv.URL, Records: records(ParallelArrays("hourly", "time", "temperature_2m")),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -918,6 +943,162 @@ func TestAutoIDNaoCarimbaProveniencia(t *testing.T) {
 	for i, e := range envelopes {
 		if e.SourceKey != "" || e.RecordTS != "" {
 			t.Errorf("registro %d ganhou proveniência que o id não usa: %+v", i, e)
+		}
+	}
+}
+
+// records adapta um Expander para o campo Records, que é onde a decisão de
+// "o que esta resposta carrega" mora agora.
+func records(e Expander) func(Response) ([]any, error) {
+	return func(r Response) ([]any, error) {
+		doc, err := r.Object()
+		if err != nil {
+			return nil, err
+		}
+		return e(doc)
+	}
+}
+
+// --- Records: por resposta, e todo 2xx chega ----------------------------
+
+// Um vendor que responde 204 numa janela vazia não pode ser pipeline
+// vermelho. Zero registros é um resultado, não uma falha.
+func TestTodoDoisXXChegaAoRecords(t *testing.T) {
+	casos := []struct {
+		status int
+		corpo  string
+		linhas int
+	}{
+		{200, `[{"a":1},{"a":2}]`, 2},
+		{201, `[{"a":1}]`, 1},
+		{204, ``, 0},
+		{206, `[{"a":1}]`, 1},
+	}
+
+	for _, c := range casos {
+		t.Run(fmt.Sprint(c.status), func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(c.status)
+				_, _ = fmt.Fprint(w, c.corpo)
+			}))
+			defer srv.Close()
+
+			visto := 0
+			data, err := Extract(context.Background(), Source{
+				URL: srv.URL,
+				Records: func(r Response) ([]any, error) {
+					visto = r.Status
+					if len(r.Bytes()) == 0 {
+						return nil, nil // janela vazia
+					}
+					var docs []any
+					return docs, r.JSON(&docs)
+				},
+			})
+			if err != nil {
+				t.Fatalf("http %d derrubou a execução: %v", c.status, err)
+			}
+			if visto != c.status {
+				t.Errorf("Records viu status %d, esperado %d", visto, c.status)
+			}
+
+			n := 0
+			for _, err := range data.Records {
+				if err != nil {
+					t.Fatalf("iteração: %v", err)
+				}
+				n++
+			}
+			if n != c.linhas {
+				t.Errorf("http %d rendeu %d registros, esperado %d", c.status, n, c.linhas)
+			}
+		})
+	}
+}
+
+// Não-2xx continua como estava: erro com status e corpo.
+func TestNaoDoisXXContinuaFalhando(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(404)
+		_, _ = fmt.Fprint(w, `nao existe`)
+	}))
+	defer srv.Close()
+
+	chamou := false
+	_, err := Extract(context.Background(), Source{
+		URL:     srv.URL,
+		Records: func(Response) ([]any, error) { chamou = true; return nil, nil },
+	})
+	if err == nil {
+		t.Fatal("um 404 tem de falhar")
+	}
+	if chamou {
+		t.Error("um não-2xx não é resposta de sucesso; Records não deve vê-lo")
+	}
+	var se *SourceError
+	if !errors.As(err, &se) || se.Status != 404 {
+		t.Errorf("o status precisa chegar a quem chamou: %v", err)
+	}
+}
+
+// Uma recusa da fonte e um erro de programação pedem coisas diferentes de
+// quem está de plantão, então têm de ser distinguíveis.
+func TestRecusaSeDistingueDeErroDeProgramacao(t *testing.T) {
+	recusa := Reject("open-meteo recusou: %s", "latitude inválida")
+	if !errors.Is(recusa, ErrRejected) {
+		t.Error("Reject tem de casar com errors.Is(err, ErrRejected)")
+	}
+	if !strings.Contains(recusa.Error(), "latitude inválida") {
+		t.Errorf("a razão precisa sobreviver: %v", recusa)
+	}
+
+	if errors.Is(fmt.Errorf("nil map"), ErrRejected) {
+		t.Error("um erro comum não pode passar por recusa")
+	}
+
+	var r *Rejection
+	if !errors.As(recusa, &r) {
+		t.Error("Rejection tem de ser alcançável por errors.As")
+	}
+}
+
+// E a recusa sobrevive à travessia do extract, que é onde ela precisa
+// chegar para virar log e alerta.
+func TestRecusaSobreviveAoExtract(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = fmt.Fprint(w, `{"error":true,"reason":"latitude fora do intervalo"}`)
+	}))
+	defer srv.Close()
+
+	_, err := Extract(context.Background(), Source{
+		URL:     srv.URL,
+		Records: func(r Response) ([]any, error) { return nil, RejectIf("error")(r) },
+	})
+	if err == nil {
+		t.Fatal("a recusa não chegou")
+	}
+	if !errors.Is(err, ErrRejected) {
+		t.Errorf("a recusa perdeu o tipo na travessia: %T %v", err, err)
+	}
+	if !strings.Contains(err.Error(), "latitude fora do intervalo") {
+		t.Errorf("a razão do vendor se perdeu: %v", err)
+	}
+}
+
+// Records e DataKey respondem a mesma pergunta, e com Records o DataKey
+// nunca seria lido -- um campo que não faz nada é pior que um erro.
+func TestRecordsComDataKeyERecusado(t *testing.T) {
+	_, err := Extract(context.Background(), Source{
+		URL:     "http://exemplo.invalido",
+		DataKey: "results",
+		Records: func(Response) ([]any, error) { return nil, nil },
+	})
+	if err == nil {
+		t.Fatal("Records junto de DataKey deixaria o DataKey sem efeito")
+	}
+	for _, want := range []string{"Records", "DataKey", "results"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("o erro não menciona %q: %v", want, err)
 		}
 	}
 }

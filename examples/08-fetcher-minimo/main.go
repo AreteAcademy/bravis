@@ -5,6 +5,7 @@
 package main
 
 import (
+	"net/http"
 	"time"
 
 	"github.com/AreteAcademy/bravis/sdk"
@@ -15,8 +16,21 @@ func main() {
 		Source: sdk.Source{
 			URL:     "https://api.example.com/v1/events",
 			Timeout: 15 * time.Second,
-			Guard:   sdk.RejectIf("error"),
-			Expand:  sdk.ArrayAt("results"),
+			// Records decides what a response means. Validating and
+			// slicing are the same question, answered once, per response.
+			Records: func(r sdk.Response) ([]any, error) {
+				if r.Status == http.StatusNoContent {
+					return nil, nil // an empty window is a result, not a failure
+				}
+				if err := sdk.RejectIf("error")(r); err != nil {
+					return nil, err
+				}
+				doc, err := r.Object()
+				if err != nil {
+					return nil, err
+				}
+				return sdk.ArrayAt("results")(doc)
+			},
 		},
 
 		// The columns of the destination table, and the only place they are

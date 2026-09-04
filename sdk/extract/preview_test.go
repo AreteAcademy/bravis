@@ -251,8 +251,8 @@ func TestExtractCountsTheBytesItRead(t *testing.T) {
 	}
 }
 
-// The guard path buffers the body with io.ReadAll, which is a second way to
-// read it -- and a counter that only wraps one of the two would report zero.
+// The Records path buffers the body with io.ReadAll, which is a second way
+// to read it -- and a counter that only wraps one of the two would report zero.
 func TestExtractCountsBytesOnTheBufferedPath(t *testing.T) {
 	body := `[{"id":1},{"id":2}]`
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -264,7 +264,13 @@ func TestExtractCountsBytesOnTheBufferedPath(t *testing.T) {
 	records, err := JSON(context.Background(), core.Source{
 		URL:   srv.URL,
 		Stats: stats,
-		Guard: func(int, []byte) error { return nil },
+		Records: func(r core.Response) ([]any, error) {
+			var docs []any
+			if err := r.JSON(&docs); err != nil {
+				return nil, err
+			}
+			return docs, nil
+		},
 	})
 	if err != nil {
 		t.Fatalf("Extract: %v", err)
