@@ -133,10 +133,13 @@ estado". Olhando de novo, **só um precisa de estado que sobreviva à execução
 Isso muda o desenho. O caso **comum** é credencial em memória com TTL e trava —
 o que o `ana` já faz, e cujo motivo está escrito lá: *"a ANA monitora a
 FREQUÊNCIA de auth e bloqueia o IP em rajada"*. O caso **raro** é a credencial
-rotativa sem login, e é só ele que precisa de armazenamento.
+rotativa sem login — e mesmo ele, como se vê a seguir, não precisa de
+armazenamento.
 
-Vale o armazenamento por um vendor? Sim — mas com peso de caso raro: interface
-pequena, um store de verdade, e nada obrigatório para os outros três.
+Isso importava quando a resposta parecia ser um store. Não é — ver a seção
+seguinte. Mas a contagem continua valendo para o desenho: **o caso comum é
+credencial que vive só na execução**, e qualquer coisa que o SDK acrescente para
+o caso raro não pode pesar sobre os outros três.
 
 #### A decisão: a credencial é uma env var, e o SDK não guarda nada
 

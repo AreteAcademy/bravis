@@ -6,6 +6,10 @@
 > Para o SDK como ele é hoje: [`SDK_ARQUITETURA.md`](SDK_ARQUITETURA.md),
 > [`SDK_NOVO_DRIVER.md`](SDK_NOVO_DRIVER.md) e [`SDK_DECISOES.md`](SDK_DECISOES.md).
 
+> **TODOS OS OITO ITENS RESOLVIDOS**, o último na `sdk/v0.24.0`. Este documento
+> vira registro. O que os oito custaram e as classes que se repetiram estão em
+> [`SDK_CONSUMIDOR.md`](SDK_CONSUMIDOR.md).
+
 **Aberto em** 2026-09-03 · **Versões analisadas** `sdk/v0.9.0`, `sdk/v0.9.1`,
 `sdk/v0.10.0` · **Alvo** `sdk/v0.10.1`
 
@@ -239,7 +243,15 @@ ele que me fez procurar o defeito no lugar errado primeiro.
 
 ---
 
-## 3. `msg=loaded` sai antes de saber se carregou — **ABERTO**, e localizado
+## 3. `msg=loaded` sai antes de saber se carregou — **RESOLVIDO**
+
+> Conserto: `pipeline.go:167` passou a ramificar — `slog.Error("load failed")`
+> quando há erro, `slog.Info("loaded")` quando não. O resultado continua vindo
+> no caminho de falha, por desenho, para que `RowErrors` seja legível; o que
+> mudou é a mensagem saber distinguir os dois. O comentário no código diz o
+> porquê melhor do que este relatório dizia: *"loaded num load que não escreveu
+> nada é uma linha que alguém vai grepar e acreditar, e em INFO ela nem chega a
+> quem observa erro"*.
 
 Numa carga que falhou, a saída foi:
 
@@ -509,7 +521,12 @@ sites. Hoje nenhum teste olha a mensagem, e é por isso que dois espaços passar
 
 ---
 
-## 8. `Metadata` é documentado como interruptor, e não é um — **v0.23.0**
+## 8. `Metadata` é documentado como interruptor, e não é um — **RESOLVIDO na v0.24.0**
+
+> Resolvido pela raiz, e não pelo texto: o bloco `Metadata` **deixou de
+> existir**. As duas colunas viraram `sdk.IngestionID()` e
+> `sdk.IngestionLoadedAt()`, transformers como quaisquer outros. Não há mais
+> interruptor a descrever, nem três estados a explicar.
 
 `metadata.go:11`:
 

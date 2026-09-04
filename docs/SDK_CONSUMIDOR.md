@@ -1,9 +1,13 @@
 # O SDK visto pelo primeiro consumidor
 
-**Vale para** `sdk/v0.23.0` · **Escrito em** 2026-09-04 · **Revisado em** 2026-09-04
+**Vale para** `sdk/v0.25.1` · **Escrito em** 2026-09-04 · **Atualizado em** 2026-09-04 · **Revisado em** 2026-09-04
 
 Registro do que o consumidor `zarv-data-pipeline` achou entre 2026-09-02 e
-2026-09-04, e do que mudou no SDK por causa disso. **31 versões em três dias.**
+2026-09-04, e do que mudou no SDK por causa disso. **34 versões em três dias**,
+e o módulo mudou de nome no meio (`bravis` → `brevis`, na `v0.25.0`).
+
+**Os onze defeitos estão fechados.** O último, o §3 do
+[`SDK_V9.md`](SDK_V9.md), na `v0.24.0`.
 
 Este documento não repete [`SDK_DECISOES.md`](SDK_DECISOES.md) (o que cada
 decisão custou) nem [`SDK_ARQUITETURA.md`](SDK_ARQUITETURA.md) (como o desenho
@@ -82,6 +86,67 @@ log é a observabilidade inteira de um fetcher, e era a parte sem teste.
 
 ---
 
+## 2.1 O segundo consumidor: o `gabriel`
+
+Depois do exemplo, um vendor de verdade foi refatorado de Python para Go: o
+`gabriel`, que traz ocorrências e alimenta três cubos gold de risco geográfico.
+A prova de refatoração bem-sucedida foi a mesma dos dois casos: **o dbt não mudou
+uma linha**, porque o `ingestion_id` bate com o que o Python gravava — conferido
+contra linhas reais de 2020 tiradas da tabela.
+
+Ele exercitou partes do SDK que o exemplo não tocava, e achou três coisas:
+
+- **O `Pipeline` cobre a forma de um endpoint, não a de N.** Um vendor que faz
+  ~56 requisições em lote sobre coordenadas vindas do warehouse não cabe em
+  `sdk.Run(Pipeline{})`. Cabe no SDK: `Extract`, `Transform` e `Load` são
+  exportados e o `main` faz o laço. Esse caminho nunca tinha sido usado.
+- **Paginação por número de página não existe.** O `gabriel` pagina com
+  `page=1,2,3…`, e o SDK só tem offset e cursor — o consumidor escreveu
+  `OffsetKey: "page", PageSize: 1`, onde `PageSize` não é o tamanho da página e
+  sim o incremento. Funciona, e é um truque.
+- **O erro do staging não diz o que fazer.** Acima de 5000 linhas a carga encena
+  por GCS, e sem bucket ela falha com `The specified bucket does not exist` — sem
+  dizer qual bucket, que o nome padrão mudou na `v0.25.0`, nem as duas saídas.
+
+E achou uma quarta, que não é do SDK e é a mais séria: **dois terços do fetcher
+(183 de 284 linhas) não eram sobre o Gabriel** — eram sessão, cookie e
+armazenamento de credencial. Está medido e proposto em
+[`plan/2026-09-04-sdk-http-autenticacao.md`](plan/2026-09-04-sdk-http-autenticacao.md).
+
+## 2.2 A credencial: uma classe nova, e a pior
+
+O `gabriel` guardava o cookie de sessão numa tabela do BigQuery. Três coisas
+erradas, em ordem crescente de gravidade:
+
+1. um warehouse **analítico** guardando estado de sessão, que não se analisa;
+2. no dataset `bronze`, cujo significado é "dado bruto do fornecedor" — a camada
+   errada dentro do banco errado;
+3. **eram credenciais vivas**, onze delas, legíveis por qualquer `dataViewer` do
+   dataset. E não credenciais de serviço: a resposta de `/api/auth/session` traz
+   `user: {name, email, image, id}`. **A pipeline se autentica como uma pessoa
+   do time.** Quem lesse o token agiria como ela no sistema do fornecedor.
+
+O terceiro ponto não apareceu por análise de segurança: apareceu porque alguém
+perguntou *"como essa sessão é criada e por quem?"*. A pergunta certa achou o
+que nenhuma revisão de código tinha achado.
+
+A correção foi tirar o armazenamento inteiro, não movê-lo. A credencial passou a
+vir de env var, e **no lugar do store entrou um aviso**: a resposta da renovação
+traz a validade, e o fetcher a reporta a cada execução, com `WARN` a sete dias do
+vencimento. Um store adia o vencimento; um aviso o resolve.
+
+Antes de decidir, o pressuposto foi testado contra a API — sem store, o valor
+rotacionado é descartado, e isso só funciona se o token antigo sobreviver à
+rotação:
+
+```
+1. GET /auth/session com o token atual   ->  Set-Cookie com token NOVO
+2. GET /occurrences com o ANTIGO         ->  HTTP 200
+```
+
+Sobrevive. O custo passou a ser único e conhecido — alguém recola a env por mês —
+em vez de uma credencial pessoal replicada num dataset de análise.
+
 ## 3. As classes que se repetiram
 
 Cinco defeitos diferentes, uma causa só. É a parte deste documento que serve como
@@ -130,7 +195,20 @@ duas linhas era a tabela.
 
 > Um atalho que esconde a decisão acaba **tomando** a decisão.
 
-### 3.5 O teste existia e nunca tinha rodado
+### 3.5 Estado que não é dado, guardado onde o dado mora
+
+O `gabriel` escrevia o cookie de sessão no BigQuery porque era o armazenamento
+que estava à mão — o fetcher já tinha um cliente conectado. Ninguém decidiu
+"vamos guardar credencial no warehouse"; a decisão foi tomada pela conveniência.
+
+> O teste é perguntar do que o dado **serve**. Se ninguém vai analisá-lo, ele
+> não pertence a um banco analítico — por mais perto que o cliente esteja.
+
+Vale para além de credenciais: cursores de paginação, marcas d'água de
+incremental, checkpoints. Tudo isso é estado de execução, e todo ele tem a mesma
+tentação.
+
+### 3.6 O teste existia e nunca tinha rodado
 
 `TestIntegrationMergeDoesNotDouble` cobria exatamente o §1 — tabela ausente,
 `CreateTable`, `DedupMerge` — desde a `v0.2.1`. Nunca rodou: `requireIntegration`
@@ -142,7 +220,7 @@ exatamente o retry que o `DedupMerge` existe para tratar.
 > O defeito não escapou por falta de teste. Escapou porque o teste estava atrás
 > de uma variável de ambiente.
 
-### 3.6 O teste cobria só a forma fácil
+### 3.7 O teste cobria só a forma fácil
 
 Todo teste de merge usava **coluna escalar**. O §6 — `JSON` virando `RECORD` —
 sobreviveu 14 versões porque nenhum exercitava o tipo que motiva a landing de um
@@ -178,45 +256,41 @@ Vale registrar que **duas propostas do consumidor foram recusadas com razão**:
 
 ## 5. O fetcher hoje
 
+O exemplo `open_meteo/hourly_temperature` foi aposentado quando cumpriu o papel.
+O fetcher ativo é o `gabriel`, e ele lê assim:
+
 ```go
-origem := &from.HTTP{Header: …, Timeout: …, TotalTimeout: …,
-    Records: func(r sdk.Response) ([]any, error) { … }}   // o que a resposta significa
+origem := &from.HTTP{
+    URL: ".../occurrences?limit=1000&skipCount=true&page=1",
+    OffsetKey: "page", PageSize: 1, MaxPages: 200, DataKey: "data",
+}
 
 sdk.Run(sdk.Pipeline{
-    Source:    sdk.Source{From: origem},                  // de onde vem
-    Transform: []sdk.Transformer{
-        sdk.Accept("time", "temperature_2m", "latitude", "longitude"),
-        sdk.Compute("payload", …), sdk.Compute("provider", …),
-        sdk.Compute("entity", …), sdk.Compute("source_key", sdk.Key(…)),
-        sdk.IngestionID("provider", "entity", "source_key", "time"),
-        sdk.IngestionLoadedAt(),
-        sdk.Without("time", "temperature_2m", "latitude", "longitude"),
-    },                                                    // que linha monta
-    Target: sdk.Target{
-        To:       bigquery.Table{Dataset: "bronze", Name: "vendors_open_meteo_hourly_temperatures"},
-        Columns:  []string{"ingestion_id", "ingestion_loaded_at", "provider", "entity", "source_key", "payload"},
-        Dedup:    sdk.DedupMerge,
-    },                                                    // para onde vai, e com que colunas
+    Before: func(ctx context.Context, _ *sdk.Pipeline) error {   // credencial e validade
+        cookie, err := prepararSessao(ctx); …
+        origem.Header = map[string][]string{"Cookie": {cookie}, …}
+        return nil
+    },
+    Source:    sdk.Source{From: origem},
+    Transform: []sdk.Transformer{ … , sdk.IngestionID(…), sdk.IngestionLoadedAt(),
+                                  sdk.Accept(as seis colunas) },
+    Target:    sdk.Target{To: bigquery.Table{…}, Columns: […]},
 })
 ```
 
-Três detalhes que só um consumidor real produz, e que valem para o próximo:
+Quatro coisas que só um consumidor real produz, e que valem para o próximo:
 
-- **`sdk.IngestionID` lê `source_key` de volta** em vez de recalculá-lo. O
-  `Transform` o computa uma vez com `sdk.Key(...)`, e o transformer o lê da
-  linha. Um só lugar produz a chave, então a coluna e o `ingestion_id` não podem
-  divergir.
-- **Um adaptador desce um nível e delega.** Os seletores rodam depois do
-  `Transform`, quando a leitura já está aninhada sob `payload`. O adaptador
-  chama o `sdk.Key` do SDK sobre o mapa interno — um `fmt.Sprintf` local
-  pareceria idêntico e daria outro `ingestion_id` no primeiro float formatado
-  diferente.
-- **O id tem de ser estável.** A dedupe deste consumidor acontece no bronze, com
-  `ROW_NUMBER() OVER (PARTITION BY ingestion_id)`, e depende de o mesmo
-  `(lat, lon, hora)` dar sempre o mesmo id. É o que `sdk.IngestionID` garante, e
-  o motivo de a fórmula ser congelada.
-
----
+- **`Accept` no fim, e não `Without`.** As chaves de uma ocorrência variam entre
+  registros, então não há lista fixa para descartar. `Accept` nomeia o que fica.
+- **A cadeia é duplicada no teste, de propósito.** Um teste que a importasse do
+  `main` não pegaria uma **reordenação** — e a ordem é o que decide se o
+  `IngestionID` encontra os campos que lê.
+- **Os valores esperados vêm da tabela**, não do código. Gerá-los com a mesma
+  implementação provaria só que ela concorda consigo mesma.
+- **`InlineLimit` explícito.** O padrão encena por GCS acima de 5000 linhas, e
+  este vendor tem ~11,4 mil; não há bucket de staging, e o vendor em Python nunca
+  precisou de um. O comentário diz o que fazer quando a coleção passar do novo
+  limite: criar o bucket, não subir o número de novo.
 
 ## 6. O que fica para a próxima versão
 
@@ -244,8 +318,11 @@ Três detalhes que só um consumidor real produz, e que valem para o próximo:
 
 3. **Um consumidor que não seja este.** Tudo aqui foi achado por um fetcher HTTP
    escrevendo no BigQuery. `from.Files`, `to.Files`, S3 e GCS entraram na
-   `v0.20.0` e ainda não têm quem os use de verdade — e a classe 3.6 diz que o
+   `v0.20.0` e ainda não têm quem os use de verdade — e a classe 3.7 diz que o
    que não é exercitado é onde o defeito mora.
+4. **A autenticação**, que é o único trabalho grande ainda por fazer:
+   [`plan/2026-09-04-sdk-http-autenticacao.md`](plan/2026-09-04-sdk-http-autenticacao.md).
+   Quatro dos 24 vendors do consumidor precisam dela, e cada um a reimplementa.
 
 4. **O `Execute` instala o logger padrão do processo.** Uma biblioteca que
    chama `slog.SetDefault` decide pelo programa que a importa. Hoje é
