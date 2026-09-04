@@ -52,14 +52,41 @@ type HTTP struct {
 	// NoHeader, for CSV: treat every row as data with field_N keys.
 	NoHeader bool
 
-	// Pagination. At most one strategy applies, checked in this order:
-	// FollowLinks, CursorKey, OffsetKey. MaxPages caps the walk.
+	// Pagination. Exactly one strategy may be set; two is an error, because
+	// the loser would be a field that was set and does nothing.
+	//
+	//	FollowLinks: true              // Link: <...>; rel="next"
+	//	CursorKey:   "next_cursor"     // the page carries the next cursor
+	//	PageKey:     "page"            // ?page=1, then 2, then 3
+	//	OffsetKey:   "offset"          // ?offset=0, then PageSize, then 2x
+	//
+	// MaxPages caps the walk.
 	FollowLinks bool
 	CursorKey   string
 	OffsetKey   string
 	DataKey     string
-	PageSize    int
 	MaxPages    int
+
+	// PageKey is the query parameter holding the page NUMBER. It advances by
+	// one page at a time and ignores PageSize.
+	//
+	// Before this existed the way to paginate by page number was OffsetKey
+	// with PageSize 1, which worked by accident: PageSize is the offset
+	// increment, so 1 made the "offset" count pages. Use PageKey.
+	PageKey string
+
+	// FirstPage numbers the first page, for PageKey. Zero means one, so a
+	// zero-indexed API says so in the URL instead -- "…?page=0" -- and a
+	// number already in the URL always wins over this field.
+	//
+	// One of the two always goes on the first request, so the server never
+	// picks a default of its own that the SDK would then guess wrong from:
+	// guessing wrong skips a whole page of rows in silence.
+	FirstPage int
+
+	// PageSize is how many rows OffsetKey advances by each page. Zero uses
+	// the number of rows the last page returned.
+	PageSize int
 }
 
 // Read satisfies core.Reader.
@@ -100,6 +127,8 @@ func (h HTTP) source(opt core.ReadOptions) core.Source {
 		NoHeader:      h.NoHeader,
 		FollowLinks:   h.FollowLinks,
 		CursorKey:     h.CursorKey,
+		PageKey:       h.PageKey,
+		FirstPage:     h.FirstPage,
 		OffsetKey:     h.OffsetKey,
 		DataKey:       h.DataKey,
 		PageSize:      h.PageSize,

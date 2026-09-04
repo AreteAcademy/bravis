@@ -32,9 +32,14 @@ e o driver.
 | `RetryConfig` | tentativas, backoff exponencial, jitter, `Retry-After` |
 | `FollowLinks` | RFC 8288, `rel="next"` |
 | `CursorKey` | cursor no corpo, devolvido como parâmetro de mesmo nome |
-| `OffsetKey` + `PageSize` | offset avançado a cada página |
+| `PageKey` + `FirstPage` | número de página, avança de um em um |
+| `OffsetKey` + `PageSize` | offset em linhas, avançado a cada página |
 | `MaxPages` | teto da caminhada; cursor repetido também para |
 | `DataKey` | desembrulha o array; **recusado junto de `Records`** |
+| `Header["Cookie"]` | semeia o jar; `Set-Cookie` renova por nome na página seguinte |
+
+**Duas estratégias de paginação juntas é erro**, não regra de precedência — a
+perdedora seria um campo escrito que não faz nada.
 
 **Todo 2xx** chega ao `Records`, `204` e `206` incluídos. Não-2xx é erro com
 status e corpo, com retry onde faz sentido.

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sort"
@@ -277,7 +278,7 @@ func (l *Loader) Load(ctx context.Context, envelopes ...core.Envelope) (*core.Lo
 	} else {
 		var bytesStaged int64
 		if result.Strategy == "gcs" {
-			bytesStaged, rowErrs, err = l.loadViaGCS(ctx, table, data)
+			bytesStaged, rowErrs, err = l.loadViaGCS(ctx, table, data, len(envelopes))
 		} else {
 			bytesStaged, rowErrs, err = l.loadInline(ctx, table, data)
 		}
@@ -310,6 +311,34 @@ func (l *Loader) Load(ctx context.Context, envelopes ...core.Envelope) (*core.Lo
 		"duration", result.Duration)
 
 	return result, nil
+}
+
+// stagingError says which bucket failed and what to do about it.
+//
+// It exists because the message used to be "close gcs writer: googleapi:
+// Error 404: The specified bucket does not exist" -- which names neither the
+// bucket it tried nor either way out. The rest of this SDK is careful here:
+// CheckColumns says "add them to Columns, or drop them in Transform". This
+// did not.
+//
+// The default bucket name also changed in v0.25.0, when the project was
+// renamed from bravis to brevis, so "does not exist" became something people
+// would hit without knowing what moved.
+func (l *Loader) stagingError(cause error, rows int) error {
+	where := fmt.Sprintf("gs://%s/%s", l.cfg.StagingBucket, l.cfg.StagingPrefix)
+
+	// GCS reports a missing bucket two ways depending on the call: a typed
+	// sentinel, or a plain 404 from the JSON API.
+	if !errors.Is(cause, storage.ErrBucketNotExist) && !isNotFound(cause) {
+		return fmt.Errorf("staging to %s: %w", where, cause)
+	}
+
+	return fmt.Errorf("staging to %s: that bucket does not exist. This load staged "+
+		"through GCS because it carries %d rows, above the InlineLimit of %d. Two ways "+
+		"out: create the bucket, or raise InlineLimit above %d so the rows load inline. "+
+		"If you did not name this bucket, it is the default: <project>-brevis-staging, "+
+		"renamed from -bravis- in v0.25.0. Set it with bigquery.Table.StagingBucket",
+		where, rows, l.cfg.ThresholdForGCS, rows)
 }
 
 // encodeRows turns the batch into the bytes that land.
@@ -455,7 +484,7 @@ func (l *Loader) loadInline(ctx context.Context, table *bigquery.Table, data []b
 	return int64(len(data)), nil, nil
 }
 
-func (l *Loader) loadViaGCS(ctx context.Context, table *bigquery.Table, data []byte) (int64, []string, error) {
+func (l *Loader) loadViaGCS(ctx context.Context, table *bigquery.Table, data []byte, rowCount int) (int64, []string, error) {
 	format, err := sourceFormat(l.cfg.Format)
 	if err != nil {
 		return 0, nil, err
@@ -470,11 +499,13 @@ func (l *Loader) loadViaGCS(ctx context.Context, table *bigquery.Table, data []b
 	if _, err := wc.Write(data); err != nil {
 		_ = wc.Close()
 		_ = obj.Delete(ctx)
-		return 0, nil, fmt.Errorf("write to gcs: %w", err)
+		return 0, nil, l.stagingError(err, rowCount)
 	}
+	// GCS reports a missing bucket on Close, not on Write: the object is only
+	// created when the writer flushes.
 	if err := wc.Close(); err != nil {
 		_ = obj.Delete(ctx)
-		return 0, nil, fmt.Errorf("close gcs writer: %w", err)
+		return 0, nil, l.stagingError(err, rowCount)
 	}
 
 	gcsRef := bigquery.NewGCSReference(fmt.Sprintf("gs://%s/%s", l.cfg.StagingBucket, objName))

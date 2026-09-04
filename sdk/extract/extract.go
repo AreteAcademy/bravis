@@ -14,6 +14,7 @@ import (
 	"math"
 	"math/rand"
 	"net/http"
+	"net/http/cookiejar"
 	"net/url"
 	"os"
 	"strconv"
@@ -72,6 +73,10 @@ func fetch(ctx context.Context, source core.Source, records core.Reading) (iter.
 			"instead: sdk.ArrayAt(%q)(doc)", source.DataKey)
 	}
 
+	if err := checkPagination(source); err != nil {
+		return nil, err
+	}
+
 	if source.Method == "" {
 		source.Method = "GET"
 	}
@@ -101,6 +106,11 @@ func fetch(ctx context.Context, source core.Source, records core.Reading) (iter.
 		source.MaxPages = defaultMaxPages
 	}
 
+	client, err := newClient(source)
+	if err != nil {
+		return nil, err
+	}
+
 	ctxTotal, cancelTotal := context.WithTimeout(ctx, source.TotalTimeout)
 
 	// Counted from the first byte of the first page, which is fetched before
@@ -110,7 +120,17 @@ func fetch(ctx context.Context, source core.Source, records core.Reading) (iter.
 	// The first page is fetched eagerly so that an unreachable host, a 404 or
 	// a guard rejection surfaces as an error from CSV/JSON/NDJSON/XML rather
 	// than as the first item of a sequence the caller has to drain to notice.
-	first, err := fetchPage(ctxTotal, source, records, source.URL, &bytesRead)
+	firstURL := source.URL
+	if source.PageKey != "" {
+		numbered, err := firstPageURL(source)
+		if err != nil {
+			cancelTotal()
+			return nil, err
+		}
+		firstURL = numbered
+	}
+
+	first, err := fetchPage(ctxTotal, client, source, records, firstURL, &bytesRead)
 	if err != nil {
 		cancelTotal()
 		return nil, err
@@ -203,7 +223,7 @@ func fetch(ctx context.Context, source core.Source, records core.Reading) (iter.
 			}
 			seen[next] = true
 
-			page, err = fetchPage(ctxTotal, source, records, next, &bytesRead)
+			page, err = fetchPage(ctxTotal, client, source, records, next, &bytesRead)
 			if err != nil {
 				yield(core.Envelope{}, fmt.Errorf("page %d: %w", pages+1, err))
 				return
@@ -240,7 +260,8 @@ type page struct {
 	body     io.ReadCloser
 	linkNext string // rel="next" from the Link header
 	cursor   string // value at source.CursorKey, when cursor paging
-	offset   int    // offset this page was fetched at, for offset paging
+	offset   int    // row offset this page was fetched at, for offset paging
+	number   int    // page number this page was fetched at, for page paging
 	release  func()
 
 	// Set when the Reading answered for this page. The records then come
@@ -321,9 +342,16 @@ func nextPageURL(source core.Source, p *page, emitted int) (string, error) {
 		}
 		return withQuery(source.URL, source.CursorKey, p.cursor)
 
+	case source.PageKey != "":
+		// An empty page is the only reliable end-of-data signal here; a short
+		// page can just be a partially filled one.
+		if emitted == 0 {
+			return "", nil
+		}
+		return withQuery(source.URL, source.PageKey, strconv.Itoa(p.number+1))
+
 	case source.OffsetKey != "":
-		// An empty page is the only reliable end-of-data signal for offset
-		// paging; a short page can just be a partially filled one.
+		// Same reasoning as above.
 		if emitted == 0 {
 			return "", nil
 		}
@@ -335,6 +363,96 @@ func nextPageURL(source core.Source, p *page, emitted int) (string, error) {
 	}
 
 	return "", nil
+}
+
+// checkPagination refuses two strategies at once. The alternative -- a
+// documented precedence order -- leaves the loser as a field that was set and
+// does nothing, which is the failure mode this SDK keeps finding in itself.
+func checkPagination(source core.Source) error {
+	set := []string{}
+	if source.FollowLinks {
+		set = append(set, "FollowLinks")
+	}
+	if source.CursorKey != "" {
+		set = append(set, "CursorKey")
+	}
+	if source.PageKey != "" {
+		set = append(set, "PageKey")
+	}
+	if source.OffsetKey != "" {
+		set = append(set, "OffsetKey")
+	}
+	if len(set) > 1 {
+		return fmt.Errorf("pagination: %s are all set, and only one can apply -- "+
+			"the others would be read and ignored. Keep the one this API uses",
+			strings.Join(set, ", "))
+	}
+
+	if source.PageSize != 0 && source.OffsetKey == "" {
+		return fmt.Errorf("pagination: PageSize is the number of rows OffsetKey advances " +
+			"by, and OffsetKey is not set. For page numbers use PageKey, which advances " +
+			"by one page and ignores PageSize")
+	}
+	if source.FirstPage != 0 && source.PageKey == "" {
+		return fmt.Errorf("pagination: FirstPage numbers the pages of PageKey, and " +
+			"PageKey is not set")
+	}
+	return nil
+}
+
+// newClient builds the one client the whole walk shares.
+//
+// It carries a cookie jar, which is why it is built once instead of per
+// request: a session cookie the API refreshes mid-walk has to survive to the
+// next page. Before this, every consumer that needed cookies wrote the same
+// merge by hand -- and the same bug, because a NextAuth session cookie is a
+// JWT whose base64 padding is "=", so splitting name=value on every "=" cuts
+// the token and the API answers 401 rather than a parse error.
+//
+// The jar has no public suffix list. A walk talks to one host, and pulling
+// x/net in as a direct dependency to police cookie domains would risk the
+// go.mod floor this SDK promises (1.23) on the next tidy.
+func newClient(source core.Source) (*http.Client, error) {
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		return nil, fmt.Errorf("cookie jar: %w", err)
+	}
+
+	// A Cookie header written by the caller seeds the jar, so that from here
+	// on there is exactly one place a cookie lives and a refreshed one
+	// replaces the old by name.
+	if raw := http.Header(source.Header).Get("Cookie"); raw != "" {
+		u, err := url.Parse(source.URL)
+		if err != nil {
+			return nil, fmt.Errorf("parse url: %w", err)
+		}
+		cookies, err := http.ParseCookie(raw)
+		if err != nil {
+			return nil, fmt.Errorf("Header[\"Cookie\"] is not a valid cookie header: %w", err)
+		}
+		jar.SetCookies(u, cookies)
+	}
+
+	return &http.Client{Timeout: source.Timeout, Jar: jar}, nil
+}
+
+// firstPageURL puts the page number on the very first request. Letting the
+// server pick its own default would leave us guessing whether it was 0 or 1,
+// and guessing wrong skips a whole page of rows in silence.
+func firstPageURL(source core.Source) (string, error) {
+	u, err := url.Parse(source.URL)
+	if err != nil {
+		return "", fmt.Errorf("parse url: %w", err)
+	}
+	if u.Query().Has(source.PageKey) {
+		return source.URL, nil // the caller numbered it; that number wins
+	}
+
+	first := source.FirstPage
+	if first == 0 {
+		first = 1
+	}
+	return withQuery(source.URL, source.PageKey, strconv.Itoa(first))
 }
 
 func withQuery(rawURL, key, value string) (string, error) {
@@ -351,7 +469,7 @@ func withQuery(rawURL, key, value string) (string, error) {
 // fetchPage performs one request, with retry, and prepares the response for
 // decoding. Everything that needs the whole body -- the guard, cursor paging
 // -- buffers it here so the streaming path below stays streaming.
-func fetchPage(ctxTotal context.Context, source core.Source, records core.Reading, pageURL string, bytesRead *int64) (*page, error) {
+func fetchPage(ctxTotal context.Context, client *http.Client, source core.Source, records core.Reading, pageURL string, bytesRead *int64) (*page, error) {
 	var resp *http.Response
 	// release cancels the context of the attempt that produced resp. The body
 	// is still streaming under that context, so it must stay alive until the
@@ -371,8 +489,6 @@ func fetchPage(ctxTotal context.Context, source core.Source, records core.Readin
 
 		ctxAttempt, cancelAttempt := context.WithTimeout(ctxTotal, source.Timeout)
 
-		client := &http.Client{Timeout: source.Timeout}
-
 		req, err := http.NewRequestWithContext(ctxAttempt, source.Method, pageURL, source.Body)
 		if err != nil {
 			cancelAttempt()
@@ -380,8 +496,13 @@ func fetchPage(ctxTotal context.Context, source core.Source, records core.Readin
 		}
 
 		if source.Header != nil {
-			req.Header = source.Header
+			req.Header = http.Header(source.Header).Clone()
 		}
+		// The jar is the single place cookies live, so a Cookie header the
+		// caller wrote is seeded into it and dropped here. Keeping both would
+		// send two values for the same name once the server refreshed it, and
+		// which one the server honours is anyone's guess.
+		req.Header.Del("Cookie")
 
 		resp, err = client.Do(req)
 
@@ -434,6 +555,9 @@ func fetchPage(ctxTotal context.Context, source core.Source, records core.Readin
 	}
 	if source.OffsetKey != "" {
 		p.offset = currentOffset(resp.Request, source.OffsetKey)
+	}
+	if source.PageKey != "" {
+		p.number = currentOffset(resp.Request, source.PageKey)
 	}
 
 	// Anything that must see the whole body reads it here and hands the

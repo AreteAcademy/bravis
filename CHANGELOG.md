@@ -8,6 +8,59 @@ A tag de um módulo aninhado leva o prefixo do diretório: `sdk/v0.2.1`.
 
 ---
 
+## [0.26.0] — 2026-09-04
+
+Três coisas que o `from.HTTP` deveria absorver e o consumidor estava escrevendo
+à mão, mais o conserto de um erro que a `v0.25.0` tornou comum.
+
+### Adicionado
+
+**`PageKey` e `FirstPage`: paginação por número de página.** Antes, quem paginava
+com `?page=1,2,3` escrevia `OffsetKey: "page"` com `PageSize: 1` — funcionava
+porque `PageSize` é o incremento do offset, e um incremento de 1 acaba contando
+páginas. Era um truque em cima de um nome que já mentia.
+
+```go
+from.HTTP{URL: url, PageKey: "page", DataKey: "results"}
+```
+
+O número vai já na **primeira** requisição, para o servidor não escolher um
+padrão que o SDK depois erraria ao adivinhar — errar aqui pula uma página inteira
+em silêncio. `FirstPage` move o começo, e um número que já esteja na URL vence:
+é assim que uma API indexada em zero se declara (`…?page=0`).
+
+**Cookies atravessam a caminhada.** Passe o primeiro em `Header["Cookie"]` e o
+SDK guarda num jar dali em diante: um `Set-Cookie` que renova a sessão no meio
+da paginação substitui por nome, e a página seguinte já sai com o valor novo.
+
+O header é lido uma vez e removido das requisições, então o mesmo nome nunca vai
+duas vezes com dois valores. E é parseado com `http.ParseCookie`, que divide no
+**primeiro** `=` — um cookie de sessão JWT termina em `=` de padding, e cortá-lo
+devolve `401`, não erro de parsing.
+
+Isso apaga o `cookie.go` de quem escrevia essa junção à mão.
+
+### Mudado
+
+**Duas estratégias de paginação juntas agora é erro.** Eram quatro campos com uma
+ordem de precedência documentada, o que deixava a perdedora como um campo escrito
+que não faz nada. `PageSize` sem `OffsetKey` e `FirstPage` sem `PageKey` também
+falham, apontando para o campo certo.
+
+**O erro de staging diz o que fazer.** Era isto:
+
+```
+close gcs writer: googleapi: Error 404: The specified bucket does not exist
+```
+
+Não dizia qual bucket, nem que o padrão mudou de nome na `v0.25.0`, nem as duas
+saídas. Agora diz as quatro coisas: o `gs://` que tentou, quantas linhas o
+fizeram estagiar, o `InlineLimit` que decidiu, e que ou se cria o bucket ou se
+levanta o limite. Uma falha que **não** seja bucket ausente continua sendo
+envolvida como veio, sem conselho inventado.
+
+---
+
 ## [0.25.0] — 2026-09-04
 
 **BREAKING, e é a maior de todas: o projeto mudou de nome.** `bravis` → `brevis`,

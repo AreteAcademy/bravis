@@ -385,9 +385,10 @@ lines, _ := extract.CSV(ctx, sdk.Source{URL: url, NoHeader: true})
 
 ## Pagination
 
-Three strategies, picked by which field you set. All of them cap out at
-`MaxPages` (1000 by default) so a server that always advertises a next page
-cannot spin forever.
+Four strategies, picked by which field you set. Setting two is an error, not a
+precedence rule: the loser would be a field you wrote that does nothing. All of
+them cap out at `MaxPages` (1000 by default) so a server that always advertises
+a next page cannot spin forever.
 
 ```go
 // Link: <...>; rel="next"
@@ -397,9 +398,43 @@ extract.NDJSON(ctx, sdk.Source{URL: url, FollowLinks: true})
 // query parameter of the same name, and DataKey says where the rows live.
 extract.JSON(ctx, sdk.Source{URL: url, CursorKey: "next_page", DataKey: "results"})
 
+// ?page=1, ?page=2, ... until a page comes back empty
+extract.JSON(ctx, sdk.Source{URL: url, PageKey: "page", DataKey: "results"})
+
 // ?offset=0, ?offset=100, ... until a page comes back empty
 extract.NDJSON(ctx, sdk.Source{URL: url, OffsetKey: "offset", PageSize: 100})
 ```
+
+`PageKey` counts pages; `OffsetKey` counts rows, and `PageSize` is how many
+rows it skips ahead each time. Before `PageKey` existed the way to paginate by
+page number was `OffsetKey: "page"` with `PageSize: 1`, which worked by
+accident: the "offset" was counting pages because the step happened to be one.
+That still runs — the SDK cannot tell it from a genuine offset of one row — but
+it breaks the moment someone touches the page size. Use `PageKey`.
+
+The first request always carries the page number, so the server never picks a
+default the SDK would then guess wrong from. `FirstPage` moves the start, and a
+number already in the URL wins over it — which is how a zero-indexed API says
+so: `…?page=0`.
+
+## Cookies
+
+A session cookie survives the whole walk. Hand the first one over in `Header`
+and the SDK keeps it in a jar from there, so a `Set-Cookie` that refreshes the
+session mid-pagination replaces it by name and page two goes out with the new
+value.
+
+```go
+sdk.Source{
+    URL:    url,
+    Header: http.Header{"Cookie": {"session-token=" + os.Getenv("APP_SESSION")}},
+}
+```
+
+The `Cookie` header is read once and then dropped from the requests, so the
+same name is never sent twice with two different values. It is parsed with
+`http.ParseCookie`, which splits on the first `=` — a JWT session cookie ends
+in `=` padding, and cutting it produces a `401` rather than a parse error.
 
 ## Rate limiting
 

@@ -259,24 +259,45 @@ type Source struct {
 	// default uses the first row as column names. Ignored for other formats.
 	NoHeader bool
 
-	// Pagination. At most one strategy applies, checked in this order:
+	// Pagination. Exactly one strategy may be set; setting two is an error
+	// rather than a silent precedence rule, because the loser would be a
+	// field that does nothing.
 	//
 	//   FollowLinks  follow RFC 8288 Link headers with rel="next"
 	//   CursorKey    name of the field in each JSON page holding the next
 	//                cursor; it is sent back as a query parameter of the
 	//                same name. Requires the page to be a JSON object.
-	//   OffsetKey    query parameter advanced by PageSize each page,
-	//                stopping at the first page that yields no rows
+	//   PageKey      query parameter holding the page NUMBER, incremented
+	//                by one each page from FirstPage
+	//   OffsetKey    query parameter holding the ROW OFFSET, advanced by
+	//                PageSize rows each page
+	//
+	// PageKey and OffsetKey both stop at the first page that yields no rows;
+	// a short page is not an end signal, because it can be a partially
+	// filled one.
 	//
 	// DataKey names the field holding the rows when a paginated response
 	// wraps them: {"results": [...], "next": "..."} needs DataKey
 	// "results". Without it the whole page object becomes one Envelope.
 	FollowLinks bool
 	CursorKey   string
+	PageKey     string
 	OffsetKey   string
 	DataKey     string
-	PageSize    int
-	MaxPages    int // safety stop on runaway pagination; 0 means 1000
+
+	// FirstPage is the number the first page carries, for PageKey. Zero
+	// means one; a zero-indexed API puts "?page=0" in the URL, and a number
+	// already in the URL wins over this field. Either way the first request
+	// carries a number, so the server never picks a default of its own that
+	// we would then guess wrong from.
+	FirstPage int
+
+	// PageSize is the number of rows OffsetKey advances by each page. Zero
+	// uses the row count of the page just read. It has no effect on PageKey,
+	// where pages advance by one regardless of how many rows they carry.
+	PageSize int
+
+	MaxPages int // safety stop on runaway pagination; 0 means 1000
 }
 
 // LoadOption is a functional option for load.
