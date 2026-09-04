@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AreteAcademy/bravis/sdk/from"
 	core "github.com/AreteAcademy/bravis/sdk/internal/core"
 )
 
@@ -220,9 +221,10 @@ func TestExtractExpandeEMapeia(t *testing.T) {
 	srv := openMeteoServer(t)
 	defer srv.Close()
 
-	data, err := Extract(context.Background(), Source{
-		URL: srv.URL,
-	}, records(ParallelArrays("hourly", "time", "temperature_2m")))
+	data, err := Extract(context.Background(), Source{From: from.HTTP{
+		URL:     srv.URL,
+		Records: records(ParallelArrays("hourly", "time", "temperature_2m")),
+	}})
 	if err != nil {
 		t.Fatalf("Extract: %v", err)
 	}
@@ -271,8 +273,10 @@ func TestExtractRecordsRecusaAntesDeDecodificar(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := Extract(context.Background(), Source{URL: srv.URL},
-		func(r Response) ([]any, error) { return nil, RejectIf("error")(r) })
+	_, err := Extract(context.Background(), Source{From: from.HTTP{
+		URL:     srv.URL,
+		Records: func(r Response) ([]any, error) { return nil, RejectIf("error")(r) },
+	}})
 	if err == nil {
 		t.Fatal("Records should have rejected a 200 carrying an error")
 	}
@@ -286,8 +290,10 @@ func TestExtractRecordsRecusaAntesDeDecodificar(t *testing.T) {
 
 func TestErroDeFonteEmHostInexistente(t *testing.T) {
 	_, err := Extract(context.Background(), Source{
-		URL:         "http://127.0.0.1:1/nada",
-		RetryConfig: &RetryConfig{MaxAttempts: 1},
+		From: from.HTTP{
+			URL:         "http://127.0.0.1:1/nada",
+			RetryConfig: &RetryConfig{MaxAttempts: 1},
+		},
 	})
 	if err == nil {
 		t.Fatal("expected an error")
@@ -308,7 +314,7 @@ func TestErroDeFonteCarregaStatus(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := Extract(context.Background(), Source{URL: srv.URL})
+	_, err := Extract(context.Background(), Source{From: from.HTTP{URL: srv.URL}})
 	var source *SourceError
 	if !errors.As(err, &source) {
 		t.Fatalf("expected *SourceError, got %T", err)
@@ -322,9 +328,10 @@ func TestErroDeFormatoEmChaveAusente(t *testing.T) {
 	srv := openMeteoServer(t)
 	defer srv.Close()
 
-	data, err := Extract(context.Background(), Source{
-		URL: srv.URL,
-	}, records(ParallelArrays("hourly", "time", "temperature_2m")))
+	data, err := Extract(context.Background(), Source{From: from.HTTP{
+		URL:     srv.URL,
+		Records: records(ParallelArrays("hourly", "time", "temperature_2m")),
+	}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -347,159 +354,6 @@ func TestErroDeFormatoEmChaveAusente(t *testing.T) {
 
 // Provenance is required exactly when the SDK is going to stamp an id, and
 // not otherwise.
-func TestDestinoExigeIdentidadeSomenteComMetadata(t *testing.T) {
-	t.Setenv(EnvProject, "a-project")
-
-	cases := []struct {
-		name     string
-		target   Target
-		expected string
-	}{
-		{"no provider", Target{Metadata: &Metadata{Entity: "e", Key: Key("id")}}, "Provider"},
-		{"no entity", Target{Metadata: &Metadata{Provider: "p", Key: Key("id")}}, "Entity"},
-		{"no key", Target{Metadata: &Metadata{Provider: "p", Entity: "e"}}, "Key"},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			_, _, err := c.target.resolve()
-			if err == nil {
-				t.Fatalf("expected an error naming %s", c.expected)
-			}
-			if !strings.Contains(err.Error(), c.expected) {
-				t.Errorf("the error should name %s: %v", c.expected, err)
-			}
-		})
-	}
-}
-
-// The other half, and the point of the change: with the flag off none of the
-// three is needed, because the SDK has nothing to build out of them.
-func TestDestinoSemMetadataNaoExigeProveniencia(t *testing.T) {
-	t.Setenv(EnvProject, "a-project")
-
-	cfg, _, err := Target{Table: "minha_tabela"}.resolve()
-	if err != nil {
-		t.Fatalf("a load that adds no metadata needs no provenance: %v", err)
-	}
-	if cfg.Table != "minha_tabela" {
-		t.Errorf("Table = %q", cfg.Table)
-	}
-}
-
-// Without Provider and Entity there is no default name to fall back on, and
-// "vendors__s" is two missing values pretending to be one.
-func TestDestinoSemNomeDeTabelaFalaClaro(t *testing.T) {
-	t.Setenv(EnvProject, "a-project")
-
-	_, _, err := Target{}.resolve()
-	if err == nil {
-		t.Fatal("a target with no table and no provider must not resolve")
-	}
-	if !strings.Contains(err.Error(), "table not set") {
-		t.Errorf("the error should say the table is missing: %v", err)
-	}
-}
-
-func TestTargetPrecedenceAndOrigin(t *testing.T) {
-	t.Setenv(EnvProject, "from-the-environment")
-	t.Setenv(EnvDataset, "dataset-from-the-environment")
-
-	// 1. explicit beats the environment
-	cfg, origins, err := Target{
-		Metadata: &Metadata{Provider: "acme", Entity: "tx", Key: Key("id")},
-		Project:  "explicito",
-	}.resolve()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cfg.ProjectID != "explicito" {
-		t.Errorf("explicit must beat the environment: %s", cfg.ProjectID)
-	}
-	if origins["project"].from != "explicit" {
-		t.Errorf("project origin = %q", origins["project"].from)
-	}
-
-	// 2. the environment beats the default
-	if cfg.Dataset != "dataset-from-the-environment" {
-		t.Errorf("the environment must beat the default: %s", cfg.Dataset)
-	}
-	if origins["dataset"].from != EnvDataset {
-		t.Errorf("dataset origin = %q", origins["dataset"].from)
-	}
-
-	// 3. the default when there is neither
-	if cfg.Table != "vendors_acme_txs" {
-		t.Errorf("default table name = %q", cfg.Table)
-	}
-	if origins["table"].from != "default" {
-		t.Errorf("table origin = %q", origins["table"].from)
-	}
-}
-
-func TestDestinoSemProjetoErra(t *testing.T) {
-	t.Setenv(EnvProject, "")
-	_, _, err := Target{Metadata: &Metadata{Provider: "p", Entity: "e", Key: Key("id")}}.resolve()
-	if err == nil {
-		t.Fatal("no project and no environment must be an error")
-	}
-	if !strings.Contains(err.Error(), EnvProject) {
-		t.Errorf("the error must say which variable to set: %v", err)
-	}
-}
-
-func TestTargetDoesNotCreateTablesUnasked(t *testing.T) {
-	t.Setenv(EnvProject, "p")
-
-	// Nothing runs DDL against a warehouse without being asked. The zero
-	// value creates nothing; CreateTable is the whole opt-in.
-	cfg, _, err := Target{Metadata: &Metadata{Provider: "a", Entity: "b", Key: Key("id")}}.resolve()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cfg.CreateTable {
-		t.Errorf("nil must not create a table: %+v", cfg)
-	}
-
-	asked, _, err := Target{
-		Metadata: &Metadata{Provider: "a", Entity: "b", Key: Key("id")}, CreateTable: Bool(true),
-	}.resolve()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !asked.CreateTable {
-		t.Errorf("CreateTable did not reach the loader: %+v", asked)
-	}
-}
-
-func TestTargetCarriesTableOptions(t *testing.T) {
-	t.Setenv(EnvProject, "p")
-
-	cfg, _, err := Target{
-		Metadata:               &Metadata{Provider: "open_meteo", Entity: "hourly", Key: Key("id")},
-		CreateTable:            Bool(true),
-		PartitionExpiration:    90 * 24 * time.Hour,
-		RequirePartitionFilter: true,
-		CreateSQL:              "CREATE TABLE x (a INT64)",
-	}.resolve()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if cfg.PartitionExpiration != 90*24*time.Hour {
-		t.Errorf("PartitionExpiration = %v", cfg.PartitionExpiration)
-	}
-	if !cfg.RequirePartitionFilter {
-		t.Error("RequirePartitionFilter did not reach the loader")
-	}
-	if cfg.CreateSQL == "" {
-		t.Error("CreateSQL did not reach the loader")
-	}
-	// Provider and Entity travel so the created table can be labelled.
-	if cfg.Provider != "open_meteo" || cfg.Entity != "hourly" {
-		t.Errorf("provider/entity did not reach the loader: %+v", cfg)
-	}
-}
-
 func TestSomenteFiltraCamposVolateis(t *testing.T) {
 	// generationtime_ms changes on every call: keeping it would make the same
 	// reading write a different payload on every run.
@@ -540,87 +394,41 @@ func TestSourceDriverDefaultsToHTTP(t *testing.T) {
 	defer srv.Close()
 
 	// An empty Driver must not be an error: the common case sets nothing.
-	if _, err := Extract(context.Background(), Source{URL: srv.URL}); err != nil {
+	if _, err := Extract(context.Background(), Source{From: from.HTTP{URL: srv.URL}}); err != nil {
 		t.Fatalf("an empty Driver should default to HTTP: %v", err)
 	}
-	if _, err := Extract(context.Background(), Source{URL: srv.URL, Driver: DriverHTTP}); err != nil {
+	if _, err := Extract(context.Background(), Source{From: from.HTTP{URL: srv.URL}}); err != nil {
 		t.Fatalf("DriverHTTP: %v", err)
 	}
 }
 
-func TestSourceRejectsUnimplementedDriver(t *testing.T) {
-	// An API that accepts a driver it does not have would silently fetch over
-	// HTTP anyway -- the same class of lie as a Format that is ignored.
-	_, err := Extract(context.Background(), Source{URL: "http://x", Driver: "s3"})
+// An unimplemented source used to be a runtime error on Source.Driver. Now
+// the driver is a value, so there is no field to write a wrong name into --
+// it is a compile error, which is strictly better. What can still go wrong is
+// forgetting the driver entirely.
+func TestSourceRefusesNoDriver(t *testing.T) {
+	_, err := Extract(context.Background(), Source{})
 	if err == nil {
-		t.Fatal("an unimplemented driver must be refused")
+		t.Fatal("a Source with no From has nowhere to read from")
 	}
-	if !strings.Contains(err.Error(), "not implemented") || !strings.Contains(err.Error(), "http") {
-		t.Errorf("the error must name what is supported: %v", err)
-	}
-}
-
-func TestTargetDriverDefaultsToBigQuery(t *testing.T) {
-	t.Setenv(EnvProject, "p")
-
-	cfg, _, err := Target{Metadata: &Metadata{Provider: "a", Entity: "b", Key: Key("id")}}.resolve()
-	if err != nil {
-		t.Fatalf("an empty Driver should default to BigQuery: %v", err)
-	}
-	if cfg.Driver != DriverBigQuery {
-		t.Errorf("Driver = %q, expected %q", cfg.Driver, DriverBigQuery)
+	for _, want := range []string{"Source.From", "from.HTTP"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("the error should say what to pass (%q): %v", want, err)
+		}
 	}
 }
 
-func TestTargetRejectsUnimplementedDriver(t *testing.T) {
-	t.Setenv(EnvProject, "p")
-
-	_, _, err := Target{
-		Metadata: &Metadata{Provider: "a", Entity: "b", Key: Key("id")}, Driver: "postgres",
-	}.resolve()
+func TestTargetRefusesNoDriver(t *testing.T) {
+	err := Target{}.validate()
 	if err == nil {
-		t.Fatal("an unimplemented driver must be refused")
+		t.Fatal("a Target with no To has nowhere to write to")
 	}
-	if !strings.Contains(err.Error(), "not implemented") {
-		t.Errorf("the error must say so: %v", err)
-	}
-}
-
-func TestDriverIsNotProvider(t *testing.T) {
-	t.Setenv(EnvProject, "p")
-
-	// Driver is which system receives the rows; Provider is which vendor the
-	// data came from. Only Provider feeds ingestion_id -- confusing the two
-	// would silently change every id in the base.
-	cfg, _, err := Target{
-		Metadata: &Metadata{Provider: "open_meteo", Entity: "hourly", Key: Key("id")},
-		Driver:   DriverBigQuery,
-	}.resolve()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cfg.Driver != DriverBigQuery {
-		t.Errorf("Driver = %q", cfg.Driver)
-	}
-
-	env := Envelope{Provider: "open_meteo", Entity: "hourly", SourceKey: "k", RecordTS: "t"}
-	withDriver, err := env.IngestionID()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// The same record, loaded through a different driver, must keep its id.
-	withoutDriver := Envelope{Provider: "open_meteo", Entity: "hourly", SourceKey: "k", RecordTS: "t"}
-	id2, _ := withoutDriver.IngestionID()
-	if withDriver != id2 {
-		t.Error("the driver must not take part in ingestion_id")
+	for _, want := range []string{"Target.To", "to.BigQuery"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("the error should say what to pass (%q): %v", want, err)
+		}
 	}
 }
-
-// --- Result counters -------------------------------------------------------
-
-// A number in a result that is always zero is worse than no number, because
-// nobody doubts it. These lock Pages and Attempts to reality.
 
 func TestResultCountsPagesWalked(t *testing.T) {
 	hits := 0
@@ -634,7 +442,7 @@ func TestResultCountsPagesWalked(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	data, err := Extract(context.Background(), Source{URL: srv.URL, FollowLinks: true})
+	data, err := Extract(context.Background(), Source{From: from.HTTP{URL: srv.URL, FollowLinks: true}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -666,10 +474,12 @@ func TestResultCountsRetriedAttempts(t *testing.T) {
 	defer srv.Close()
 
 	data, err := Extract(context.Background(), Source{
-		URL: srv.URL,
-		RetryConfig: &RetryConfig{
-			MaxAttempts: 3, InitialBackoff: time.Millisecond,
-			MaxBackoff: time.Millisecond, JitterFraction: 0.1,
+		From: from.HTTP{
+			URL: srv.URL,
+			RetryConfig: &RetryConfig{
+				MaxAttempts: 3, InitialBackoff: time.Millisecond,
+				MaxBackoff: time.Millisecond, JitterFraction: 0.1,
+			},
 		},
 	})
 	if err != nil {
@@ -693,9 +503,10 @@ func TestTransformKeepsTheCounters(t *testing.T) {
 	srv := openMeteoServer(t)
 	defer srv.Close()
 
-	data, err := Extract(context.Background(), Source{
-		URL: srv.URL,
-	}, records(ParallelArrays("hourly", "time", "temperature_2m")))
+	data, err := Extract(context.Background(), Source{From: from.HTTP{
+		URL:     srv.URL,
+		Records: records(ParallelArrays("hourly", "time", "temperature_2m")),
+	}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -749,10 +560,12 @@ func TestDataStatsIsReadableWithoutLoad(t *testing.T) {
 	defer srv.Close()
 
 	data, err := Extract(context.Background(), Source{
-		URL: srv.URL,
-		RetryConfig: &RetryConfig{
-			MaxAttempts: 3, InitialBackoff: time.Millisecond,
-			MaxBackoff: time.Millisecond, JitterFraction: 0.1,
+		From: from.HTTP{
+			URL: srv.URL,
+			RetryConfig: &RetryConfig{
+				MaxAttempts: 3, InitialBackoff: time.Millisecond,
+				MaxBackoff: time.Millisecond, JitterFraction: 0.1,
+			},
 		},
 	})
 	if err != nil {
@@ -814,9 +627,10 @@ func TestSemMetadataOSDKNaoTocaNoPayload(t *testing.T) {
 	srv := openMeteoServer(t)
 	defer srv.Close()
 
-	data, err := Extract(context.Background(), Source{
-		URL: srv.URL,
-	}, records(ParallelArrays("hourly", "time", "temperature_2m")))
+	data, err := Extract(context.Background(), Source{From: from.HTTP{
+		URL:     srv.URL,
+		Records: records(ParallelArrays("hourly", "time", "temperature_2m")),
+	}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -826,7 +640,7 @@ func TestSemMetadataOSDKNaoTocaNoPayload(t *testing.T) {
 	// Metadata block: without it there are no selectors to run, and no way to
 	// hand the SDK one. The guarantee moved from a validation to the shape of
 	// the API, which is the stronger place for it.
-	envelopes, err := collect(data, Target{Table: "qualquer"})
+	envelopes, err := collect(data, Target{})
 	if err != nil {
 		t.Fatalf("collect: %v", err)
 	}
@@ -850,14 +664,15 @@ func TestSemMetadataOPayloadSaiComoEntrou(t *testing.T) {
 	srv := openMeteoServer(t)
 	defer srv.Close()
 
-	data, err := Extract(context.Background(), Source{
-		URL: srv.URL,
-	}, records(ParallelArrays("hourly", "time", "temperature_2m")))
+	data, err := Extract(context.Background(), Source{From: from.HTTP{
+		URL:     srv.URL,
+		Records: records(ParallelArrays("hourly", "time", "temperature_2m")),
+	}})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	envelopes, err := collect(data, Target{Table: "qualquer"})
+	envelopes, err := collect(data, Target{})
 	if err != nil {
 		t.Fatalf("collect: %v", err)
 	}
@@ -881,54 +696,19 @@ func TestSemMetadataOPayloadSaiComoEntrou(t *testing.T) {
 
 // AutoID is the whole declaration: nothing about the record goes into the id,
 // so nothing about the record has to be described.
-func TestAutoIDSozinhoBasta(t *testing.T) {
-	t.Setenv(EnvProject, "um-projeto")
-
-	cfg, _, err := Target{
-		Table:    "minha_tabela",
-		Metadata: &Metadata{AutoID: true},
-	}.resolve()
-	if err != nil {
-		t.Fatalf("AutoID não deveria pedir mais nada: %v", err)
-	}
-	if !cfg.Metadata || !cfg.AutoID {
-		t.Errorf("as flags não chegaram ao load: Metadata=%v AutoID=%v", cfg.Metadata, cfg.AutoID)
-	}
-}
-
-// A field that is set and never read is the defect this SDK keeps finding in
-// itself, so AutoID refuses provenance rather than ignoring it.
-func TestAutoIDRecusaProvenienciaQueNaoSeriaLida(t *testing.T) {
-	t.Setenv(EnvProject, "um-projeto")
-
-	_, _, err := Target{
-		Table:    "t",
-		Metadata: &Metadata{AutoID: true, Provider: "acme", Key: Key("id")},
-	}.resolve()
-	if err == nil {
-		t.Fatal("Provider e Key com AutoID não são lidos; aceitar isso é mentir sobre o id")
-	}
-	for _, want := range []string{"Provider", "Key", "AutoID"} {
-		if !strings.Contains(err.Error(), want) {
-			t.Errorf("o erro não menciona %q: %v", want, err)
-		}
-	}
-}
-
-// With AutoID nothing is read out of the record, so collect must not stamp
-// provenance either.
 func TestAutoIDNaoCarimbaProveniencia(t *testing.T) {
 	srv := openMeteoServer(t)
 	defer srv.Close()
 
-	data, err := Extract(context.Background(), Source{
-		URL: srv.URL,
-	}, records(ParallelArrays("hourly", "time", "temperature_2m")))
+	data, err := Extract(context.Background(), Source{From: from.HTTP{
+		URL:     srv.URL,
+		Records: records(ParallelArrays("hourly", "time", "temperature_2m")),
+	}})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	envelopes, err := collect(data, Target{Table: "t", Metadata: &Metadata{AutoID: true}})
+	envelopes, err := collect(data, Target{Metadata: &Metadata{AutoID: true}})
 	if err != nil {
 		t.Fatalf("collect: %v", err)
 	}
@@ -976,15 +756,17 @@ func TestTodoDoisXXChegaAoRecords(t *testing.T) {
 			defer srv.Close()
 
 			visto := 0
-			data, err := Extract(context.Background(), Source{URL: srv.URL},
-				func(r Response) ([]any, error) {
+			data, err := Extract(context.Background(), Source{From: from.HTTP{
+				URL: srv.URL,
+				Records: func(r Response) ([]any, error) {
 					visto = r.Status
 					if len(r.Bytes()) == 0 {
 						return nil, nil // janela vazia
 					}
 					var docs []any
 					return docs, r.JSON(&docs)
-				})
+				},
+			}})
 			if err != nil {
 				t.Fatalf("http %d derrubou a execução: %v", c.status, err)
 			}
@@ -1015,8 +797,10 @@ func TestNaoDoisXXContinuaFalhando(t *testing.T) {
 	defer srv.Close()
 
 	chamou := false
-	_, err := Extract(context.Background(), Source{URL: srv.URL},
-		func(Response) ([]any, error) { chamou = true; return nil, nil })
+	_, err := Extract(context.Background(), Source{From: from.HTTP{
+		URL:     srv.URL,
+		Records: func(Response) ([]any, error) { chamou = true; return nil, nil },
+	}})
 	if err == nil {
 		t.Fatal("um 404 tem de falhar")
 	}
@@ -1058,8 +842,10 @@ func TestRecusaSobreviveAoExtract(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := Extract(context.Background(), Source{URL: srv.URL},
-		func(r Response) ([]any, error) { return nil, RejectIf("error")(r) })
+	_, err := Extract(context.Background(), Source{From: from.HTTP{
+		URL:     srv.URL,
+		Records: func(r Response) ([]any, error) { return nil, RejectIf("error")(r) },
+	}})
 	if err == nil {
 		t.Fatal("a recusa não chegou")
 	}
@@ -1074,10 +860,11 @@ func TestRecusaSobreviveAoExtract(t *testing.T) {
 // Records e DataKey respondem a mesma pergunta, e com Records o DataKey
 // nunca seria lido -- um campo que não faz nada é pior que um erro.
 func TestRecordsComDataKeyERecusado(t *testing.T) {
-	_, err := Extract(context.Background(), Source{
+	_, err := Extract(context.Background(), Source{From: from.HTTP{
 		URL:     "http://exemplo.invalido",
 		DataKey: "results",
-	}, func(Response) ([]any, error) { return nil, nil })
+		Records: func(Response) ([]any, error) { return nil, nil },
+	}})
 	if err == nil {
 		t.Fatal("Records junto de DataKey deixaria o DataKey sem efeito")
 	}

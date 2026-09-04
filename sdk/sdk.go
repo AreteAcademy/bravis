@@ -34,9 +34,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/AreteAcademy/bravis/sdk/extract"
 	core "github.com/AreteAcademy/bravis/sdk/internal/core"
-	"github.com/AreteAcademy/bravis/sdk/load"
 )
 
 // Data is a stream of records with the statistics of the fetch that produced
@@ -73,53 +71,25 @@ func (d *Data) Stats() core.Stats {
 // The returned records carry only Payload. Provider, Entity, SourceKey and
 // RecordTS are provenance, and provenance is decided at Load, where Target
 // says how to derive it.
-func Extract(ctx context.Context, source Source, records ...Reading) (*Data, error) {
-	var reading Reading
-	switch len(records) {
-	case 0:
-	case 1:
-		reading = records[0]
-	default:
-		return nil, fmt.Errorf("Extract takes at most one Reading; got %d", len(records))
-	}
-
-	switch source.Driver {
-	case "", DriverHTTP:
-		source.Driver = DriverHTTP
-	default:
-		return nil, fmt.Errorf("extract driver %q is not implemented; use %q", source.Driver, DriverHTTP)
-	}
-
-	if source.Format == "" {
-		source.Format = FormatJSON
+func Extract(ctx context.Context, source Source) (*Data, error) {
+	if err := source.validate(); err != nil {
+		return nil, err
 	}
 
 	start := time.Now()
 
-	// Filled in as the walk proceeds, read once the stream is drained. Load
-	// copies it into Result, so Pages and Attempts describe what happened
-	// rather than being zeroes nobody doubts.
-	stats := &core.Stats{}
-	source.Stats = stats
-
-	var (
-		lines iter.Seq2[Envelope, error]
-		err   error
-	)
-	switch source.Format {
-	case FormatJSON:
-		lines, err = extract.JSON(ctx, source, reading)
-	case FormatNDJSON:
-		lines, err = extract.NDJSON(ctx, source, reading)
-	case FormatCSV:
-		lines, err = extract.CSV(ctx, source, reading)
-	case FormatXML:
-		lines, err = extract.XML(ctx, source, reading)
-	default:
-		return nil, fmt.Errorf("unknown format %q; use JSON, NDJSON, CSV or XML", source.Format)
+	// The counters are the driver's to fill, and Result copies them, so
+	// Pages and Attempts describe what happened rather than being zero.
+	stats := source.Stats
+	if stats == nil {
+		stats = &core.Stats{}
 	}
+	opt := source.options(runContextFromEnv())
+	opt.Stats = stats
+
+	lines, err := source.From.Read(ctx, opt)
 	if err != nil {
-		return nil, classifyExtract(source, err)
+		return nil, classifyExtract(source.From.Describe(), err)
 	}
 
 	return &Data{Records: lines, source: source, start: start, stats: stats}, nil
@@ -142,12 +112,9 @@ func loadWith(ctx context.Context, data *Data, target Target, run RunContext) (*
 	if data == nil {
 		return nil, fmt.Errorf("Load got nil data: call Extract first")
 	}
-
-	cfg, origins, err := target.resolveWith(run)
-	if err != nil {
+	if err := target.validate(); err != nil {
 		return nil, err
 	}
-	logResolution(ctx, origins)
 
 	envelopes, err := collect(data, target)
 	if err != nil {
@@ -159,7 +126,7 @@ func loadWith(ctx context.Context, data *Data, target Target, run RunContext) (*
 	res := &Result{
 		Records:     int64(len(envelopes)),
 		ExtractTime: time.Since(data.start),
-		Table:       fmt.Sprintf("%s.%s", cfg.Dataset, cfg.Table),
+		Table:       target.To.Describe(),
 	}
 	if data.stats != nil {
 		res.Pages = data.stats.Pages
@@ -173,13 +140,7 @@ func loadWith(ctx context.Context, data *Data, target Target, run RunContext) (*
 	}
 
 	loadStart := time.Now()
-
-	loader, err := load.New(ctx, cfg)
-	if err != nil {
-		return res, &TargetError{Table: res.Table, Cause: err}
-	}
-
-	lr, err := loader.Load(ctx, envelopes...)
+	lr, err := target.To.Write(ctx, envelopes, target.options(run))
 	res.LoadTime = time.Since(loadStart)
 	res.Duration = time.Since(start)
 
@@ -236,7 +197,7 @@ func collect(data *Data, target Target) ([]Envelope, error) {
 		key, err := meta.Key(env.Payload)
 		if err != nil {
 			return nil, &FormatError{
-				URL: redact(data.source.URL), Format: string(data.source.Format),
+				URL:  data.source.From.Describe(),
 				Line: i, Cause: fmt.Errorf("building source_key: %w", err),
 			}
 		}
@@ -244,7 +205,7 @@ func collect(data *Data, target Target) ([]Envelope, error) {
 		ts, err := when(env.Payload)
 		if err != nil {
 			return nil, &FormatError{
-				URL: redact(data.source.URL), Format: string(data.source.Format),
+				URL:  data.source.From.Describe(),
 				Line: i, Cause: fmt.Errorf("reading record_ts: %w", err),
 			}
 		}
@@ -274,21 +235,18 @@ func apply(res *Result, lr *core.LoadResult) {
 
 // classifyExtract turns a transport or decode failure into the typed error
 // that says which action it calls for.
-func classifyExtract(source Source, err error) error {
-	url := redact(source.URL)
-
-	attempts := 1
-	if source.RetryConfig != nil {
-		attempts = source.RetryConfig.MaxAttempts
-	}
-
+//
+// The driver no longer tells us how many attempts it spent -- Stats does, and
+// it is read where it is final. What stays here is the classification, which
+// is what decides whether the answer is "retry later" or "fix the mapping".
+func classifyExtract(source string, err error) error {
 	if status, ok := statusOf(err); ok {
-		return &SourceError{URL: url, Status: status, Attempts: attempts, Cause: err}
+		return &SourceError{URL: source, Status: status, Cause: err}
 	}
 	if isTransport(err) {
-		return &SourceError{URL: url, Attempts: attempts, Cause: err}
+		return &SourceError{URL: source, Cause: err}
 	}
-	return &FormatError{URL: url, Format: string(source.Format), Line: -1, Cause: err}
+	return &FormatError{URL: source, Line: -1, Cause: err}
 }
 
 var _ = slog.LevelInfo

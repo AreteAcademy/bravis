@@ -77,8 +77,7 @@ func Transform(data *Data, fns ...Transformer) *Data {
 				payload, skip, err := applyAll(fns, env.Payload)
 				if err != nil {
 					yield(Envelope{}, &FormatError{
-						URL: redact(source.URL), Format: string(source.Format),
-						Line: i, Cause: err,
+						URL: source.From.Describe(), Line: i, Cause: err,
 					})
 					return
 				}

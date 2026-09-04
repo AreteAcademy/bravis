@@ -13,6 +13,8 @@ import (
 	"log"
 
 	"github.com/AreteAcademy/bravis/sdk"
+	"github.com/AreteAcademy/bravis/sdk/from"
+	"github.com/AreteAcademy/bravis/sdk/to"
 )
 
 const (
@@ -32,20 +34,22 @@ func main() {
 
 		// Configuration, and only that.
 		Source: sdk.Source{
-			URL: "https://api.open-meteo.com/v1/forecast" +
-				"?latitude=-23.55&longitude=-46.63&hourly=temperature_2m",
-		},
+			From: from.HTTP{
+				URL: "https://api.open-meteo.com/v1/forecast" +
+					"?latitude=-23.55&longitude=-46.63&hourly=temperature_2m",
 
-		// What a response means.
-		Records: func(r sdk.Response) ([]any, error) {
-			if err := sdk.RejectIf("error")(r); err != nil {
-				return nil, err
-			}
-			doc, err := r.Object()
-			if err != nil {
-				return nil, err
-			}
-			return sdk.ParallelArrays("hourly", "time", "temperature_2m")(doc)
+				// What a response means.
+				Records: func(r sdk.Response) ([]any, error) {
+					if err := sdk.RejectIf("error")(r); err != nil {
+						return nil, err
+					}
+					doc, err := r.Object()
+					if err != nil {
+						return nil, err
+					}
+					return sdk.ParallelArrays("hourly", "time", "temperature_2m")(doc)
+				},
+			},
 		},
 
 		Transform: []sdk.Transformer{
@@ -66,6 +70,17 @@ func main() {
 		},
 
 		Target: sdk.Target{
+			To: to.BigQuery{
+				Project: project,
+				Dataset: "landing",
+				Table:   "vendors_" + provider + "_" + entity + "s",
+
+				// First run creates the table. Clustering has to be named:
+				// the SDK does not know what is in your payload.
+				CreateTable: sdk.Bool(true),
+				ClusterBy:   []string{"provider", "entity"},
+			},
+
 			// The table, in the order of its DDL:
 			//
 			//	CREATE TABLE ... (
@@ -95,12 +110,6 @@ func main() {
 				Key:      sdk.Key("source_key"),
 				When:     sdk.Field("source_key"),
 			},
-
-			// First run creates the table, inferring the columns from the
-			// rows above. Clustering has to be named: the SDK does not know
-			// what is in your payload.
-			CreateTable: sdk.Bool(true),
-			ClusterBy:   []string{"provider", "entity"},
 
 			// Re-running the same window is a no-op. Costs one scan of the
 			// destination per load, which is why it is never on by default.

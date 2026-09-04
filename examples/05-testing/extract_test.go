@@ -12,13 +12,13 @@ import (
 	"testing"
 
 	"github.com/AreteAcademy/bravis/sdk"
-	"github.com/AreteAcademy/bravis/sdk/extract"
+	"github.com/AreteAcademy/bravis/sdk/from"
 )
 
 // FetchAndProcess is the kind of function you would actually write: it uses
 // the SDK and hands each row to your own logic.
 func FetchAndProcess(ctx context.Context, url string, process func(sdk.Envelope) error) (int, error) {
-	lines, err := extract.CSV(ctx, sdk.Source{URL: url}, nil)
+	lines, err := from.HTTP{URL: url, Format: sdk.FormatCSV}.Read(ctx, sdk.ReadOptions{})
 	if err != nil {
 		return 0, err
 	}

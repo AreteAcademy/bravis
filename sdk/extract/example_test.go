@@ -6,15 +6,15 @@ import (
 	"log"
 	"time"
 
-	"github.com/AreteAcademy/bravis/sdk"
 	"github.com/AreteAcademy/bravis/sdk/extract"
+	core "github.com/AreteAcademy/bravis/sdk/internal/core"
 )
 
 // These compile as part of `go test`, so the snippets on pkg.go.dev cannot
 // drift away from the real API the way the README once did.
 
 func ExampleCSV() {
-	lines, err := extract.CSV(context.Background(), sdk.Source{
+	lines, err := extract.CSV(context.Background(), core.Source{
 		URL: "https://example.gov/data.csv",
 	}, nil)
 	if err != nil {
@@ -32,7 +32,7 @@ func ExampleCSV() {
 // The first CSV row names the columns by default. Pass NoHeader when the file
 // has none, and every line is keyed field_0, field_1, ...
 func ExampleCSV_noHeader() {
-	lines, _ := extract.CSV(context.Background(), sdk.Source{
+	lines, _ := extract.CSV(context.Background(), core.Source{
 		URL:      "https://example.gov/headerless.csv",
 		NoHeader: true,
 	}, nil)
@@ -44,11 +44,11 @@ func ExampleCSV_noHeader() {
 // Retry, guard and the two timeouts are what make an unattended pipeline
 // survive a flaky upstream.
 func ExampleNDJSON_resilient() {
-	source := sdk.Source{
+	source := core.Source{
 		URL:          "https://api.example.com/events",
 		Timeout:      15 * time.Second, // per attempt
 		TotalTimeout: 5 * time.Minute,  // whole walk
-		RetryConfig: &sdk.RetryConfig{
+		RetryConfig: &core.RetryConfig{
 			MaxAttempts:    5,
 			InitialBackoff: time.Second,
 			MaxBackoff:     30 * time.Second,
@@ -56,9 +56,9 @@ func ExampleNDJSON_resilient() {
 		},
 	}
 
-	reading := func(r sdk.Response) ([]any, error) {
+	reading := func(r core.Response) ([]any, error) {
 		if len(r.Bytes()) == 0 {
-			return nil, sdk.Reject("empty body on %d", r.Status)
+			return nil, core.Reject("empty body on %d", r.Status)
 		}
 		var docs []any
 		return docs, r.JSON(&docs)
@@ -71,7 +71,7 @@ func ExampleNDJSON_resilient() {
 
 // Follow RFC 8288 Link headers until the API stops offering rel="next".
 func ExampleNDJSON_pagination() {
-	lines, _ := extract.NDJSON(context.Background(), sdk.Source{
+	lines, _ := extract.NDJSON(context.Background(), core.Source{
 		URL:         "https://api.example.com/events",
 		FollowLinks: true,
 		MaxPages:    50,
@@ -83,7 +83,7 @@ func ExampleNDJSON_pagination() {
 // A wrapped page: {"results": [...], "next_page": "abc"}. The cursor goes
 // back as a query parameter of the same name; DataKey says where rows live.
 func ExampleJSON_cursor() {
-	lines, _ := extract.JSON(context.Background(), sdk.Source{
+	lines, _ := extract.JSON(context.Background(), core.Source{
 		URL:       "https://api.example.com/events",
 		CursorKey: "next_page",
 		DataKey:   "results",
@@ -94,7 +94,7 @@ func ExampleJSON_cursor() {
 
 // XML turns each repeated element under the root into one Envelope.
 func ExampleXML() {
-	lines, _ := extract.XML(context.Background(), sdk.Source{
+	lines, _ := extract.XML(context.Background(), core.Source{
 		URL: "https://example.gov/feed.xml",
 	}, nil)
 	for env := range lines {

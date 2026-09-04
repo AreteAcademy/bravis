@@ -24,6 +24,8 @@ import (
 	"time"
 
 	"github.com/AreteAcademy/bravis/sdk"
+	"github.com/AreteAcademy/bravis/sdk/from"
+	"github.com/AreteAcademy/bravis/sdk/to"
 )
 
 func main() {
@@ -31,28 +33,18 @@ func main() {
 		Name: "open_meteo/hourly",
 
 		Source: sdk.Source{
-			URL: "https://api.open-meteo.com/v1/forecast" +
-				"?latitude=-23.55&longitude=-46.63&hourly=temperature_2m",
-			Timeout: 15 * time.Second,
+			From: from.HTTP{
+				URL: "https://api.open-meteo.com/v1/forecast" +
+					"?latitude=-23.55&longitude=-46.63&hourly=temperature_2m",
+				Timeout: 15 * time.Second,
 
-			// One record per hour, with latitude, longitude and the other
-			// top-level scalars copied onto each.
-			// Open-Meteo refuses with 200 and {"error": true}, so the
-			// refusal has to be read here -- the response carries zero
-			// records, and a per-record check would never see it.
-		},
+				// One record per hour, with latitude, longitude and the other
+				// top-level scalars copied onto each.
+				// Open-Meteo refuses with 200 and {"error": true}, so the
+				// refusal has to be read here -- the response carries zero
+				// records, and a per-record check would never see it.
 
-		// What a response means.
-		Records: func(r sdk.Response) ([]any, error) {
-			doc, err := r.Object()
-			if err != nil {
-				return nil, err
-			}
-			if bad, _ := doc["error"].(bool); bad {
-				return nil, sdk.Reject("open-meteo refused: %v", doc["reason"])
-			}
-			// One record per hour, with the top-level scalars copied on.
-			return sdk.ParallelArrays("hourly", "time", "temperature_2m")(doc)
+			},
 		},
 
 		// Runs on every record, in order, before anything is written.
@@ -90,6 +82,7 @@ func main() {
 		},
 
 		Target: sdk.Target{
+			To: to.BigQuery{},
 			Metadata: &sdk.Metadata{
 				Provider: "open_meteo",
 				Entity:   "hourly_temperature",

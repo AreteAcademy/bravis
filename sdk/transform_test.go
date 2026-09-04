@@ -9,6 +9,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/AreteAcademy/bravis/sdk/from"
 )
 
 // perto compares floats. Writing 14.1*9/5+32 as a literal would be evaluated
@@ -39,8 +41,10 @@ func meteoServer(t *testing.T) *httptest.Server {
 
 func meteoRecords(t *testing.T, srv *httptest.Server) *Data {
 	t.Helper()
-	data, err := Extract(context.Background(), Source{URL: srv.URL},
-		records(ParallelArrays("hourly", "time", "temperature_2m")))
+	data, err := Extract(context.Background(), Source{From: from.HTTP{
+		URL:     srv.URL,
+		Records: records(ParallelArrays("hourly", "time", "temperature_2m")),
+	}})
 	if err != nil {
 		t.Fatalf("Extract: %v", err)
 	}

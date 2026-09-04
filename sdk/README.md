@@ -20,57 +20,65 @@ Requires Go 1.23 or newer (the SDK streams rows as `iter.Seq2`).
 ## Three lines
 
 ```go
-dados, err := sdk.Extract(ctx,
-	sdk.Source{URL: "https://api.open-meteo.com/v1/forecast?..."},
-	func(r sdk.Response) ([]any, error) {
-		doc, err := r.Object()
-		if err != nil {
-			return nil, err
-		}
-		if bad, _ := doc["error"].(bool); bad {
-			return nil, sdk.Reject("open-meteo refused: %v", doc["reason"])
-		}
-		return sdk.ParallelArrays("hourly", "time", "temperature_2m")(doc)
-	})
+import (
+	"github.com/AreteAcademy/bravis/sdk"
+	"github.com/AreteAcademy/bravis/sdk/from"
+	"github.com/AreteAcademy/bravis/sdk/to"
+)
+
+dados, err := sdk.Extract(ctx, sdk.Source{
+	From: from.HTTP{
+		URL: "https://api.open-meteo.com/v1/forecast?...",
+		Records: func(r sdk.Response) ([]any, error) {
+			doc, err := r.Object()
+			if err != nil {
+				return nil, err
+			}
+			if bad, _ := doc["error"].(bool); bad {
+				return nil, sdk.Reject("open-meteo refused: %v", doc["reason"])
+			}
+			return sdk.ParallelArrays("hourly", "time", "temperature_2m")(doc)
+		},
+	},
+})
 
 // What we take from the source.
 dados = sdk.Transform(dados, sdk.Accept("time", "temperature_2m", "latitude", "longitude"))
 
 // Where it goes, and the columns it has.
 res, err := sdk.Load(ctx, dados, sdk.Target{
-	Table:   "hourly_temperatures",
+	To:      to.BigQuery{Dataset: "bronze", Table: "hourly_temperatures"},
 	Columns: []string{"time", "temperature_2m", "latitude", "longitude"},
 })
 ```
 
-**The columns come from `Transform`.** Whatever shape your transformers
-compose is exactly what is written — no wrapper column, no provenance columns,
-no shape the library decided for you. Read the `Transform` chain and you know
-what the table holds.
+**The driver is a value, not a setting.** `from.HTTP` carries everything an
+HTTP source needs — URL, headers, retry, pagination, and what a response
+means. `from.Postgres` will carry a DSN and a query. Neither has to make room
+for the other's fields, so no source struct collects forty options of which any
+one driver reads six.
 
-The one exception is `Metadata`, and it names what it adds:
+It also decides what you compile. Go prunes dependencies by package imported,
+never by field used, so a fetcher that writes to Postgres never builds the
+BigQuery client:
 
-```go
-res, err := sdk.Load(ctx, dados, sdk.Target{
-	Table: "hourly_temperatures",
+| what you import | packages | BigQuery |
+|---|---|---|
+| `sdk` | 190 | no |
+| `sdk` + `from` | 194 | no |
+| `sdk` + `to` | 456 | yes |
 
-	// Adds exactly two columns: ingestion_id and ingestion_loaded_at.
-	Metadata: &sdk.Metadata{
-		Provider: "open_meteo",
-		Entity:   "hourly_temperature",
-		Key:      sdk.Key("latitude", "longitude", "time"),
-		When:     sdk.Field("time"),
-	},
-})
-```
+`Source` and `Target` hold what every driver honours: the preview and counters
+on one side, the declared columns, metadata and deduplication on the other.
 
-Provenance lives inside that block because that is the only thing it is for:
-those four fields build `ingestion_id`, and they never become columns. Without
-the block the SDK never reads a field out of your record at all.
+**The columns come from `Transform` and are declared in `Target.Columns`.**
+Whatever shape your transformers compose is exactly what is written; the SDK
+adds nothing on its own except the two `Metadata` fields, and those are named
+in the declaration too.
 
 Everything between the two calls that is not specific to the vendor lives in
-the SDK: config, retry, pagination, expansion, table creation, deduplication
-and the result you log.
+the SDK: config, retry, pagination, table creation, deduplication and the
+result you log.
 
 ## Transform
 

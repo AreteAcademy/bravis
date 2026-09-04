@@ -12,30 +12,33 @@ import (
 	"time"
 
 	"github.com/AreteAcademy/bravis/sdk"
+	"github.com/AreteAcademy/bravis/sdk/from"
+	"github.com/AreteAcademy/bravis/sdk/to"
 )
 
 func main() {
 	sdk.Run(sdk.Pipeline{
 		// Where it comes from. Configuration, and only that.
 		Source: sdk.Source{
-			URL:     "https://api.example.com/v1/events",
-			Timeout: 15 * time.Second,
-		},
+			From: from.HTTP{
+				URL:     "https://api.example.com/v1/events",
+				Timeout: 15 * time.Second,
 
-		// What a response means. Per response, because a response that is an
-		// error carries zero records and a per-record check would never see it.
-		Records: func(r sdk.Response) ([]any, error) {
-			if r.Status == http.StatusNoContent {
-				return nil, nil // an empty window is a result, not a failure
-			}
-			if err := sdk.RejectIf("error")(r); err != nil {
-				return nil, err
-			}
-			doc, err := r.Object()
-			if err != nil {
-				return nil, err
-			}
-			return sdk.ArrayAt("results")(doc)
+				// What a response means.
+				Records: func(r sdk.Response) ([]any, error) {
+					if r.Status == http.StatusNoContent {
+						return nil, nil // an empty window is a result, not a failure
+					}
+					if err := sdk.RejectIf("error")(r); err != nil {
+						return nil, err
+					}
+					doc, err := r.Object()
+					if err != nil {
+						return nil, err
+					}
+					return sdk.ArrayAt("results")(doc)
+				},
+			},
 		},
 
 		// What row it builds. Accept says what we take from the source: a
@@ -48,7 +51,9 @@ func main() {
 		// Where it goes, and the columns it has -- the two the SDK fills in
 		// included, so nothing lands in the table without being written here.
 		Target: sdk.Target{
-			Table: "events",
+			To: to.BigQuery{
+				Table: "events",
+			},
 			Columns: []string{
 				"ingestion_id",        // from Metadata
 				"ingestion_loaded_at", // from Metadata

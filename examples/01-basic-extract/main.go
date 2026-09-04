@@ -9,7 +9,7 @@ import (
 	"log"
 
 	"github.com/AreteAcademy/bravis/sdk"
-	"github.com/AreteAcademy/bravis/sdk/extract"
+	"github.com/AreteAcademy/bravis/sdk/from"
 )
 
 func main() {
@@ -17,7 +17,8 @@ func main() {
 	flag.Parse()
 
 	// The first row names the columns; pass NoHeader to key rows positionally.
-	lines, err := extract.CSV(context.Background(), sdk.Source{URL: *url}, nil)
+	lines, err := from.HTTP{URL: *url, Format: sdk.FormatCSV}.
+		Read(context.Background(), sdk.ReadOptions{})
 	if err != nil {
 		log.Fatalf("extract: %v", err)
 	}

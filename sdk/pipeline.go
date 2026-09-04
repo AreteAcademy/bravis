@@ -34,19 +34,9 @@ import (
 // Anything this does not cover is still reachable by calling Extract and Load
 // directly.
 type Pipeline struct {
-	// Source is configuration, and only that: URL, headers, timeouts, retry,
-	// pagination, format. Nothing in it decides what the data means.
+	// Source is where records come from: the driver in From, plus the preview
+	// and the counters that every origin honours.
 	Source Source
-
-	// Records decides what each successful response means -- the records it
-	// carries, or a refusal saying why. Nil decodes the body and treats each
-	// document as one record. See Reading.
-	//
-	// It sits here rather than inside Source because it is the one thing in a
-	// fetcher that is about the data instead of the transport, and it belongs
-	// next to Transform, which is the other step that runs over what was
-	// extracted.
-	Records Reading
 
 	// Transform reshapes each record between Extract and Load, in order. See
 	// Transformer.
@@ -87,7 +77,10 @@ func (p Pipeline) name() string {
 	if m := p.Target.Metadata; m != nil && m.Provider != "" {
 		return fmt.Sprintf("%s/%s", m.Provider, m.Entity)
 	}
-	return p.Target.Table
+	if p.Target.To != nil {
+		return p.Target.To.Describe()
+	}
+	return "pipeline"
 }
 
 // Run runs a Pipeline as a command: it parses flags, sets up logging,
@@ -109,8 +102,6 @@ func Execute(ctx context.Context, p *Pipeline, args []string) error {
 	var (
 		dryRun  = fs.Bool("dry-run", false, "extract, map and print the first records without writing")
 		sample  = fs.Int("sample", 5, "how many records -dry-run prints")
-		dataset = fs.String("dataset", "", "BigQuery dataset (default: "+EnvDataset+", or landing)")
-		table   = fs.String("table", "", "destination table (default: vendors_<provider>_<entity>s)")
 		verbose = fs.Bool("v", false, "log at debug level")
 		preview = fs.Int("preview", 0, "print the first N records as a table once the extract finishes")
 	)
@@ -129,17 +120,11 @@ func Execute(ctx context.Context, p *Pipeline, args []string) error {
 
 	// Read before Before, so a hook can act on it.
 	p.Run = runContextFromEnv()
-	if p.Run.fromEngine() {
+	if p.Run.FromEngine() {
 		slog.InfoContext(ctx, "running under Bravis",
 			append([]any{"pipeline", p.name()}, p.Run.Args()...)...)
 	}
 
-	if *dataset != "" {
-		p.Target.Dataset = *dataset
-	}
-	if *table != "" {
-		p.Target.Table = *table
-	}
 	// The flag only turns the preview on; a pipeline that asked for one in
 	// code keeps it, so running without the flag does not silently disable
 	// what the fetcher configured.
@@ -157,7 +142,7 @@ func Execute(ctx context.Context, p *Pipeline, args []string) error {
 		return runDryRun(ctx, p, *sample)
 	}
 
-	data, err := Extract(ctx, p.Source, p.Records)
+	data, err := Extract(ctx, p.Source)
 	if err != nil {
 		return err
 	}
@@ -182,7 +167,7 @@ func Execute(ctx context.Context, p *Pipeline, args []string) error {
 func runDryRun(ctx context.Context, p *Pipeline, n int) error {
 	start := time.Now()
 
-	data, err := Extract(ctx, p.Source, p.Records)
+	data, err := Extract(ctx, p.Source)
 	if err != nil {
 		return err
 	}
@@ -197,14 +182,9 @@ func runDryRun(ctx context.Context, p *Pipeline, n int) error {
 		return err
 	}
 
-	table := p.Target.Table
-	if table == "" {
-		table = p.Target.defaultTable()
-	}
-
 	stats := data.Stats()
 	_, _ = fmt.Fprintf(os.Stdout, "dry-run %s -> %s (%d records, %d page(s), %d attempt(s), %s)\n\n",
-		p.name(), table, len(envelopes), stats.Pages, stats.Attempts,
+		p.name(), p.Target.To.Describe(), len(envelopes), stats.Pages, stats.Attempts,
 		time.Since(start).Round(time.Millisecond))
 
 	for i, env := range envelopes {

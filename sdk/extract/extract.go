@@ -579,6 +579,10 @@ func calculateBackoff(attempt int, cfg *core.RetryConfig) time.Duration {
 	return backoff + jitter
 }
 
+// Redact strips secrets from a URL's query string, for logs and errors.
+// Exported so a driver can describe its source without leaking a token.
+func Redact(urlStr string) string { return redactURL(urlStr) }
+
 func redactURL(urlStr string) string {
 	u, err := url.Parse(urlStr)
 	if err != nil {

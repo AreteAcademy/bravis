@@ -21,6 +21,8 @@ import (
 	"log/slog"
 
 	"github.com/AreteAcademy/bravis/sdk"
+	"github.com/AreteAcademy/bravis/sdk/from"
+	"github.com/AreteAcademy/bravis/sdk/to"
 )
 
 func main() {
@@ -28,20 +30,22 @@ func main() {
 		Name: "open_meteo/hourly",
 
 		Source: sdk.Source{
-			URL: "https://api.open-meteo.com/v1/forecast" +
-				"?latitude=-23.55&longitude=-46.63&hourly=temperature_2m",
-		},
+			From: from.HTTP{
+				URL: "https://api.open-meteo.com/v1/forecast" +
+					"?latitude=-23.55&longitude=-46.63&hourly=temperature_2m",
 
-		// What a response means.
-		Records: func(r sdk.Response) ([]any, error) {
-			if err := sdk.RejectIf("error")(r); err != nil {
-				return nil, err
-			}
-			doc, err := r.Object()
-			if err != nil {
-				return nil, err
-			}
-			return sdk.ParallelArrays("hourly", "time", "temperature_2m")(doc)
+				// What a response means.
+				Records: func(r sdk.Response) ([]any, error) {
+					if err := sdk.RejectIf("error")(r); err != nil {
+						return nil, err
+					}
+					doc, err := r.Object()
+					if err != nil {
+						return nil, err
+					}
+					return sdk.ParallelArrays("hourly", "time", "temperature_2m")(doc)
+				},
+			},
 		},
 
 		Transform: []sdk.Transformer{
@@ -51,27 +55,35 @@ func main() {
 		// Reading the run context is optional. This one uses it to widen the
 		// window on a backfill; a fetcher that ignores it works the same.
 		Before: func(ctx context.Context, p *sdk.Pipeline) error {
-			if p.Run.Trigger == "backfill" {
-				p.Source.URL += "&past_days=7"
-				slog.InfoContext(ctx, "backfill: widening the window",
-					"logical_date", p.Run.LogicalDate)
+			if p.Run.Trigger != "backfill" {
+				return nil
 			}
+			// The source is a value, so widening the window means replacing
+			// it -- and the type says which driver you are replacing.
+			origem := p.Source.From.(from.HTTP)
+			origem.URL += "&past_days=7"
+			p.Source.From = origem
+
+			slog.InfoContext(ctx, "backfill: widening the window",
+				"logical_date", p.Run.LogicalDate)
 			return nil
 		},
 
 		Target: sdk.Target{
+			To: to.BigQuery{
+				ClusterBy: []string{"latitude", "longitude"},
+
+				// Left nil on purpose. Inside Bravis the engine decides; outside,
+				// nothing is created. sdk.Bool(false) here would refuse even on a
+				// first run, and the engine would not override it.
+				CreateTable: nil,
+			},
 			Metadata: &sdk.Metadata{
 				Provider: "open_meteo",
 				Entity:   "hourly_temperature",
 				Key:      sdk.Key("latitude", "longitude", "time"),
 				When:     sdk.Field("time"),
 			},
-			ClusterBy: []string{"latitude", "longitude"},
-
-			// Left nil on purpose. Inside Bravis the engine decides; outside,
-			// nothing is created. sdk.Bool(false) here would refuse even on a
-			// first run, and the engine would not override it.
-			CreateTable: nil,
 		},
 	})
 }

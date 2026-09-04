@@ -15,15 +15,24 @@ type (
 	// Envelope is one extracted record plus its provenance.
 	Envelope = core.Envelope
 
-	// Source describes where and how to extract.
-	Source = core.Source
-
 	// Response is one successful HTTP response, handed to Pipeline.Records.
 	Response = core.Response
 
 	// Reading decides what a successful response means: the records it
-	// carries, or a refusal saying why. See Pipeline.Records.
+	// carries, or a refusal saying why. See from.HTTP.Records.
 	Reading = core.Reading
+
+	// Reader is a source: from.HTTP, and the drivers that follow it.
+	Reader = core.Reader
+
+	// Writer is a destination: to.BigQuery, and the drivers that follow it.
+	Writer = core.Writer
+
+	// ReadOptions and WriteOptions are what every driver honours, whatever it
+	// reads from or writes to. A fetcher does not build these -- Source and
+	// Target do.
+	ReadOptions  = core.ReadOptions
+	WriteOptions = core.WriteOptions
 
 	// Rejection is what Reject returns: the source answered, and what it
 	// sent is not data.

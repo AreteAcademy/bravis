@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"github.com/AreteAcademy/bravis/sdk"
+	"github.com/AreteAcademy/bravis/sdk/from"
+	"github.com/AreteAcademy/bravis/sdk/to"
 )
 
 // Escrito de fora do módulo do SDK de propósito.
@@ -58,15 +60,18 @@ func executa(t *testing.T, p sdk.Pipeline) string {
 func pipeline(url string) sdk.Pipeline {
 	return sdk.Pipeline{
 		Name:   "proof/entity",
-		Source: sdk.Source{URL: url},
+		Source: sdk.Source{From: from.HTTP{URL: url}},
 		Target: sdk.Target{
+			To: to.BigQuery{
+				Project: "p",
+				Table:   "prova",
+				// nil: quem decide é o engine, ou ninguém.
+				CreateTable: nil,
+			},
 			Metadata: &sdk.Metadata{
 				Provider: "proof", Entity: "entity",
 				Key: sdk.Key("id"), When: sdk.Field("id"),
 			},
-			Project: "p",
-			// nil: quem decide é o engine, ou ninguém.
-			CreateTable: nil,
 		},
 	}
 }
@@ -162,7 +167,7 @@ func TestConsumidorLigaOPreviewEEscolheOnde(t *testing.T) {
 
 	var out strings.Builder
 	data, err := sdk.Extract(context.Background(), sdk.Source{
-		URL:           srv.URL,
+		From:          from.HTTP{URL: srv.URL},
 		Preview:       2,
 		PreviewBytes:  2048,
 		PreviewWriter: &out,
@@ -185,7 +190,7 @@ func TestConsumidorLigaOPreviewEEscolheOnde(t *testing.T) {
 func TestConsumidorLeOTamanhoDoQueFoiExtraido(t *testing.T) {
 	srv := fonte(t)
 
-	data, err := sdk.Extract(context.Background(), sdk.Source{URL: srv.URL})
+	data, err := sdk.Extract(context.Background(), sdk.Source{From: from.HTTP{URL: srv.URL}})
 	if err != nil {
 		t.Fatalf("Extract: %v", err)
 	}
@@ -203,13 +208,13 @@ func TestConsumidorCarregaSemProvenienciaNenhuma(t *testing.T) {
 	t.Setenv("GOOGLE_PROJECT_ID", "um-projeto")
 
 	srv := fonte(t)
-	data, err := sdk.Extract(context.Background(), sdk.Source{URL: srv.URL})
+	data, err := sdk.Extract(context.Background(), sdk.Source{From: from.HTTP{URL: srv.URL}})
 	if err != nil {
 		t.Fatalf("Extract: %v", err)
 	}
 
 	// Nem Provider, nem Entity, nem Key. Só onde escrever.
-	_, err = sdk.Load(context.Background(), data, sdk.Target{Table: "minha_tabela"})
+	_, err = sdk.Load(context.Background(), data, sdk.Target{To: to.BigQuery{Table: "minha_tabela"}})
 
 	// Sem credencial o load não chega ao BigQuery, e isso basta: o que este
 	// teste prova é que a validação da fachada deixa passar. Um erro citando
@@ -228,15 +233,12 @@ func TestConsumidorComMetadataPrecisaDeProveniencia(t *testing.T) {
 	t.Setenv("GOOGLE_PROJECT_ID", "um-projeto")
 
 	srv := fonte(t)
-	data, err := sdk.Extract(context.Background(), sdk.Source{URL: srv.URL})
+	data, err := sdk.Extract(context.Background(), sdk.Source{From: from.HTTP{URL: srv.URL}})
 	if err != nil {
 		t.Fatalf("Extract: %v", err)
 	}
 
-	_, err = sdk.Load(context.Background(), data, sdk.Target{
-		Table:    "minha_tabela",
-		Metadata: &sdk.Metadata{Entity: "e", Key: sdk.Key("id")},
-	})
+	_, err = sdk.Load(context.Background(), data, sdk.Target{To: to.BigQuery{Table: "minha_tabela"}, Metadata: &sdk.Metadata{Entity: "e", Key: sdk.Key("id")}})
 	if err == nil || !strings.Contains(err.Error(), "Metadata.Provider") {
 		t.Errorf("um bloco Metadata sem Provider deveria falhar nomeando o campo: %v", err)
 	}
@@ -247,7 +249,7 @@ func TestConsumidorComMetadataPrecisaDeProveniencia(t *testing.T) {
 func TestConsumidorComponeAsColunasNoTransform(t *testing.T) {
 	srv := fonte(t)
 
-	data, err := sdk.Extract(context.Background(), sdk.Source{URL: srv.URL})
+	data, err := sdk.Extract(context.Background(), sdk.Source{From: from.HTTP{URL: srv.URL}})
 	if err != nil {
 		t.Fatalf("Extract: %v", err)
 	}
@@ -275,7 +277,7 @@ func TestConsumidorComponeAsColunasNoTransform(t *testing.T) {
 func TestConsumidorVeOSchemaFalharQuandoOCampoSome(t *testing.T) {
 	srv := fonte(t)
 
-	data, err := sdk.Extract(context.Background(), sdk.Source{URL: srv.URL})
+	data, err := sdk.Extract(context.Background(), sdk.Source{From: from.HTTP{URL: srv.URL}})
 	if err != nil {
 		t.Fatalf("Extract: %v", err)
 	}
@@ -299,15 +301,12 @@ func TestConsumidorUsaAutoIDSozinho(t *testing.T) {
 	t.Setenv("GOOGLE_PROJECT_ID", "um-projeto")
 
 	srv := fonte(t)
-	data, err := sdk.Extract(context.Background(), sdk.Source{URL: srv.URL})
+	data, err := sdk.Extract(context.Background(), sdk.Source{From: from.HTTP{URL: srv.URL}})
 	if err != nil {
 		t.Fatalf("Extract: %v", err)
 	}
 
-	_, err = sdk.Load(context.Background(), data, sdk.Target{
-		Table:    "minha_tabela",
-		Metadata: &sdk.Metadata{AutoID: true},
-	})
+	_, err = sdk.Load(context.Background(), data, sdk.Target{To: to.BigQuery{Table: "minha_tabela"}, Metadata: &sdk.Metadata{AutoID: true}})
 	if err != nil {
 		for _, proibido := range []string{"Provider", "Entity", "Key"} {
 			if strings.Contains(err.Error(), proibido) {

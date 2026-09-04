@@ -8,6 +8,76 @@ A tag de um módulo aninhado leva o prefixo do diretório: `sdk/v0.2.1`.
 
 ---
 
+## [0.19.0] — 2026-09-04
+
+**BREAKING.** A costura para os drivers: fase 0 de
+[`docs/plan/2026-09-04-sdk-drivers-mvp.md`](docs/plan/2026-09-04-sdk-drivers-mvp.md).
+Nenhum driver novo — HTTP e BigQuery passam para trás das interfaces, e é isso
+que torna Postgres, MySQL, Redshift e Files possíveis sem transformar `Source`
+e `Target` em structs de união com quarenta campos.
+
+### Adicionado
+- **`sdk/from` e `sdk/to`** — um tipo por origem e por destino, cada um
+  carregando a própria configuração e sabendo se ler ou se escrever:
+  `from.HTTP`, `to.BigQuery`.
+- **`sdk.Reader` e `sdk.Writer`**, com `ReadOptions` e `WriteOptions` para o
+  que atravessa todos os drivers.
+
+### Alterado
+- **`Source` e `Target` passam a segurar o driver.** `Source{From: Reader}` mais
+  preview e contadores; `Target{To: Writer}` mais `Columns`, `Metadata` e
+  `Dedup`. Tudo que era específico de HTTP ou de BigQuery mudou de casa.
+- **`Records` volta para o driver**, em `from.HTTP`. A `v0.18.0` o tinha movido
+  para `Pipeline` porque `Source` era config e ele não; com o driver sendo um
+  valor, `from.HTTP` **é** a origem HTTP inteira, e um `Pipeline.Records` seria
+  um campo sem sentido para `from.Postgres` — exatamente o defeito que a fase 0
+  existe para evitar em escala.
+- `sdk.Extract` volta a receber dois argumentos; a leitura vai no driver.
+- **`-dataset` e `-table` saem do `Execute`.** Eram flags de BigQuery num lugar
+  genérico. Um fetcher que precisa delas registra as suas com `Flags` e monta o
+  destino no `Before`, que é para o que os dois existem.
+- `RunContext` e a resolução de configuração descem para `internal/core`, de
+  onde os drivers alcançam.
+
+### O número
+```
+                    pacotes   BigQuery
+sdk                     190   não
+sdk + from              194   não
+sdk + to                456   sim
+```
+Antes: **458 pacotes e 21 MB de binário** para quem só importava o SDK, porque
+a raiz puxava `sdk/load` e ele puxa BigQuery, Arrow e Thrift. Go poda por
+pacote importado, nunca por campo usado — então a única forma de não pagar por
+um driver é não importar o pacote dele. Há teste de consumidor que afirma isso,
+**com o controle junto**: quem importa `to` tem de receber o BigQuery, ou o
+teste passaria com um SDK que não carrega nada.
+
+### Migração
+```go
+// antes
+Source: sdk.Source{URL: "...", Timeout: 15 * time.Second},
+Records: func(r sdk.Response) ([]any, error) { ... },
+Target: sdk.Target{Dataset: "bronze", Table: "pedidos", CreateTable: sdk.Bool(true)},
+
+// depois
+Source: sdk.Source{
+    From: from.HTTP{
+        URL:     "...",
+        Timeout: 15 * time.Second,
+        Records: func(r sdk.Response) ([]any, error) { ... },
+    },
+},
+Target: sdk.Target{
+    To: to.BigQuery{Dataset: "bronze", Table: "pedidos", CreateTable: sdk.Bool(true)},
+},
+```
+
+Um driver não implementado deixa de ser erro em tempo de execução e passa a ser
+**erro de compilação**: não existe mais campo onde escrever um nome errado.
+
+---
+
 ## [0.18.0] — 2026-09-04
 
 **BREAKING.** Uma declaração de colunas, no formato do DDL. Executa
@@ -678,6 +748,7 @@ Primeira versão que compila.
 > versão de `proxy.golang.org`, então ela permanece publicada e quebrada para
 > sempre. Comece pela `v0.1.1`.
 
+[0.19.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.19.0
 [0.18.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.18.0
 [0.17.1]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.17.1
 [0.17.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.17.0

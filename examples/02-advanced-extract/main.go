@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/AreteAcademy/bravis/sdk"
-	"github.com/AreteAcademy/bravis/sdk/extract"
+	"github.com/AreteAcademy/bravis/sdk/from"
 )
 
 // throttle is anything with Wait(ctx) error, so *rate.Limiter from
@@ -35,7 +35,7 @@ func main() {
 		Level: slog.LevelDebug,
 	})))
 
-	fonte := sdk.Source{
+	fonte := from.HTTP{
 		URL:    "https://api.example.com/v1/transactions",
 		Method: "GET",
 		Header: map[string][]string{
@@ -70,7 +70,8 @@ func main() {
 		return docs, r.JSON(&docs)
 	}
 
-	lines, err := extract.NDJSON(context.Background(), fonte, leitura)
+	fonte.Records = leitura
+	lines, err := fonte.Read(context.Background(), sdk.ReadOptions{})
 	if err != nil {
 		log.Fatalf("extract: %v", err)
 	}

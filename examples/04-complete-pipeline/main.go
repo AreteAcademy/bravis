@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/AreteAcademy/bravis/sdk"
-	"github.com/AreteAcademy/bravis/sdk/extract"
+	"github.com/AreteAcademy/bravis/sdk/from"
 	"github.com/AreteAcademy/bravis/sdk/load"
 )
 
@@ -44,11 +44,12 @@ func main() {
 
 	// Follows Link: rel="next" until the API stops offering one. Use
 	// CursorKey or OffsetKey instead when the API paginates in the body.
-	lines, err := extract.NDJSON(ctx, sdk.Source{
+	lines, err := from.HTTP{
 		URL:          *source,
+		Format:       sdk.FormatNDJSON,
 		FollowLinks:  true,
 		TotalTimeout: 30 * time.Minute,
-	}, nil)
+	}.Read(ctx, sdk.ReadOptions{})
 	if err != nil {
 		log.Fatalf("extract: %v", err)
 	}

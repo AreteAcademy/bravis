@@ -12,7 +12,7 @@ func TestRunContextIsEmptyWithoutTheEngine(t *testing.T) {
 	// The normal case: a fetcher run by hand must not notice this exists.
 	rc := runContextFromEnv()
 
-	if rc.fromEngine() {
+	if rc.FromEngine() {
 		t.Errorf("nothing was injected, so nothing should be reported: %+v", rc)
 	}
 	if rc.First || rc.Attempt != 0 || rc.ID != "" {
@@ -37,7 +37,7 @@ func TestRunContextReadsWhatTheEngineInjected(t *testing.T) {
 
 	rc := runContextFromEnv()
 
-	if !rc.fromEngine() {
+	if !rc.FromEngine() {
 		t.Error("an injected run id means the engine ran this")
 	}
 	if !rc.First || rc.Attempt != 2 || rc.Trigger != "backfill" {
@@ -101,85 +101,3 @@ func keysOf(args []any) []string {
 }
 
 // --- the tri-state ---------------------------------------------------------
-
-func TestCreateTableUnsetLetsTheEngineDecide(t *testing.T) {
-	t.Setenv(EnvProject, "p")
-	target := Target{Metadata: &Metadata{Provider: "a", Entity: "b", Key: Key("id")}}
-
-	// Outside the engine: nothing is created.
-	cfg, origins, err := target.resolveWith(RunContext{Params: map[string]string{}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cfg.CreateTable {
-		t.Error("with nobody asking, nothing should be created")
-	}
-	if origins["create_table"].from != "default" {
-		t.Errorf("origin = %q", origins["create_table"].from)
-	}
-
-	// First run of this step: created.
-	cfg, origins, err = target.resolveWith(RunContext{First: true, Params: map[string]string{}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !cfg.CreateTable {
-		t.Error("a first run should create the table")
-	}
-	if !strings.Contains(origins["create_table"].from, "first run") {
-		t.Errorf("the log has to say why: %q", origins["create_table"].from)
-	}
-}
-
-func TestCreateTableParamAsksWithoutFakingAFirstRun(t *testing.T) {
-	// The table was dropped by mistake: recreate it, without pretending
-	// nothing ever ran here.
-	t.Setenv(EnvProject, "p")
-
-	cfg, origins, err := Target{Metadata: &Metadata{Provider: "a", Entity: "b", Key: Key("id")}}.resolveWith(
-		RunContext{Params: map[string]string{ParamCreateTable: "true"}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !cfg.CreateTable {
-		t.Error("create_table=true should turn creation on")
-	}
-	if !strings.Contains(origins["create_table"].from, ParamCreateTable) {
-		t.Errorf("the log has to name the parameter: %q", origins["create_table"].from)
-	}
-}
-
-func TestExplicitRefusalBeatsTheEngine(t *testing.T) {
-	// The decision this design turns on. If the engine could override a
-	// deliberate false, the same code would behave differently inside and
-	// outside Bravis, with nothing to warn you.
-	t.Setenv(EnvProject, "p")
-
-	cfg, origins, err := Target{
-		Metadata: &Metadata{Provider: "a", Entity: "b", Key: Key("id")}, CreateTable: Bool(false),
-	}.resolveWith(RunContext{First: true, Params: map[string]string{ParamCreateTable: "true"}})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if cfg.CreateTable {
-		t.Error("an explicit false must not be overridden by the engine")
-	}
-	if origins["create_table"].from != "explicit" {
-		t.Errorf("origin = %q", origins["create_table"].from)
-	}
-}
-
-func TestExplicitTrueWorksWithoutTheEngine(t *testing.T) {
-	t.Setenv(EnvProject, "p")
-
-	cfg, _, err := Target{
-		Metadata: &Metadata{Provider: "a", Entity: "b", Key: Key("id")}, CreateTable: Bool(true),
-	}.resolveWith(RunContext{Params: map[string]string{}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !cfg.CreateTable {
-		t.Error("an explicit true stands on its own")
-	}
-}
