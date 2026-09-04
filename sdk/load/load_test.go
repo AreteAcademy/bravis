@@ -11,7 +11,6 @@ import (
 
 	"cloud.google.com/go/bigquery"
 	core "github.com/AreteAcademy/bravis/sdk/internal/core"
-	"github.com/google/uuid"
 )
 
 // --- resolveConfig --------------------------------------------------------
@@ -57,25 +56,6 @@ func TestResolveConfigDefaults(t *testing.T) {
 	}
 	if got.Format != "ndjson" {
 		t.Errorf("Format = %q", got.Format)
-	}
-}
-
-func TestResolveConfigFromOptionsAlone(t *testing.T) {
-	got, err := resolveConfig(nil,
-		core.WithProjectID("p"),
-		core.WithDataset("d"),
-		core.WithTable("t"),
-		core.WithThresholdForGCS(10),
-		core.WithMetadata(true),
-	)
-	if err != nil {
-		t.Fatalf("resolveConfig: %v", err)
-	}
-	if got.ProjectID != "p" || got.Dataset != "d" || got.Table != "t" {
-		t.Errorf("options did not build the config: %+v", got)
-	}
-	if got.ThresholdForGCS != 10 || !got.Metadata {
-		t.Errorf("behaviour options did not apply: %+v", got)
 	}
 }
 
@@ -221,114 +201,6 @@ func TestEncodeRowsStructPayloadUsesJSONTags(t *testing.T) {
 
 // --- metadata -------------------------------------------------------------
 
-func metaLoader() *Loader {
-	return &Loader{cfg: &core.LoadConfig{
-		ProjectID: "p", Dataset: "d", Table: "t",
-		Metadata: true, Format: "ndjson",
-	}}
-}
-
-func TestAddMetadataInjectsFields(t *testing.T) {
-	l := metaLoader()
-	env := core.Envelope{
-		Provider:  "gov",
-		Entity:    "tx",
-		SourceKey: "k1",
-		RecordTS:  "2026-01-01T00:00:00Z",
-		Payload:   map[string]any{"amount": 10},
-	}
-
-	if err := l.addMetadataToEnvelope(&env); err != nil {
-		t.Fatalf("addMetadataToEnvelope: %v", err)
-	}
-
-	got := env.Payload.(map[string]any)
-	if got["amount"] != 10 {
-		t.Errorf("original payload fields must survive: %v", got)
-	}
-	for _, k := range metadataFields {
-		if _, ok := got[k]; !ok {
-			t.Errorf("missing metadata field %s", k)
-		}
-	}
-	// Only two. provider, entity and source_key are provenance the SDK uses
-	// to build the id, not columns it imposes on your rows.
-	if len(got) != 3 {
-		t.Errorf("expected the payload plus exactly 2 metadata fields, got %v", got)
-	}
-}
-
-func TestAddMetadataIngestionIDIsDeterministic(t *testing.T) {
-	// This id is the whole idempotency story: the same record seen twice must
-	// produce the same id, and a different record must not collide.
-	base := core.Envelope{
-		Provider: "gov", Entity: "tx", SourceKey: "k1",
-		RecordTS: "2026-01-01T00:00:00Z",
-		Payload:  map[string]any{"amount": 10},
-	}
-
-	a, b := base, base
-	l := metaLoader()
-	if err := l.addMetadataToEnvelope(&a); err != nil {
-		t.Fatal(err)
-	}
-	if err := l.addMetadataToEnvelope(&b); err != nil {
-		t.Fatal(err)
-	}
-
-	idA := a.Payload.(map[string]any)["ingestion_id"]
-	idB := b.Payload.(map[string]any)["ingestion_id"]
-	if idA != idB {
-		t.Errorf("same record produced different ids: %v vs %v", idA, idB)
-	}
-
-	other := base
-	other.SourceKey = "k2"
-	if err := l.addMetadataToEnvelope(&other); err != nil {
-		t.Fatal(err)
-	}
-	if other.Payload.(map[string]any)["ingestion_id"] == idA {
-		t.Error("different source keys collided on the same ingestion id")
-	}
-}
-
-func TestAddMetadataRequiresSourceKey(t *testing.T) {
-	l := metaLoader()
-	env := core.Envelope{Provider: "gov", Entity: "tx", Payload: map[string]any{}}
-	if err := l.addMetadataToEnvelope(&env); err == nil {
-		t.Fatal("Expected an error: without a source key there is no stable id")
-	}
-}
-
-func TestAddMetadataConvertsStructPayload(t *testing.T) {
-	l := metaLoader()
-	type tx struct {
-		Amount int `json:"amount"`
-	}
-	env := core.Envelope{
-		Provider: "gov", Entity: "tx", SourceKey: "k1",
-		RecordTS: "2026-01-01T00:00:00Z",
-		Payload:  tx{Amount: 10},
-	}
-
-	if err := l.addMetadataToEnvelope(&env); err != nil {
-		t.Fatalf("addMetadataToEnvelope: %v", err)
-	}
-
-	got, ok := env.Payload.(map[string]any)
-	if !ok {
-		t.Fatalf("payload should become a map, got %T", env.Payload)
-	}
-	if got["amount"] != float64(10) {
-		t.Errorf("struct field lost in conversion: %v", got)
-	}
-	if _, ok := got["ingestion_id"]; !ok {
-		t.Error("metadata not added to converted struct")
-	}
-}
-
-// --- Load, empty batch ----------------------------------------------------
-
 func TestLoadEmptyBatchTouchesNothing(t *testing.T) {
 	// Must return before reaching BigQuery -- this Loader has nil clients, so
 	// any call would panic.
@@ -367,11 +239,11 @@ func TestLoadReturnsResultOnFailure(t *testing.T) {
 	// following the documentation panicked.
 	l := &Loader{cfg: &core.LoadConfig{
 		ProjectID: "p", Dataset: "d", Table: "t", Format: "ndjson",
-		Metadata: true}}
+		Columns: []string{"a"}}}
 
-	// A missing SourceKey fails in metadata, before any client is touched.
+	// Uma linha que não bate com a declaração falha antes de tocar o cliente.
 	result, err := l.Load(context.Background(), core.Envelope{
-		Provider: "gov", Entity: "tx", Payload: map[string]any{},
+		Provider: "gov", Entity: "tx", Payload: map[string]any{"b": 1},
 	})
 
 	if err == nil {
@@ -426,47 +298,6 @@ func TestRowErrorsNilStatus(t *testing.T) {
 	}
 }
 
-func TestAddMetadataRefusesToOverwritePayloadFields(t *testing.T) {
-	// The two fields carry no prefix, so a payload that already owns one of
-	// those names would have its value silently replaced by ours -- an
-	// invisible failure, and the worse one.
-	l := metaLoader()
-	env := core.Envelope{
-		Provider: "gov", Entity: "tx", SourceKey: "k1", RecordTS: "2026-01-01T00:00:00Z",
-		Payload: map[string]any{"ingestion_id": "the vendor's own value", "amount": 10},
-	}
-
-	err := l.addMetadataToEnvelope(&env)
-	if err == nil {
-		t.Fatal("a colliding payload field must be an error, not a silent overwrite")
-	}
-	if !strings.Contains(err.Error(), "ingestion_id") {
-		t.Errorf("the error must name the colliding field: %v", err)
-	}
-	if !strings.Contains(err.Error(), "Transform") {
-		t.Errorf("the error should say where to fix it: %v", err)
-	}
-}
-
-func TestAddMetadataDoesNotMutateCallerPayload(t *testing.T) {
-	l := metaLoader()
-	original := map[string]any{"amount": 10}
-	env := core.Envelope{
-		Provider: "gov", Entity: "tx", SourceKey: "k1", RecordTS: "2026-01-01T00:00:00Z",
-		Payload: original,
-	}
-
-	if err := l.addMetadataToEnvelope(&env); err != nil {
-		t.Fatal(err)
-	}
-
-	if len(original) != 1 {
-		t.Errorf("the caller's map was mutated: %v", original)
-	}
-}
-
-// --- table creation --------------------------------------------------------
-
 func TestSanitiseLabel(t *testing.T) {
 	// BigQuery takes lowercase letters, digits, dashes and underscores, up to
 	// 63 characters, starting with a letter. Anything else is dropped rather
@@ -494,7 +325,7 @@ func TestRequirePartitionFilterRefusesMerge(t *testing.T) {
 	// filter would make the merge miss and write the duplicate.
 	_, err := resolveConfig(nil,
 		core.WithProjectID("p"), core.WithDataset("d"), core.WithTable("t"),
-		core.WithMetadata(true),
+		core.WithColumns([]string{"ingestion_id", "ingestion_loaded_at"}),
 		core.WithRequirePartitionFilter(true),
 		core.WithDedup(core.DedupMerge),
 	)
@@ -521,37 +352,28 @@ func TestCreateTableAloneIsEnough(t *testing.T) {
 	}
 }
 
-func TestPartitionOptionsNeedMetadata(t *testing.T) {
-	// The table is partitioned on ingestion_loaded_at, and that column only
-	// exists when Metadata adds it. Asking for one without the other is
-	// a contradiction, caught before anything touches the warehouse.
-	for _, opt := range []core.LoadOption{
-		core.WithPartitionExpiration(24 * time.Hour),
-		core.WithRequirePartitionFilter(true),
+// As opções de partição particionam em ingestion_loaded_at, então a coluna
+// tem de estar declarada.
+func TestPartitionOptionsNeedTheLoadedAtColumn(t *testing.T) {
+	for _, c := range []core.LoadConfig{
+		{ProjectID: "p", Dataset: "d", Table: "t", Format: "ndjson",
+			PartitionExpiration: time.Hour, Columns: []string{"sku"}},
+		{ProjectID: "p", Dataset: "d", Table: "t", Format: "ndjson",
+			RequirePartitionFilter: true, Columns: []string{"sku"}},
 	} {
-		_, err := resolveConfig(nil,
-			core.WithProjectID("p"), core.WithDataset("d"), core.WithTable("t"), opt,
-		)
-		if err == nil {
-			t.Error("a partition option without Metadata must be refused")
-		} else if !strings.Contains(err.Error(), "Metadata") {
-			t.Errorf("the error must name what is missing: %v", err)
+		if _, err := resolveConfig(&c); err == nil {
+			t.Error("uma opção de partição sem a coluna declarada tem de ser recusada")
+		} else if !strings.Contains(err.Error(), "ingestion_loaded_at") {
+			t.Errorf("o erro precisa nomear a coluna: %v", err)
 		}
 	}
-}
 
-func TestDedupMergeNeedsMetadata(t *testing.T) {
-	// The merge matches rows on ingestion_id; without Metadata there is
-	// no such column to match on.
-	_, err := resolveConfig(nil,
-		core.WithProjectID("p"), core.WithDataset("d"), core.WithTable("t"),
-		core.WithDedup(core.DedupMerge),
-	)
-	if err == nil {
-		t.Fatal("DedupMerge without Metadata must be refused")
-	}
-	if !strings.Contains(err.Error(), "ingestion_id") {
-		t.Errorf("the error must say what is missing: %v", err)
+	if _, err := resolveConfig(&core.LoadConfig{
+		ProjectID: "p", Dataset: "d", Table: "t", Format: "ndjson",
+		PartitionExpiration: time.Hour,
+		Columns:             []string{"ingestion_loaded_at", "sku"},
+	}); err != nil {
+		t.Errorf("com a coluna declarada deveria passar: %v", err)
 	}
 }
 
@@ -583,37 +405,6 @@ func TestDefaultWritesThePayloadUntouched(t *testing.T) {
 	}
 }
 
-func TestMetadataAddsExactlyTwoFields(t *testing.T) {
-	l := metaLoader()
-	env := core.Envelope{
-		Provider: "open_meteo", Entity: "hourly", SourceKey: "k1",
-		RecordTS: "2026-01-01T00:00:00Z",
-		Payload:  map[string]any{"temperature_c": 20},
-	}
-
-	if err := l.addMetadataToEnvelope(&env); err != nil {
-		t.Fatal(err)
-	}
-
-	got := env.Payload.(map[string]any)
-	if len(got) != 3 {
-		t.Fatalf("expected the payload plus 2 fields, got %v", got)
-	}
-	if got["ingestion_id"] == nil || got["ingestion_loaded_at"] == nil {
-		t.Errorf("row = %v", got)
-	}
-
-	// The id is the one Envelope.IngestionID produces: one owner, so a row
-	// written here matches the row any other producer writes for the record.
-	want, err := env.IngestionID()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got["ingestion_id"] != want {
-		t.Errorf("ingestion_id = %v, Envelope.IngestionID() = %v", got["ingestion_id"], want)
-	}
-}
-
 func TestClusterByIsCarriedNotGuessed(t *testing.T) {
 	// The SDK does not know the payload, so it cannot pick cluster columns.
 	cfg, err := resolveConfig(nil,
@@ -637,24 +428,6 @@ func TestClusterByIsCarriedNotGuessed(t *testing.T) {
 	}
 }
 
-func TestTableDescriptionNamesTheSource(t *testing.T) {
-	cfg := &core.LoadConfig{}
-	prov := provenance{Provider: "open_meteo", Entity: "hourly_temperature"}
-
-	if d := tableDescription(cfg, prov); !strings.Contains(d, "open_meteo/hourly_temperature") {
-		t.Errorf("description should say what writes here: %q", d)
-	}
-
-	cfg.Metadata = true
-	if d := tableDescription(cfg, prov); !strings.Contains(d, "ingestion_id") {
-		t.Errorf("with metadata on it should say how to deduplicate: %q", d)
-	}
-}
-
-// A proveniência vem do lote, não da configuração. É o que o godoc do
-// LoadConfig sempre prometeu e o load nunca fez -- as tabelas criadas saíam
-// sem os labels de atribuição de custo, e nenhuma contagem de linha muda com
-// isso.
 func TestProvenanceComesFromTheBatch(t *testing.T) {
 	got := provenanceOf([]core.Envelope{
 		{Provider: "open_meteo", Entity: "hourly", Payload: map[string]any{"a": 1}},
@@ -724,13 +497,13 @@ func TestLayoutDoesNotInferOverCreateSQL(t *testing.T) {
 	}
 }
 
-// The layout now lives on the created table, not on the load job: with
-// metadata the SDK creates the destination itself, so the job must not carry
-// a schema of its own.
+// Quando a declaração nomeia uma coluna do SDK, é o SDK que cria a tabela --
+// então o job não pode carregar schema próprio, ou o autodetect relaxaria o
+// NOT NULL que a criação acabou de pôr.
 func TestLayoutOnTheJobIsOffWhenTheSDKCreatesTheTable(t *testing.T) {
 	loader, file := layoutFor(&core.LoadConfig{
-		Format: "ndjson", CreateTable: true, Metadata: true,
-	})
+		Format: "ndjson", CreateTable: true,
+		Columns: []string{"ingestion_id", "ingestion_loaded_at"}})
 
 	if file.AutoDetect {
 		t.Error("autodetect against a table the SDK already created relaxes its NOT NULL columns")
@@ -750,8 +523,7 @@ func TestTypedTableDeclaresTheMetadataColumnsNotNull(t *testing.T) {
 	}
 
 	meta := typedTable(&core.LoadConfig{
-		Format: "ndjson", CreateTable: true, Metadata: true,
-		PartitionExpiration:    30 * 24 * time.Hour,
+		Format: "ndjson", CreateTable: true, PartitionExpiration: 30 * 24 * time.Hour,
 		RequirePartitionFilter: true,
 		ClusterBy:              []string{"sku"},
 	}, inferred, provenance{})
@@ -826,40 +598,6 @@ func TestClusterByMustBeInTheRows(t *testing.T) {
 	}
 }
 
-func TestLoadDoesNotMutateTheCallersBatch(t *testing.T) {
-	// A variadic call shares the backing array, so stamping metadata into
-	// `envelopes` writes into the slice the caller still holds. Loading the
-	// same batch twice then failed on the second try -- which is what a retry
-	// does, and what DedupMerge exists to handle.
-	//
-	// The narrower test above proves the payload map is copied; this one
-	// proves the slice element is too. Found by the integration test.
-	l := metaLoader()
-	batch := []core.Envelope{{
-		Provider: "gov", Entity: "tx", SourceKey: "k1", RecordTS: "2026-01-01T00:00:00Z",
-		Payload: map[string]any{"amount": 10},
-	}}
-
-	stamped := make([]core.Envelope, len(batch))
-	copy(stamped, batch)
-	for i := range stamped {
-		if err := l.addMetadataToEnvelope(&stamped[i]); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	original, ok := batch[0].Payload.(map[string]any)
-	if !ok {
-		t.Fatalf("payload = %T", batch[0].Payload)
-	}
-	if len(original) != 1 {
-		t.Errorf("the caller's envelope was altered: %v", original)
-	}
-	if _, present := original["ingestion_id"]; present {
-		t.Error("a second load of the same batch would now fail on a collision")
-	}
-}
-
 func TestStagedFileIsDeletedByDefault(t *testing.T) {
 	// DeleteAfterLoad was a bool documented as defaulting to true, which a
 	// bool cannot do: load.New got the zero value and never cleaned up. The
@@ -875,56 +613,36 @@ func TestStagedFileIsDeletedByDefault(t *testing.T) {
 	}
 }
 
-// A merge on a random id matches nothing, so it would write exactly the
-// duplicates it exists to prevent. Refused rather than surprising.
-func TestAutoIDComDedupMergeERecusado(t *testing.T) {
+// A precondição do merge passou a ser a coluna que ele de fato usa, e ela é
+// conferida contra a declaração do chamador.
+func TestDedupMergeExigeAColunaIngestionID(t *testing.T) {
 	_, err := resolveConfig(&core.LoadConfig{
 		ProjectID: "p", Dataset: "d", Table: "t", Format: "ndjson",
-		Metadata: true, AutoID: true, Dedup: core.DedupMerge,
+		Dedup: core.DedupMerge, Columns: []string{"sku", "quantidade"},
 	})
 	if err == nil {
-		t.Fatal("DedupMerge com AutoID nunca casa e duplica tudo; tem de ser recusado")
+		t.Fatal("o merge casa em ingestion_id; sem a coluna declarada não há como")
 	}
-	for _, want := range []string{"DedupMerge", "AutoID"} {
-		if !strings.Contains(err.Error(), want) {
-			t.Errorf("o erro não nomeia %q: %v", want, err)
+	for _, quer := range []string{"ingestion_id", "sdk.IngestionID"} {
+		if !strings.Contains(err.Error(), quer) {
+			t.Errorf("o erro precisa dizer %q: %v", quer, err)
 		}
 	}
-}
 
-func TestAutoIDGeraIDsDiferentesParaOMesmoRegistro(t *testing.T) {
-	l := &Loader{cfg: &core.LoadConfig{Metadata: true, AutoID: true}}
+	// Declarada, passa.
+	if _, err := resolveConfig(&core.LoadConfig{
+		ProjectID: "p", Dataset: "d", Table: "t", Format: "ndjson",
+		Dedup: core.DedupMerge, Columns: []string{"ingestion_id", "sku"},
+	}); err != nil {
+		t.Errorf("com a coluna declarada deveria passar: %v", err)
+	}
 
-	env := core.Envelope{Payload: map[string]any{"a": 1}}
-	primeiro, err := l.ingestionID(&env)
-	if err != nil {
-		t.Fatalf("ingestionID: %v", err)
-	}
-	segundo, err := l.ingestionID(&env)
-	if err != nil {
-		t.Fatalf("ingestionID: %v", err)
-	}
-	if primeiro == segundo {
-		t.Error("AutoID gera um id novo por linha; dois iguais significam que não é aleatório")
-	}
-	if _, err := uuid.Parse(primeiro); err != nil {
-		t.Errorf("o id não é um UUID: %q", primeiro)
-	}
-}
-
-// E sem AutoID continua determinístico, que é o que torna um re-run seguro.
-func TestSemAutoIDOIDContinuaDeterministico(t *testing.T) {
-	l := &Loader{cfg: &core.LoadConfig{Metadata: true}}
-
-	env := core.Envelope{
-		Provider: "p", Entity: "e", SourceKey: "k", RecordTS: "2026-01-01T00:00:00Z",
-	}
-	primeiro, err := l.ingestionID(&env)
-	if err != nil {
-		t.Fatalf("ingestionID: %v", err)
-	}
-	segundo, _ := l.ingestionID(&env)
-	if primeiro != segundo {
-		t.Errorf("o id determinístico mudou entre chamadas: %s != %s", primeiro, segundo)
+	// E sem declaração nenhuma não há o que conferir aqui -- a linha é
+	// conferida na carga.
+	if _, err := resolveConfig(&core.LoadConfig{
+		ProjectID: "p", Dataset: "d", Table: "t", Format: "ndjson",
+		Dedup: core.DedupMerge,
+	}); err != nil {
+		t.Errorf("sem Columns não há o que conferir na configuração: %v", err)
 	}
 }

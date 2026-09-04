@@ -297,7 +297,7 @@ func TestLoadOptionsApply(t *testing.T) {
 		core.WithStagingBucket("bucket"),
 		core.WithFormat("ndjson"),
 		core.WithThresholdForGCS(42),
-		core.WithMetadata(true),
+		core.WithColumns([]string{"ingestion_id"}),
 	} {
 		opt(&cfg)
 	}
@@ -308,7 +308,7 @@ func TestLoadOptionsApply(t *testing.T) {
 	if cfg.StagingBucket != "bucket" || cfg.Format != "ndjson" {
 		t.Errorf("staging options did not apply: %+v", cfg)
 	}
-	if cfg.ThresholdForGCS != 42 || !cfg.Metadata {
+	if cfg.ThresholdForGCS != 42 || len(cfg.Columns) != 1 {
 		t.Errorf("behaviour options did not apply: %+v", cfg)
 	}
 }

@@ -31,21 +31,30 @@ func (e *Envelope) IngestionID() (string, error) {
 	if e.SourceKey == "" {
 		return "", fmt.Errorf("SourceKey cannot be empty")
 	}
+	return ComputeIngestionID(e.Provider, e.Entity, e.SourceKey, e.RecordTS)
+}
 
-	// FROZEN, and deliberately not configurable. This namespace, the field
-	// order and the "|" separator together define ingestion_id. A row written
-	// here has to match the row a Python fetcher writes for the same record,
-	// and it does -- checked against uuid.uuid5. Make any of the three a
-	// setting and the guarantee is gone, silently, for whoever changes it.
+// ComputeIngestionID is the frozen formula, and the only implementation.
+//
+// FROZEN, and deliberately not configurable. This namespace, the field order
+// and the "|" separator together define ingestion_id. A row written here has
+// to match the row a Python fetcher writes for the same record, and it does --
+// checked against uuid.uuid5. Make any of the three a setting and the
+// guarantee is gone, silently, for whoever changes it.
+//
+// It lives here, exported, because sdk.IngestionID -- the transformer that
+// writes the column -- needs it, and there must be exactly one place that
+// computes this. A fmt.Sprintf in a fetcher would look identical and produce a
+// different id on the first float formatted differently.
+func ComputeIngestionID(provider, entity, sourceKey, recordTS string) (string, error) {
 	const ingestNS = "e3a4f8c0-1b9d-4ea0-9c2e-77f6a6c4a4d7"
 	ns, err := uuid.Parse(ingestNS)
 	if err != nil {
 		return "", err
 	}
 
-	key := fmt.Sprintf("%s|%s|%s|%s", e.Provider, e.Entity, e.SourceKey, e.RecordTS)
-	id := uuid.NewSHA1(ns, []byte(key))
-	return id.String(), nil
+	key := fmt.Sprintf("%s|%s|%s|%s", provider, entity, sourceKey, recordTS)
+	return uuid.NewSHA1(ns, []byte(key)).String(), nil
 }
 
 // Dedup names how a load avoids writing a record twice.
@@ -141,35 +150,9 @@ type LoadConfig struct {
 	// to prevent.
 	RequirePartitionFilter bool
 
-	// Metadata adds exactly two fields to every record:
-	//
-	//	ingestion_id         deterministic UUID v5 over
-	//	                     provider|entity|source_key|record_ts
-	//	ingestion_loaded_at  when the row was written, RFC 3339
-	//
-	// Two columns, and only ever those two. Off by default: the columns are
-	// composed in Transform, and the SDK adds nothing you did not ask for.
-	//
-	// At this level the provenance is already on the Envelope. The facade
-	// takes an sdk.Metadata instead, which is where it gets built.
-	//
-	// A record that already has one of those names is an error rather than a
-	// silent overwrite.
-	Metadata bool
-
-	// AutoID makes ingestion_id a fresh random UUID per row instead of the
-	// deterministic one built from provenance.
-	//
-	// It buys a row identifier without asking you to say what identifies a
-	// record at the source. What it costs is idempotency: the same reading
-	// loaded twice gets two different ids, so nothing downstream can tell the
-	// copies apart. DedupMerge is refused alongside it for that reason -- a
-	// merge on a random id matches nothing and would write the duplicate it
-	// exists to prevent.
-	AutoID bool
-
 	// Columns declares the destination's columns, in DDL order, including
-	// the two Metadata fills in. Nil declares nothing.
+	// the two sdk.IngestionID and sdk.IngestionLoadedAt write. Nil declares
+	// nothing.
 	//
 	// See sdk.Target.Columns for what it checks and when.
 	Columns []string
@@ -377,13 +360,6 @@ func WithRequirePartitionFilter(enabled bool) LoadOption {
 	}
 }
 
-// WithMetadata adds ingestion_id and ingestion_loaded_at to each record.
-func WithMetadata(enabled bool) LoadOption {
-	return func(cfg *LoadConfig) {
-		cfg.Metadata = enabled
-	}
-}
-
 // WithStagingPrefix sets where staged objects go inside the bucket.
 func WithStagingPrefix(prefix string) LoadOption {
 	return func(cfg *LoadConfig) {
@@ -402,14 +378,6 @@ func WithKeepStagedFile(keep bool) LoadOption {
 func WithColumns(columns []string) LoadOption {
 	return func(cfg *LoadConfig) {
 		cfg.Columns = columns
-	}
-}
-
-// WithAutoID makes ingestion_id a random UUID instead of the deterministic
-// one. See LoadConfig.AutoID.
-func WithAutoID(enabled bool) LoadOption {
-	return func(cfg *LoadConfig) {
-		cfg.AutoID = enabled
 	}
 }
 

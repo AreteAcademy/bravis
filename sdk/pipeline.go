@@ -74,9 +74,6 @@ func (p Pipeline) name() string {
 	if p.Name != "" {
 		return p.Name
 	}
-	if m := p.Target.Metadata; m != nil && m.Provider != "" {
-		return fmt.Sprintf("%s/%s", m.Provider, m.Entity)
-	}
 	if p.Target.To != nil {
 		return p.Target.To.Describe()
 	}
@@ -219,19 +216,10 @@ func runDryRun(ctx context.Context, p *Pipeline, n int) error {
 			return fmt.Errorf("record %d: %w", i, err)
 		}
 
-		// Without a Metadata block there is no ingestion_id to print, because
-		// the load will not write one. Printing a computed id here would
-		// show a column that never lands.
-		if p.Target.Metadata == nil {
-			_, _ = fmt.Fprintf(os.Stdout, "%s\n", body)
-			continue
-		}
-
-		id, err := env.IngestionID()
-		if err != nil {
-			return fmt.Errorf("record %d: %w", i, err)
-		}
-		_, _ = fmt.Fprintf(os.Stdout, "%s  key=%s  ts=%s\n  %s\n", id, env.SourceKey, env.RecordTS, body)
+		// The row is printed whole. Whatever the chain composed is what
+		// lands, ingestion_id included -- so there is nothing left to compute
+		// here, and nothing that could be printed and then not written.
+		_, _ = fmt.Fprintf(os.Stdout, "%s\n", body)
 	}
 
 	if len(envelopes) == 0 {

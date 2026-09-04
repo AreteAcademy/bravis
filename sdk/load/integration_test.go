@@ -99,6 +99,57 @@ func countRows(ctx context.Context, t *testing.T, client *bigquery.Client, env i
 	return row.N
 }
 
+// comIngestao é o que a cadeia de Transform produz: a linha do chamador mais
+// as duas colunas que sdk.IngestionID e sdk.IngestionLoadedAt escrevem.
+//
+// As fixtures montam a linha inteira porque é assim que ela chega ao destino
+// agora -- nada é carimbado depois.
+// comIngestaoNaLinha faz o mesmo para uma linha avulsa.
+func mustID(provider, entity, sourceKey, recordTS string) string {
+	id, err := core.ComputeIngestionID(provider, entity, sourceKey, recordTS)
+	if err != nil {
+		panic(err)
+	}
+	return id
+}
+
+func comIngestaoNaLinha(row map[string]any) map[string]any {
+	id, err := core.ComputeIngestionID("acme", "widgets", "k-1", "2026-01-01T00:00:00Z")
+	if err != nil {
+		panic(err)
+	}
+	out := map[string]any{
+		core.MetadataID:       id,
+		core.MetadataLoadedAt: time.Now().UTC().Format(time.RFC3339),
+	}
+	for k, v := range row {
+		out[k] = v
+	}
+	return out
+}
+
+func comIngestao(n int) []core.Envelope {
+	out := envelopes(n)
+	agora := time.Now().UTC().Format(time.RFC3339)
+	for i := range out {
+		row := out[i].Payload.(map[string]any)
+		id, err := core.ComputeIngestionID(out[i].Provider, out[i].Entity,
+			out[i].SourceKey, out[i].RecordTS)
+		if err != nil {
+			panic(err)
+		}
+		nova := map[string]any{
+			core.MetadataID:       id,
+			core.MetadataLoadedAt: agora,
+		}
+		for k, v := range row {
+			nova[k] = v
+		}
+		out[i].Payload = nova
+	}
+	return out
+}
+
 func envelopes(n int) []core.Envelope {
 	out := make([]core.Envelope, n)
 	for i := range out {
@@ -209,7 +260,7 @@ func TestIntegrationMergeDoesNotDouble(t *testing.T) {
 		core.WithProjectID(env.project),
 		core.WithDataset(env.dataset),
 		core.WithTable(name),
-		core.WithMetadata(true),
+		core.WithColumns([]string{"ingestion_id", "ingestion_loaded_at", "amount", "label"}),
 		core.WithCreateTable(true),
 		core.WithDedup(core.DedupMerge),
 	)
@@ -217,7 +268,7 @@ func TestIntegrationMergeDoesNotDouble(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 
-	batch := envelopes(24)
+	batch := comIngestao(24)
 
 	first, err := loader.Load(ctx, batch...)
 	if err != nil {
@@ -269,7 +320,7 @@ func TestIntegrationCreatesTableFromData(t *testing.T) {
 		core.WithDataset(env.dataset),
 		core.WithTable(name),
 		core.WithCreateTable(true),
-		core.WithMetadata(true),
+		core.WithColumns([]string{"ingestion_id", "ingestion_loaded_at", "amount", "label"}),
 		// Um campo que os próprios registros têm: o SDK não impõe coluna
 		// nenhuma desde a v0.9.0, então "provider" não existe mais aqui.
 		core.WithClusterBy("label"),
@@ -278,7 +329,7 @@ func TestIntegrationCreatesTableFromData(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 
-	res, err := loader.Load(ctx, envelopes(3)...)
+	res, err := loader.Load(ctx, comIngestao(3)...)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -370,14 +421,14 @@ func TestIntegrationMergeIntoADifferentColumnOrder(t *testing.T) {
 		core.WithProjectID(env.project),
 		core.WithDataset(env.dataset),
 		core.WithTable(name),
-		core.WithMetadata(true),
+		core.WithColumns([]string{"ingestion_id", "ingestion_loaded_at", "amount", "label"}),
 		core.WithDedup(core.DedupMerge),
 	)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
 
-	batch := envelopes(6)
+	batch := comIngestao(6)
 	if _, err := loader.Load(ctx, batch...); err != nil {
 		t.Fatalf("merging into a table whose column order differs: %v", err)
 	}
@@ -444,7 +495,7 @@ func TestIntegrationFirstMergeLoadStillPartitions(t *testing.T) {
 		core.WithProjectID(env.project),
 		core.WithDataset(env.dataset),
 		core.WithTable(name),
-		core.WithMetadata(true),
+		core.WithColumns([]string{"ingestion_id", "ingestion_loaded_at", "amount", "label"}),
 		core.WithCreateTable(true),
 		core.WithDedup(core.DedupMerge),
 		core.WithClusterBy("label"),
@@ -453,7 +504,7 @@ func TestIntegrationFirstMergeLoadStillPartitions(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 
-	if _, err := loader.Load(ctx, envelopes(4)...); err != nil {
+	if _, err := loader.Load(ctx, comIngestao(4)...); err != nil {
 		t.Fatalf("first load: %v", err)
 	}
 
@@ -541,70 +592,6 @@ func TestIntegrationWritesOnlyTheCallersFields(t *testing.T) {
 }
 
 // And the other half: with the flag on, exactly two fields are added.
-func TestIntegrationMetadataAddsExactlyTwoFields(t *testing.T) {
-	env := requireIntegration(t)
-	ctx := context.Background()
-
-	client, err := bigquery.NewClient(ctx, env.project)
-	if err != nil {
-		t.Fatalf("bigquery client: %v", err)
-	}
-	defer func() { _ = client.Close() }()
-
-	name := fmt.Sprintf("it_meta_%d", time.Now().UnixNano())
-	table := client.Dataset(env.dataset).Table(name)
-	t.Cleanup(func() { _ = table.Delete(context.Background()) })
-
-	loader, err := New(ctx, nil,
-		core.WithProjectID(env.project),
-		core.WithDataset(env.dataset),
-		core.WithTable(name),
-		core.WithCreateTable(true),
-		core.WithMetadata(true),
-	)
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
-
-	batch := []core.Envelope{{
-		Provider: "acme", Entity: "widgets", SourceKey: "k-1",
-		RecordTS: "2026-01-01T00:00:00Z",
-		Payload:  map[string]any{"sku": "W-1", "quantidade": 3},
-	}}
-	if _, err := loader.Load(ctx, batch...); err != nil {
-		t.Fatalf("load: %v", err)
-	}
-
-	meta, err := table.Metadata(ctx)
-	if err != nil {
-		t.Fatalf("reading metadata: %v", err)
-	}
-
-	got := map[string]bool{}
-	for _, f := range meta.Schema {
-		got[f.Name] = true
-	}
-	for _, want := range []string{"sku", "quantidade", "ingestion_id", "ingestion_loaded_at"} {
-		if !got[want] {
-			t.Errorf("%q is missing from the table", want)
-		}
-	}
-	for _, forbidden := range []string{"provider", "entity", "source_key", "payload"} {
-		if got[forbidden] {
-			t.Errorf("Metadata wrote %q; it adds two fields, not six", forbidden)
-		}
-	}
-	if len(meta.Schema) != 4 {
-		t.Errorf("the table has %d columns, expected the caller's 2 plus exactly 2", len(meta.Schema))
-	}
-}
-
-// TestIntegrationMetadataColumnsAreNotNull is the DDL, checked against the
-// thing that issues it.
-//
-// Autodetect infers both columns as NULLABLE, and BigQuery refuses to tighten
-// a NULLABLE column afterwards -- so this only passes if the SDK declares the
-// two itself at creation.
 func TestIntegrationMetadataColumnsAreNotNull(t *testing.T) {
 	env := requireIntegration(t)
 	ctx := context.Background()
@@ -624,7 +611,7 @@ func TestIntegrationMetadataColumnsAreNotNull(t *testing.T) {
 		core.WithDataset(env.dataset),
 		core.WithTable(name),
 		core.WithCreateTable(true),
-		core.WithMetadata(true),
+		core.WithColumns([]string{"ingestion_id", "ingestion_loaded_at", "sku", "quantidade"}),
 		core.WithClusterBy("sku"),
 	)
 	if err != nil {
@@ -634,7 +621,7 @@ func TestIntegrationMetadataColumnsAreNotNull(t *testing.T) {
 	batch := []core.Envelope{{
 		Provider: "acme", Entity: "widgets", SourceKey: "k-1",
 		RecordTS: "2026-01-01T00:00:00Z",
-		Payload:  map[string]any{"sku": "W-1", "quantidade": 3},
+		Payload:  comIngestaoNaLinha(map[string]any{"sku": "W-1", "quantidade": 3}),
 	}}
 	if _, err := loader.Load(ctx, batch...); err != nil {
 		t.Fatalf("load: %v", err)
@@ -671,9 +658,7 @@ func TestIntegrationMetadataColumnsAreNotNull(t *testing.T) {
 
 	// And a second load still lands, against the fixed schema.
 	if _, err := loader.Load(ctx, core.Envelope{
-		Provider: "acme", Entity: "widgets", SourceKey: "k-2",
-		RecordTS: "2026-01-02T00:00:00Z",
-		Payload:  map[string]any{"sku": "W-2", "quantidade": 9},
+		Payload: comIngestaoNaLinha(map[string]any{"sku": "W-2", "quantidade": 9}),
 	}); err != nil {
 		t.Fatalf("second load into the typed table: %v", err)
 	}
@@ -684,69 +669,6 @@ func TestIntegrationMetadataColumnsAreNotNull(t *testing.T) {
 
 // AutoID gives a row id without asking what identifies a record at the
 // source, and the column is still NOT NULL.
-func TestIntegrationAutoIDWritesARandomID(t *testing.T) {
-	env := requireIntegration(t)
-	ctx := context.Background()
-
-	client, err := bigquery.NewClient(ctx, env.project)
-	if err != nil {
-		t.Fatalf("bigquery client: %v", err)
-	}
-	defer func() { _ = client.Close() }()
-
-	name := fmt.Sprintf("it_autoid_%d", time.Now().UnixNano())
-	table := client.Dataset(env.dataset).Table(name)
-	t.Cleanup(func() { _ = table.Delete(context.Background()) })
-
-	loader, err := New(ctx, nil,
-		core.WithProjectID(env.project),
-		core.WithDataset(env.dataset),
-		core.WithTable(name),
-		core.WithCreateTable(true),
-		core.WithMetadata(true),
-		core.WithAutoID(true),
-	)
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
-
-	// No provenance at all: AutoID does not read it.
-	batch := []core.Envelope{
-		{Payload: map[string]any{"sku": "W-1"}},
-		{Payload: map[string]any{"sku": "W-2"}},
-	}
-	if _, err := loader.Load(ctx, batch...); err != nil {
-		t.Fatalf("load: %v", err)
-	}
-
-	q := client.Query(fmt.Sprintf(
-		"SELECT COUNT(DISTINCT ingestion_id) AS n FROM `%s.%s.%s`", env.project, env.dataset, name))
-	it, err := q.Read(ctx)
-	if err != nil {
-		t.Fatalf("query: %v", err)
-	}
-	var row struct{ N int64 }
-	if err := it.Next(&row); err != nil {
-		t.Fatalf("read: %v", err)
-	}
-	if row.N != 2 {
-		t.Errorf("%d distinct ids for 2 rows; AutoID must give each row its own", row.N)
-	}
-
-	meta, _ := table.Metadata(ctx)
-	for _, f := range meta.Schema {
-		if f.Name == "ingestion_id" && !f.Required {
-			t.Error("ingestion_id is nullable even with AutoID")
-		}
-	}
-}
-
-// TestIntegrationColumnsMatchTheDDL is the spec's §7 proof, run against the
-// table it describes.
-//
-// Six columns, one declaration, and the two the SDK fills in are named in it
-// -- which they could never be inside the Transform chain, because that runs
-// before they exist.
 func TestIntegrationColumnsMatchTheDDL(t *testing.T) {
 	env := requireIntegration(t)
 	ctx := context.Background()
@@ -770,7 +692,7 @@ func TestIntegrationColumnsMatchTheDDL(t *testing.T) {
 		core.WithDataset(env.dataset),
 		core.WithTable(name),
 		core.WithCreateTable(true),
-		core.WithMetadata(true),
+		core.WithColumns([]string{"ingestion_id", "ingestion_loaded_at", "amount", "label"}),
 		core.WithColumns(declared),
 	)
 	if err != nil {
@@ -782,12 +704,12 @@ func TestIntegrationColumnsMatchTheDDL(t *testing.T) {
 	batch := []core.Envelope{{
 		Provider: "open_meteo", Entity: "hourly", SourceKey: "2026-01-01T00:00",
 		RecordTS: "2026-01-01T00:00:00Z",
-		Payload: map[string]any{
+		Payload: comIngestaoNaLinha(map[string]any{
 			"provider":   "open_meteo",
 			"entity":     "hourly",
 			"source_key": "2026-01-01T00:00",
 			"payload":    `{"temperature_2m":14.1}`,
-		},
+		}),
 	}}
 
 	if _, err := loader.Load(ctx, batch...); err != nil {
@@ -817,7 +739,7 @@ func TestIntegrationColumnsMatchTheDDL(t *testing.T) {
 		core.WithProjectID(env.project),
 		core.WithDataset(env.dataset),
 		core.WithTable(name),
-		core.WithMetadata(true),
+		core.WithColumns([]string{"ingestion_id", "ingestion_loaded_at", "amount", "label"}),
 		core.WithColumns(append(append([]string{}, declared...), "coluna_inventada")),
 	)
 	if err != nil {
@@ -919,14 +841,14 @@ func TestIntegrationPartitionOptionsReachTheTable(t *testing.T) {
 		core.WithDataset(env.dataset),
 		core.WithTable(name),
 		core.WithCreateTable(true),
-		core.WithMetadata(true),
+		core.WithColumns([]string{"ingestion_id", "ingestion_loaded_at", "amount", "label"}),
 		core.WithPartitionExpiration(expiracao),
 		core.WithRequirePartitionFilter(true),
 	)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	if _, err := loader.Load(ctx, envelopes(2)...); err != nil {
+	if _, err := loader.Load(ctx, comIngestao(2)...); err != nil {
 		t.Fatalf("load: %v", err)
 	}
 
@@ -1103,12 +1025,12 @@ func TestIntegrationProvenanceLabelsTheTable(t *testing.T) {
 		core.WithDataset(env.dataset),
 		core.WithTable(name),
 		core.WithCreateTable(true),
-		core.WithMetadata(true),
+		core.WithColumns([]string{"ingestion_id", "ingestion_loaded_at", "amount", "label"}),
 	)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	if _, err := loader.Load(ctx, envelopes(2)...); err != nil {
+	if _, err := loader.Load(ctx, comIngestao(2)...); err != nil {
 		t.Fatalf("load: %v", err)
 	}
 
@@ -1157,7 +1079,7 @@ func TestIntegrationMergeIntoAJSONColumn(t *testing.T) {
 		core.WithProjectID(env.project),
 		core.WithDataset(env.dataset),
 		core.WithTable(name),
-		core.WithMetadata(true),
+		core.WithColumns([]string{"ingestion_id", "ingestion_loaded_at", "source_key", "payload"}),
 		core.WithDedup(core.DedupMerge),
 	)
 	if err != nil {
@@ -1174,8 +1096,11 @@ func TestIntegrationMergeIntoAJSONColumn(t *testing.T) {
 			SourceKey: fmt.Sprintf("j-%d", i),
 			RecordTS:  "2026-01-01T00:00:00Z",
 			Payload: map[string]any{
-				"source_key": fmt.Sprintf("j-%d", i),
-				"payload":    map[string]any{"reading": i, "unit": "celsius"},
+				core.MetadataID: mustID("integration", "json",
+					fmt.Sprintf("j-%d", i), "2026-01-01T00:00:00Z"),
+				core.MetadataLoadedAt: time.Now().UTC().Format(time.RFC3339),
+				"source_key":          fmt.Sprintf("j-%d", i),
+				"payload":             map[string]any{"reading": i, "unit": "celsius"},
 			},
 		}
 	}
@@ -1215,5 +1140,108 @@ func TestIntegrationMergeIntoAJSONColumn(t *testing.T) {
 	}
 	if row.N != 6 {
 		t.Errorf("JSON_VALUE found %d rows, expected 6: the column did not land as JSON", row.N)
+	}
+}
+
+// TestIntegrationChainWritesEverything é a prova do §6 da spec: a landing de
+// seis colunas, carregada por um fetcher SEM bloco de metadado, com
+// DedupMerge — e o ingestion_id lido de volta e conferido.
+//
+// Se o id mudasse, toda carga anterior de todo consumidor deixaria de casar.
+func TestIntegrationChainWritesEverything(t *testing.T) {
+	env := requireIntegration(t)
+	ctx := context.Background()
+
+	client, err := bigquery.NewClient(ctx, env.project)
+	if err != nil {
+		t.Fatalf("bigquery client: %v", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	name := fmt.Sprintf("it_chain_%d", time.Now().UnixNano())
+	table := client.Dataset(env.dataset).Table(name)
+	t.Cleanup(func() { _ = table.Delete(context.Background()) })
+
+	declared := []string{
+		"ingestion_id", "ingestion_loaded_at", "provider", "entity", "source_key", "payload",
+	}
+
+	loader, err := New(ctx, nil,
+		core.WithProjectID(env.project),
+		core.WithDataset(env.dataset),
+		core.WithTable(name),
+		core.WithCreateTable(true),
+		core.WithColumns(declared),
+		core.WithDedup(core.DedupMerge),
+	)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	// A linha inteira, exatamente como a cadeia a compõe: nada é carimbado
+	// depois. O id é o que sdk.IngestionID escreveria.
+	id, err := core.ComputeIngestionID("open_meteo", "hourly", "k-1", "2026-01-01T00:00")
+	if err != nil {
+		t.Fatal(err)
+	}
+	linha := map[string]any{
+		"ingestion_id":        id,
+		"ingestion_loaded_at": time.Now().UTC().Format(time.RFC3339),
+		"provider":            "open_meteo",
+		"entity":              "hourly",
+		"source_key":          "k-1",
+		"payload":             map[string]any{"temperature_2m": 14.1},
+	}
+
+	if _, err := loader.Load(ctx, core.Envelope{Payload: linha}); err != nil {
+		t.Fatalf("primeira carga: %v", err)
+	}
+	// A segunda não pode reingerir: é o que o merge existe para fazer, e ele
+	// casa exatamente na coluna que a cadeia escreveu.
+	res, err := loader.Load(ctx, core.Envelope{Payload: linha})
+	if err != nil {
+		t.Fatalf("segunda carga: %v", err)
+	}
+	if res.RowsLoaded != 0 || res.RowsIgnored != 1 {
+		t.Errorf("segunda carga escreveu %d e ignorou %d, esperado 0 e 1",
+			res.RowsLoaded, res.RowsIgnored)
+	}
+
+	// As duas colunas do SDK saem NOT NULL porque a declaração as nomeia.
+	meta, err := table.Metadata(ctx)
+	if err != nil {
+		t.Fatalf("reading metadata: %v", err)
+	}
+	byName := map[string]*bigquery.FieldSchema{}
+	for _, f := range meta.Schema {
+		byName[f.Name] = f
+	}
+	if f := byName["ingestion_id"]; f == nil || !f.Required {
+		t.Errorf("ingestion_id não saiu NOT NULL: %+v", f)
+	}
+	if f := byName["ingestion_loaded_at"]; f == nil || !f.Required {
+		t.Errorf("ingestion_loaded_at não saiu NOT NULL: %+v", f)
+	}
+	if len(meta.Schema) != len(declared) {
+		t.Errorf("a tabela tem %d colunas, a declaração tem %d", len(meta.Schema), len(declared))
+	}
+	// E os labels, que vêm das colunas provider/entity da própria linha.
+	if meta.Labels["provider"] != "open_meteo" {
+		t.Errorf("label provider = %q", meta.Labels["provider"])
+	}
+
+	// O id lido de volta é o que a fórmula congelada produz.
+	q := client.Query(fmt.Sprintf(
+		"SELECT ingestion_id FROM `%s.%s.%s`", env.project, env.dataset, name))
+	it, err := q.Read(ctx)
+	if err != nil {
+		t.Fatalf("query: %v", err)
+	}
+	var row []bigquery.Value
+	if err := it.Next(&row); err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if len(row) != 1 || row[0] != id {
+		t.Errorf("o id gravado (%v) não é o da fórmula (%s)", row, id)
 	}
 }

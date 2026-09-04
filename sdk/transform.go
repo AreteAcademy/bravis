@@ -50,8 +50,8 @@ var SkipRecord = errors.New("skip record") //nolint:staticcheck // ST1012: contr
 //
 // Provenance is not available here. Provider, Entity, SourceKey and RecordTS
 // are stamped at Load, from Target, after every Transformer has run -- so a
-// Transformer that renames a field Metadata.Key reads must run before Load
-// sees it, and Metadata.Key must name the new name.
+// Transformer that renames a field sdk.IngestionID reads must run before it,
+// and IngestionID must name the new name.
 func Transform(data *Data, fns ...Transformer) *Data {
 	if data == nil || len(fns) == 0 {
 		return data

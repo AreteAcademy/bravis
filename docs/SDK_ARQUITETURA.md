@@ -28,16 +28,16 @@ sdk.Run(sdk.Pipeline{
     Transform: []sdk.Transformer{
         sdk.Accept("time", "temperature_2m", "latitude", "longitude"),
         sdk.Rename(map[string]string{"temperature_2m": "temperature_celsius"}),
+        sdk.Compute("provider", ...), sdk.Compute("entity", ...),
+        sdk.Compute("source_key", ...),
+        sdk.IngestionID("provider", "entity", "source_key", "time"),
+        sdk.IngestionLoadedAt(),
     },
 
     // 3. Para onde vai, 4. com que colunas.
     Target: sdk.Target{
         To:      bigquery.Table{Dataset: "bronze", Table: "hourly_temperatures"},
         Columns: []string{"ingestion_id", "ingestion_loaded_at", "time", "temperature_celsius"},
-        Metadata: &sdk.Metadata{
-            Provider: "open_meteo", Entity: "hourly",
-            Key: sdk.Key("time"), When: sdk.Field("time"),
-        },
         Dedup: sdk.DedupMerge,
     },
 })
@@ -117,7 +117,7 @@ type Writer interface {
 | em `WriteOptions` | |
 |---|---|
 | `Columns` | a declaração do destino |
-| `Metadata`, `AutoID` | as duas colunas do SDK |
+
 | `Dedup` | a deduplicação pedida |
 | `Run` | o contexto de execução do engine |
 
@@ -141,14 +141,14 @@ from.X.Read()                     iter.Seq2[Envelope, error]  ← preguiçoso
    ├─ Records / decoder           decide o que a resposta carrega
    │
    ▼
-Transform (por registro)          Accept, Rename, Compute, Schema do cliente
+Transform (por registro)          Accept, Rename, Compute, IngestionID,
+   │                              IngestionLoadedAt
    │                              SkipRecord descarta um; erro derruba a execução
    ▼
 collect (fachada)                 carimba proveniência quando há Metadata:
    │                              Provider, Entity, SourceKey, RecordTS
    ▼
 to.X.Write()
-   ├─ metadado                    ingestion_id, ingestion_loaded_at
    ├─ checkColumns                a linha contra a declaração, nos dois sentidos
    ├─ prepara o destino           cria tipado quando pedido
    ├─ checkDeclaredAgainstTable   a declaração contra o destino real
@@ -157,33 +157,35 @@ to.X.Write()
 
 Duas coisas que a ordem explica:
 
-1. **`Columns` pode nomear `ingestion_id`.** O metadado é acrescentado dentro do
-   `Write`, então a conferência acontece depois — dentro do `Transform` aquelas
-   duas colunas ainda não existem.
-2. **`Metadata.Key` lê o registro depois do `Transform`.** Renomear um campo no
-   `Transform` obriga a mudar o `Key`, e nomear o antigo é erro listando o que a
-   linha de fato tem.
+1. **A linha que chega ao destino é exatamente a que a cadeia compôs.** Nada é
+   carimbado depois, então a conferência contra `Columns` não tem caso especial.
+2. **`IngestionID` lê o registro na posição em que está.** Um `Rename` antes
+   obriga a nomear o campo novo, e nomear o antigo é erro listando o que a linha
+   de fato tem.
 
 ---
 
 ## 5. O que o SDK escreve
 
-**As colunas que você compôs no `Transform`, e nada mais** — a menos que peça
-`Metadata`, que acrescenta exatamente duas:
+**As colunas que você compôs no `Transform`, e nada mais.** As duas que o SDK
+sabe escrever são transformers, postos na cadeia como qualquer outro:
 
 ```sql
 ingestion_id        STRING    NOT NULL,
 ingestion_loaded_at TIMESTAMP NOT NULL
 ```
 
-`Provider`, `Entity`, `Key` e `When` são **proveniência**: constroem o
-`ingestion_id` e nunca viram coluna. `Metadata` é um interruptor para essas
-duas colunas, não um lugar para pôr dado.
+```go
+sdk.IngestionID("provider", "entity", "source_key", "time"),
+sdk.IngestionLoadedAt(),
+```
 
-`AutoID` troca o id determinístico por um UUID aleatório por linha. Isso abre
-mão de idempotência, então `DedupMerge` junto é recusado — um merge sobre id
-aleatório não casa com nada e escreveria as duplicatas que ele existe para
-evitar.
+`sdk.IngestionID` lê os quatro componentes de **campos do registro**. Eles
+constroem o id e não viram coluna por si — quem quiser `provider` e `entity` na
+tabela os compõe com `Compute`, como qualquer outra coluna.
+
+O `NOT NULL` sai quando `Target.Columns` nomeia a coluna: declare, e o SDK cria
+a tabela para poder apertá-la; não declare, e tudo é inferido nullable.
 
 ---
 
@@ -270,7 +272,9 @@ sem falhar a execução.
 | o `ingestion_id` | `sdk/internal/core/types.go` (`IngestionID`) |
 | a reconciliação de colunas | `sdk/load/columns.go`, `sdk/load/merge_sql.go` |
 | o preview | `sdk/internal/core/preview.go` |
-| o metadado e o `CheckColumns` | `sdk/internal/core/metadata.go` |
+| os transformers de ingestão | `sdk/ingestion.go` |
+| a fórmula congelada do id | `sdk/internal/core/types.go` |
+| o `CheckColumns` | `sdk/internal/core/metadata.go` |
 | os backends de nuvem | `sdk/store/s3`, `sdk/store/gcs` |
 | os testes contra o BigQuery real | `sdk/load/integration_test.go` |
 | os testes contra MinIO e GCS | `sdk/from/integration_test.go` |

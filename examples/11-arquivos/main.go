@@ -65,8 +65,7 @@ func main() {
 			PartitionBy: "ingestion_loaded_at",
 			Compress:    true,
 		},
-		Columns:  []string{"ingestion_id", "ingestion_loaded_at", "sku", "quantidade"},
-		Metadata: &sdk.Metadata{AutoID: true},
+		Columns: []string{"ingestion_id", "ingestion_loaded_at", "sku", "quantidade"},
 	})
 	if err != nil {
 		log.Fatalf("load: %v", err)

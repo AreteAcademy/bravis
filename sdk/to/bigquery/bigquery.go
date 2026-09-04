@@ -128,8 +128,6 @@ func (b Table) config(opt core.WriteOptions) (*core.LoadConfig, map[string]core.
 		Format:                 "ndjson",
 		Columns:                opt.Columns,
 		Dedup:                  opt.Dedup,
-		Metadata:               opt.Metadata,
-		AutoID:                 opt.AutoID,
 		ClusterBy:              b.ClusterBy,
 		CreateTable:            create,
 		CreateSQL:              b.CreateSQL,

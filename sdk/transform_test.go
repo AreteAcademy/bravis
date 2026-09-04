@@ -279,56 +279,6 @@ func TestTransformersLeaveNonObjectsAlone(t *testing.T) {
 
 // --- end to end ------------------------------------------------------------
 
-func TestTransformFeedsTheKeyAndTimestamp(t *testing.T) {
-	srv := meteoServer(t)
-	defer srv.Close()
-
-	// Metadata.Key reads the record after every Transformer has run, so a
-	// rename here has to be reflected there.
-	data := Transform(meteoRecords(t, srv),
-		Rename(map[string]string{"time": "observed_at"}),
-		Accept("observed_at", "temperature_2m", "latitude", "longitude"),
-	)
-
-	envelopes, err := collect(data, Target{
-		Metadata: &Metadata{Provider: "open_meteo", Entity: "hourly", Key: Key("latitude", "longitude", "observed_at"), When: Field("observed_at")},
-	})
-	if err != nil {
-		t.Fatalf("collect: %v", err)
-	}
-
-	if len(envelopes) != 3 {
-		t.Fatalf("expected 3 readings, got %d", len(envelopes))
-	}
-	if envelopes[0].SourceKey != "-23.514938|-46.610504|2026-09-03T00:00" {
-		t.Errorf("SourceKey = %q", envelopes[0].SourceKey)
-	}
-	if envelopes[0].RecordTS != "2026-09-03T00:00" {
-		t.Errorf("RecordTS = %q", envelopes[0].RecordTS)
-	}
-}
-
-func TestTransformKeyOnARenamedFieldFailsLoudly(t *testing.T) {
-	srv := meteoServer(t)
-	defer srv.Close()
-
-	// Renaming a field that Metadata.Key still names by its old name must be an
-	// error, not a silent short key -- that would change every ingestion_id.
-	data := Transform(meteoRecords(t, srv), Rename(map[string]string{"time": "observed_at"}))
-
-	_, err := collect(data, Target{
-		Metadata: &Metadata{Provider: "open_meteo", Entity: "hourly", Key: Key("time")},
-	})
-	if err == nil {
-		t.Fatal("a key naming a field that no longer exists must fail")
-	}
-	if !strings.Contains(err.Error(), "observed_at") {
-		t.Errorf("the error should list what the record actually has: %v", err)
-	}
-}
-
-// --- Schema: the columns are composed here ------------------------------
-
 func TestAcceptComposesExactlyTheNamedFields(t *testing.T) {
 	got, err := Accept("time", "temp")(map[string]any{
 		"time": "2026-01-01T00:00", "temp": 14.1, "generationtime_ms": 0.02, "elevation": 737,
@@ -406,5 +356,30 @@ func TestAcceptPassesScalarsThrough(t *testing.T) {
 	}
 	if got != "um texto" {
 		t.Errorf("the record changed: %v", got)
+	}
+}
+
+// A ordem importa contra o IngestionID: ele lê a linha depois de todo
+// Transformer, então um rename antes obriga a nomear o novo nome.
+func TestIngestionIDLeODepoisDoRename(t *testing.T) {
+	linha := map[string]any{
+		"provider": "p", "entity": "e", "source_key": "k", "time": "2026-01-01T00:00",
+	}
+
+	renomeado, err := Rename(map[string]string{"time": "observed_at"})(linha)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// O nome antigo já não existe, e o erro diz isso.
+	if _, err := IngestionID("provider", "entity", "source_key", "time")(renomeado); err == nil {
+		t.Fatal("nomear o campo antigo depois de um rename tem de falhar")
+	} else if !strings.Contains(err.Error(), "observed_at") {
+		t.Errorf("o erro precisa listar o que a linha tem: %v", err)
+	}
+
+	// Com o nome novo, funciona.
+	if _, err := IngestionID("provider", "entity", "source_key", "observed_at")(renomeado); err != nil {
+		t.Errorf("com o nome novo deveria funcionar: %v", err)
 	}
 }

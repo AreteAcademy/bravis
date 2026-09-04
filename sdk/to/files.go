@@ -72,15 +72,11 @@ func (f Files) Write(ctx context.Context, records []core.Envelope, opt core.Writ
 		format = core.FormatNDJSON
 	}
 
-	stamped, err := core.StampMetadata(records, opt)
-	if err != nil {
-		return nil, err
-	}
-	if err := core.CheckColumns(opt.Columns, stamped); err != nil {
+	if err := core.CheckColumns(opt.Columns, records); err != nil {
 		return nil, err
 	}
 
-	data, err := encode(stamped, format)
+	data, err := encode(records, format)
 	if err != nil {
 		return nil, err
 	}
@@ -90,13 +86,13 @@ func (f Files) Write(ctx context.Context, records []core.Envelope, opt core.Writ
 		}
 	}
 
-	key := f.name(loc, stamped, format)
+	key := f.name(loc, records, format)
 	if err := f.put(ctx, loc, key, data); err != nil {
 		return nil, err
 	}
 
 	return &core.LoadResult{
-		RowsLoaded:  int64(len(stamped)),
+		RowsLoaded:  int64(len(records)),
 		BytesStaged: int64(len(data)),
 		Duration:    time.Since(start),
 		Strategy:    "file",

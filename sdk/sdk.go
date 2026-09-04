@@ -159,66 +159,18 @@ func loadWith(ctx context.Context, data *Data, target Target, run RunContext) (*
 // staged file, so this is where streaming ends.
 // collect drains the stream into envelopes.
 //
-// The record is passed through untouched. Provenance -- provider, entity,
-// source_key, record_ts -- is filled in only when there is a Metadata block,
-// because that is the only thing it is for: those four build ingestion_id.
-// Without the block the SDK never reads a field out of your record, never
-// needs to know its shape, and cannot fail a load because a selector missed.
-//
-// What a row looks like is composed in Transform. The SDK writes it and, on
-// request, adds two fields.
-func collect(data *Data, target Target) ([]Envelope, error) {
-	meta := target.Metadata
-	// AutoID puts nothing from the record into the id, so there is nothing to
-	// collect -- same as having no Metadata block at all.
-	if meta == nil || meta.AutoID {
-		var envelopes []Envelope
-		for env, err := range data.Records {
-			if err != nil {
-				return nil, err
-			}
-			envelopes = append(envelopes, env)
-		}
-		return envelopes, nil
-	}
-
-	when := meta.When
-	if when == nil {
-		when = Now()
-	}
-
+// It does nothing else. Everything the row carries was composed in Transform,
+// including ingestion_id and ingestion_loaded_at when the fetcher asked for
+// them -- so there is no step here that reads a field out of your record, and
+// no way for one to fail.
+func collect(data *Data, _ Target) ([]Envelope, error) {
 	var envelopes []Envelope
-	i := 0
 	for env, err := range data.Records {
 		if err != nil {
 			return nil, err
 		}
-
-		key, err := meta.Key(env.Payload)
-		if err != nil {
-			return nil, &FormatError{
-				URL:  data.source.From.Describe(),
-				Line: i, Cause: fmt.Errorf("building source_key: %w", err),
-			}
-		}
-
-		ts, err := when(env.Payload)
-		if err != nil {
-			return nil, &FormatError{
-				URL:  data.source.From.Describe(),
-				Line: i, Cause: fmt.Errorf("reading record_ts: %w", err),
-			}
-		}
-
-		env.Provider = meta.Provider
-		env.Entity = meta.Entity
-		env.SourceKey = key
-		env.RecordTS = ts
-
 		envelopes = append(envelopes, env)
-		i++
 	}
-
 	return envelopes, nil
 }
 

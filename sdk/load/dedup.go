@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/bigquery"
+	core "github.com/AreteAcademy/bravis/sdk/internal/core"
 )
 
 // loadWithMerge stages the batch in a temporary table and MERGEs it into
@@ -96,7 +97,7 @@ func (l *Loader) loadWithMerge(ctx context.Context, table *bigquery.Table, data 
 		return 0, 0, nil, fmt.Errorf("the rows do not fit %s: %w", nameOf(table), err)
 	}
 
-	sql := mergeSQL(table, temp, cols, metadataID)
+	sql := mergeSQL(table, temp, cols, core.MetadataID)
 
 	job, err := l.bq.Query(sql).Run(ctx)
 	if err != nil {

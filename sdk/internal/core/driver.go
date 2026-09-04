@@ -47,8 +47,9 @@ type ReadOptions struct {
 // Writer consumes records. One implementation per destination.
 //
 // It receives records with provenance already resolved -- provider, entity,
-// source_key and record_ts, filled in by the facade from the Metadata block --
-// so no driver reads the caller's record to work out what identifies it.
+// It receives records exactly as the Transform chain composed them --
+// ingestion_id included, when the fetcher asked for it -- so no driver reads
+// the caller's record to work out what identifies it.
 type Writer interface {
 	// Write sends the batch and reports what actually happened.
 	Write(ctx context.Context, records []Envelope, opt WriteOptions) (*LoadResult, error)
@@ -60,13 +61,9 @@ type Writer interface {
 // WriteOptions is what every destination honours, whatever it writes to.
 type WriteOptions struct {
 	// Columns declares the destination's columns, in DDL order, including the
-	// two Metadata fills in. Nil declares nothing. See sdk.Target.Columns.
+	// two the ingestion transformers write. Nil declares nothing. See
+	// sdk.Target.Columns.
 	Columns []string
-
-	// Metadata asks for ingestion_id and ingestion_loaded_at. AutoID makes
-	// the id random instead of deterministic.
-	Metadata bool
-	AutoID   bool
 
 	// Dedup selects deduplication. What it costs, and whether it is supported
 	// at all, is the driver's to say -- a directory of files has no key to

@@ -28,14 +28,6 @@ func envInt(key string, fallback int) int {
 	return v
 }
 
-func envBool(key string, fallback bool) bool {
-	v, err := strconv.ParseBool(os.Getenv(key))
-	if err != nil {
-		return fallback
-	}
-	return v
-}
-
 func main() {
 	project := os.Getenv("BRAVIS_PROJECT")
 	if project == "" {
@@ -50,7 +42,6 @@ func main() {
 		sdk.WithTable(env("BRAVIS_TABLE", "raw_data")),
 		sdk.WithStagingBucket(env("BRAVIS_STAGING_BUCKET", project+"-bravis-staging")),
 		sdk.WithThresholdForGCS(envInt("BRAVIS_GCS_THRESHOLD", 5000)),
-		sdk.WithMetadata(envBool("BRAVIS_EXTRA_METADATA", false)),
 	)
 	if err != nil {
 		log.Fatalf("loader: %v", err)

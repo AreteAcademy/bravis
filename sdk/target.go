@@ -16,7 +16,7 @@ import (
 //	Target: sdk.Target{
 //		To:      to.BigQuery{Dataset: "bronze", Table: "pedidos"},
 //		Columns: []string{"ingestion_id", "ingestion_loaded_at", "payload"},
-//		Metadata: &sdk.Metadata{AutoID: true},
+//		Columns: []string{"ingestion_id", "ingestion_loaded_at", "payload"},
 //	}
 type Target struct {
 	// To is the destination. Required.
@@ -26,8 +26,8 @@ type Target struct {
 	// including the ones the SDK fills in:
 	//
 	//	Columns: []string{
-	//		"ingestion_id",         // from the Metadata block
-	//		"ingestion_loaded_at",  // from the Metadata block
+	//		"ingestion_id",         // from sdk.IngestionID()
+	//		"ingestion_loaded_at",  // from sdk.IngestionLoadedAt()
 	//		"provider",
 	//		"entity",
 	//		"source_key",
@@ -35,25 +35,18 @@ type Target struct {
 	//	}
 	//
 	// One declaration, and it names every column -- including the two that
-	// Metadata produces, which no fetcher used to have written down anywhere.
+	// the ingestion transformers write, so nothing lands that the chain did
+	// not compose.
 	//
-	// Checked against the row after Transform composed it and Metadata
-	// stamped it, so a column that neither delivered is an error naming the
-	// column, and a field the row carries that this list does not declare is
-	// an error naming the field. Checked again against the real destination,
+	// Checked against the row the Transform chain composed, so a declared
+	// column the chain did not deliver is an error naming the column, and a
+	// field the row carries that this list does not declare is an error naming
+	// the field. Checked again against the real destination,
 	// where a declared column it lacks is an error naming both sides.
 	//
 	// Nil declares nothing and checks nothing. There is no fallback: this
 	// list is the only place the destination's columns are declared.
 	Columns []string
-
-	// Metadata adds ingestion_id and ingestion_loaded_at, and is the only
-	// thing the SDK writes that Transform did not compose. Nil adds nothing.
-	//
-	// It also carries the provenance those two are built from, so declaring
-	// it is what makes Provider, Entity and Key necessary -- and the only
-	// reason the SDK reads your record at all. See Metadata.
-	Metadata *Metadata
 
 	// Dedup selects deduplication. Zero value appends, which is free. What
 	// DedupMerge costs, and whether a destination supports it at all, is the
@@ -68,22 +61,15 @@ func (d Target) validate() error {
 		return fmt.Errorf("Target.To is required: pass a destination, such as " +
 			"to.BigQuery{Dataset: \"bronze\", Table: \"pedidos\"}")
 	}
-	if d.Metadata != nil {
-		if err := d.Metadata.validate(); err != nil {
-			return err
-		}
-	}
 	return nil
 }
 
 // options folds the Target into what every driver receives.
 func (d Target) options(run RunContext) core.WriteOptions {
 	return core.WriteOptions{
-		Columns:  d.Columns,
-		Metadata: d.Metadata != nil,
-		AutoID:   d.Metadata != nil && d.Metadata.AutoID,
-		Dedup:    d.Dedup,
-		Run:      run,
+		Columns: d.Columns,
+		Dedup:   d.Dedup,
+		Run:     run,
 	}
 }
 

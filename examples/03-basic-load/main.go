@@ -36,7 +36,6 @@ func main() {
 		sdk.WithProjectID(*project),
 		sdk.WithDataset(*dataset),
 		sdk.WithTable(*table),
-		sdk.WithMetadata(true),    // adds ingestion_id and ingestion_loaded_at
 		sdk.WithCreateTable(true), // so this example runs against an empty dataset
 	)
 	if err != nil {

@@ -67,8 +67,8 @@ func TestFilesEscreveNDJSON(t *testing.T) {
 	}
 }
 
-// Sem Metadata, nada é acrescentado -- o registro sai como o Transform o
-// deixou, igual em todo destino.
+// Nada é acrescentado: o registro sai como o Transform o deixou, igual em
+// todo destino.
 func TestFilesNaoAcrescentaNadaSemMetadata(t *testing.T) {
 	dir := t.TempDir()
 	if _, err := (Files{Path: dir + "/"}).Write(context.Background(), lote(1), core.WriteOptions{}); err != nil {
@@ -86,42 +86,6 @@ func TestFilesNaoAcrescentaNadaSemMetadata(t *testing.T) {
 		if _, tem := row[proibido]; tem {
 			t.Errorf("o SDK escreveu %q sem ser pedido", proibido)
 		}
-	}
-}
-
-func TestFilesAcrescentaExatamenteDoisComMetadata(t *testing.T) {
-	dir := t.TempDir()
-	_, err := Files{Path: dir + "/"}.Write(context.Background(), lote(1),
-		core.WriteOptions{Metadata: true})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	corpo, _ := os.ReadFile(unico(t, dir))
-	var row map[string]any
-	_ = json.Unmarshal([]byte(strings.TrimSpace(string(corpo))), &row)
-
-	if len(row) != 4 {
-		t.Errorf("%d campos, esperado os 2 do chamador mais exatamente 2: %v", len(row), row)
-	}
-	for _, quer := range []string{"ingestion_id", "ingestion_loaded_at"} {
-		if _, tem := row[quer]; !tem {
-			t.Errorf("%q não foi acrescentado", quer)
-		}
-	}
-}
-
-func TestFilesParticionaPorData(t *testing.T) {
-	dir := t.TempDir()
-	_, err := Files{Path: dir + "/", PartitionBy: "ingestion_loaded_at"}.
-		Write(context.Background(), lote(1), core.WriteOptions{Metadata: true})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	caminho := unico(t, dir)
-	if !strings.Contains(caminho, "ingestion_loaded_at=") {
-		t.Errorf("o caminho não foi particionado: %s", caminho)
 	}
 }
 
@@ -148,19 +112,6 @@ func TestFilesComprime(t *testing.T) {
 
 // Um diretório não tem chave para casar, e uma flag ignorada em silêncio é
 // pior que um erro.
-func TestFilesRecusaDedup(t *testing.T) {
-	_, err := Files{Path: t.TempDir() + "/"}.Write(context.Background(), lote(1),
-		core.WriteOptions{Metadata: true, Dedup: core.DedupMerge})
-	if err == nil {
-		t.Fatal("to.Files não sabe deduplicar; aceitar a flag seria ignorá-la")
-	}
-	for _, quer := range []string{"to.Files", "Dedup"} {
-		if !strings.Contains(err.Error(), quer) {
-			t.Errorf("o erro precisa nomear %q: %v", quer, err)
-		}
-	}
-}
-
 func TestFilesRecusaFormatoQueNaoEscreve(t *testing.T) {
 	_, err := Files{Path: t.TempDir() + "/", Format: "parquet"}.
 		Write(context.Background(), lote(1), core.WriteOptions{})
@@ -244,5 +195,37 @@ func TestFilesRecusaCaminhoSemStore(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "gs") || !strings.Contains(err.Error(), "Store") {
 		t.Errorf("o erro precisa nomear os dois: %v", err)
+	}
+}
+
+// Um diretório não tem chave para casar, e uma flag ignorada em silêncio é
+// pior que um erro.
+func TestFilesRecusaDedup(t *testing.T) {
+	_, err := Files{Path: t.TempDir() + "/"}.Write(context.Background(), lote(1),
+		core.WriteOptions{Dedup: core.DedupMerge})
+	if err == nil {
+		t.Fatal("to.Files não sabe deduplicar; aceitar a flag seria ignorá-la")
+	}
+	for _, quer := range []string{"to.Files", "Dedup"} {
+		if !strings.Contains(err.Error(), quer) {
+			t.Errorf("o erro precisa nomear %q: %v", quer, err)
+		}
+	}
+}
+
+// O particionamento lê a coluna que a cadeia compôs, não uma que o destino
+// acrescenta.
+func TestFilesParticionaPelaColunaDaLinha(t *testing.T) {
+	dir := t.TempDir()
+	registros := []core.Envelope{{Payload: map[string]any{
+		"sku": "W-1", "ingestion_loaded_at": "2026-09-04T10:00:00Z",
+	}}}
+
+	if _, err := (Files{Path: dir + "/", PartitionBy: "ingestion_loaded_at"}).
+		Write(context.Background(), registros, core.WriteOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if caminho := unico(t, dir); !strings.Contains(caminho, "ingestion_loaded_at=2026-09-04") {
+		t.Errorf("o caminho não foi particionado: %s", caminho)
 	}
 }

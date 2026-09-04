@@ -108,8 +108,6 @@ var (
 	WithKeepStagedFile         = core.WithKeepStagedFile
 	WithFormat                 = core.WithFormat
 	WithThresholdForGCS        = core.WithThresholdForGCS
-	WithMetadata               = core.WithMetadata
-	WithAutoID                 = core.WithAutoID
 	WithColumns                = core.WithColumns
 	WithClusterBy              = core.WithClusterBy
 	WithCreateTable            = core.WithCreateTable

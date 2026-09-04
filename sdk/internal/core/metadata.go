@@ -5,93 +5,16 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"time"
-
-	"github.com/google/uuid"
 )
 
-// The two fields a Metadata block adds. Only two: provider, entity and
-// source_key are provenance the SDK uses to build the id, not columns it
-// imposes.
+// The names of the two columns sdk.IngestionID and sdk.IngestionLoadedAt
+// write. They live here because the destination needs to recognise them: a
+// declaration that names ingestion_loaded_at is what tells BigQuery to
+// partition on it.
 const (
 	MetadataID       = "ingestion_id"
 	MetadataLoadedAt = "ingestion_loaded_at"
 )
-
-var metadataFields = []string{MetadataID, MetadataLoadedAt}
-
-// StampMetadata adds ingestion_id and ingestion_loaded_at to every record,
-// when the WriteOptions ask for them.
-//
-// It lives here, not in a driver, because the id has to be computed in exactly
-// one place: a row written to Postgres and the same row written to BigQuery
-// must carry the same ingestion_id, or nothing downstream can reconcile them.
-//
-// Returns a copy. `Write(ctx, batch, opt)` hands the driver the caller's own
-// slice, so writing the metadata back into it would alter what they still
-// hold -- loading the same batch twice then failed on the second try with
-// "payload already has ingestion_id", which is exactly what a retry does.
-func StampMetadata(records []Envelope, opt WriteOptions) ([]Envelope, error) {
-	if !opt.Metadata {
-		return records, nil
-	}
-
-	out := make([]Envelope, len(records))
-	copy(out, records)
-
-	for i := range out {
-		id, err := ingestionID(&out[i], opt.AutoID)
-		if err != nil {
-			return nil, err
-		}
-
-		payload, err := AsObject(out[i].Payload)
-		if err != nil {
-			return nil, fmt.Errorf("a Metadata block adds two fields to the record, so it has "+
-				"to be a JSON object: %w", err)
-		}
-
-		// Copy: the caller may still hold this map.
-		stamped := make(map[string]any, len(payload)+len(metadataFields))
-		for k, v := range payload {
-			stamped[k] = v
-		}
-
-		var clashes []string
-		for _, f := range metadataFields {
-			if _, taken := stamped[f]; taken {
-				clashes = append(clashes, f)
-			}
-		}
-		if len(clashes) > 0 {
-			return nil, fmt.Errorf("record %d already has the field(s) %s, which Metadata would "+
-				"overwrite. Rename them in Transform, or drop the Metadata block",
-				i, strings.Join(clashes, ", "))
-		}
-
-		stamped[MetadataID] = id
-		stamped[MetadataLoadedAt] = time.Now().UTC().Format(time.RFC3339)
-		out[i].Payload = stamped
-	}
-
-	return out, nil
-}
-
-// ingestionID is the one place that decides which id a row gets.
-//
-// Deterministic by default, so a re-run writes the same id for the same record
-// and a merge can recognise it. Random with AutoID, which is a row identifier
-// and nothing more.
-func ingestionID(env *Envelope, auto bool) (string, error) {
-	if auto {
-		id, err := uuid.NewRandom()
-		if err != nil {
-			return "", fmt.Errorf("generating a random ingestion_id: %w", err)
-		}
-		return id.String(), nil
-	}
-	return env.IngestionID()
-}
 
 // CheckColumns confirms the row matches the declaration, in both directions.
 //
@@ -99,7 +22,7 @@ func ingestionID(env *Envelope, auto bool) (string, error) {
 // writing. If a declared column could quietly be absent, the list would drift
 // from the table it claims to describe and nothing would say so.
 //
-//   - a declared column that neither Transform nor Metadata delivered is an
+//   - a declared column the Transform chain did not deliver is an
 //     error naming the column. It would land NULL, and a column that is NULL
 //     because nobody filled it looks exactly like one that is NULL on purpose.
 //   - a field the row carries that the declaration does not list is an error
@@ -138,8 +61,8 @@ func CheckColumns(declared []string, records []Envelope) error {
 	if len(missing) > 0 {
 		sort.Strings(missing)
 		return fmt.Errorf("the Columns declaration lists %s, which the row does not have. "+
-			"Compose them in Transform, or declare a Metadata block if they are "+
-			"ingestion_id and ingestion_loaded_at. The row has: %s",
+			"Compose them in Transform -- sdk.IngestionID() and sdk.IngestionLoadedAt() "+
+			"write the two the SDK knows. The row has: %s",
 			strings.Join(missing, ", "), keysOf(row))
 	}
 	if len(undeclared) > 0 {

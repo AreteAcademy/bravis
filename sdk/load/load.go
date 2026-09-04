@@ -13,12 +13,11 @@ import (
 	"cloud.google.com/go/bigquery"
 	"cloud.google.com/go/storage"
 	core "github.com/AreteAcademy/bravis/sdk/internal/core"
-	"github.com/google/uuid"
 )
 
 // Loader writes Envelopes to BigQuery as generic JSON.
 // The SDK does NOT impose a table schema — you define it.
-// Metadata can be optionally added to the payload itself.
+// The record is written exactly as the Transform chain composed it.
 type Loader struct {
 	cfg *core.LoadConfig
 	bq  *bigquery.Client
@@ -109,23 +108,39 @@ func resolveConfig(cfg *core.LoadConfig, opts ...core.LoadOption) (*core.LoadCon
 			"the merge miss the match and write the duplicate it exists to prevent")
 	}
 
-	if c.Dedup == core.DedupMerge && c.AutoID {
-		return nil, fmt.Errorf("DedupMerge and AutoID cannot both apply: the merge matches rows " +
-			"on ingestion_id, and AutoID makes a fresh one every load -- nothing would ever " +
-			"match, so every re-run would write the duplicates the merge exists to prevent")
+	// The preconditions used to ask "is the Metadata block on?". They ask the
+	// declaration now, which is better: it is the column the merge actually
+	// matches on, and the fetcher named it.
+	//
+	// Only checkable when Columns is declared. Without a declaration the row
+	// itself is checked at load time -- see Load.
+	if c.Dedup == core.DedupMerge && declared(c.Columns) && !declares(c.Columns, core.MetadataID) {
+		return nil, fmt.Errorf("DedupMerge needs the %s column, and Columns does not declare "+
+			"it: the merge matches rows on it. Add sdk.IngestionID() to Transform and the "+
+			"column to Columns", core.MetadataID)
 	}
 
-	if c.Dedup == core.DedupMerge && !c.Metadata {
-		return nil, fmt.Errorf("DedupMerge requires Metadata: the merge matches rows on " +
-			"ingestion_id, and that column only exists when Metadata adds it")
+	if (c.PartitionExpiration > 0 || c.RequirePartitionFilter) && declared(c.Columns) &&
+		!declares(c.Columns, core.MetadataLoadedAt) {
+		return nil, fmt.Errorf("the partition options need the %s column, and Columns does "+
+			"not declare it: the table is partitioned on it. Add sdk.IngestionLoadedAt() to "+
+			"Transform and the column to Columns", core.MetadataLoadedAt)
 	}
 
-	if (c.PartitionExpiration > 0 || c.RequirePartitionFilter) && !c.Metadata {
-		return nil, fmt.Errorf("partition options require Metadata: the table is " +
-			"partitioned on ingestion_loaded_at, and that column only exists when " +
-			"Metadata adds it")
-	}
 	return &c, nil
+}
+
+// declared reports whether the caller declared the destination's columns.
+func declared(columns []string) bool { return len(columns) > 0 }
+
+// declares reports whether the declaration names a column.
+func declares(columns []string, name string) bool {
+	for _, c := range columns {
+		if c == name {
+			return true
+		}
+	}
+	return false
 }
 
 const (
@@ -163,7 +178,7 @@ func strategyFor(n, threshold int) string {
 
 // Load writes envelopes to BigQuery.
 // The table must already exist with the schema you define.
-// Metadata can be optionally added to each payload.
+// The record is written exactly as the Transform chain composed it.
 func (l *Loader) Load(ctx context.Context, envelopes ...core.Envelope) (*core.LoadResult, error) {
 	start := time.Now()
 
@@ -189,17 +204,9 @@ func (l *Loader) Load(ctx context.Context, envelopes ...core.Envelope) (*core.Lo
 		return fail(nil)
 	}
 
-	envelopes, err := core.StampMetadata(envelopes, core.WriteOptions{
-		Metadata: l.cfg.Metadata, AutoID: l.cfg.AutoID,
-	})
-	if err != nil {
-		return fail(fmt.Errorf("add metadata: %w", err))
-	}
-
-	// The row is complete now: Transform composed it and Metadata stamped it.
-	// Checking here is what lets a declared ingestion_id be legitimate, which
-	// it could never be inside the Transform chain -- that runs before the
-	// two metadata fields exist.
+	// The row is exactly what the Transform chain composed, ingestion_id
+	// included -- so the declaration is checked against the whole row and
+	// needs no special case.
 	if err := core.CheckColumns(l.cfg.Columns, envelopes); err != nil {
 		return fail(err)
 	}
@@ -305,83 +312,7 @@ func (l *Loader) Load(ctx context.Context, envelopes ...core.Envelope) (*core.Lo
 	return result, nil
 }
 
-// The two fields Metadata adds. Only two: provider, entity and
-// source_key are provenance the SDK uses to build the id, not columns it
-// imposes. What a row looks like is the caller's decision, made in Transform.
-const (
-	metadataID       = "ingestion_id"
-	metadataLoadedAt = "ingestion_loaded_at"
-)
-
-var metadataFields = []string{metadataID, metadataLoadedAt}
-
-// ingestionID is the one place that decides which id a row gets.
-//
-// Deterministic by default, so a re-run writes the same id for the same
-// record and DedupMerge can recognise it. Random with AutoID, which is a row
-// identifier and nothing more -- see LoadConfig.AutoID for what that gives up.
-func (l *Loader) ingestionID(env *core.Envelope) (string, error) {
-	if l.cfg.AutoID {
-		id, err := uuid.NewRandom()
-		if err != nil {
-			return "", fmt.Errorf("generating a random ingestion_id: %w", err)
-		}
-		return id.String(), nil
-	}
-	return env.IngestionID()
-}
-
-// addMetadataToEnvelope merges the two metadata fields into the payload.
-//
-// They carry no prefix, so a payload that already owns one of those names is
-// an error naming the field. Silently replacing a vendor's value with ours is
-// the worse failure: it is invisible.
-func (l *Loader) addMetadataToEnvelope(env *core.Envelope) error {
-	id, err := l.ingestionID(env)
-	if err != nil {
-		return err
-	}
-
-	var payload map[string]any
-	switch p := env.Payload.(type) {
-	case map[string]any:
-		// Copy: the caller may still hold this map, and a load must not
-		// mutate what it was handed.
-		payload = make(map[string]any, len(p)+len(metadataFields))
-		for k, v := range p {
-			payload[k] = v
-		}
-	default:
-		data, err := json.Marshal(env.Payload)
-		if err != nil {
-			return fmt.Errorf("marshal payload: %w", err)
-		}
-		if err := json.Unmarshal(data, &payload); err != nil {
-			return fmt.Errorf("the Metadata block adds two fields to the record, so it has to "+
-				"be a JSON object; this one is %s. Wrap it in Transform, or drop the block",
-				truncate(data, 80))
-		}
-	}
-
-	var clashes []string
-	for _, f := range metadataFields {
-		if _, taken := payload[f]; taken {
-			clashes = append(clashes, f)
-		}
-	}
-	if len(clashes) > 0 {
-		return fmt.Errorf("payload already has the field(s) %s, which Metadata would "+
-			"overwrite. Rename them in Transform, or leave Metadata off",
-			strings.Join(clashes, ", "))
-	}
-
-	payload[metadataID] = id
-	payload[metadataLoadedAt] = time.Now().UTC().Format(time.RFC3339)
-
-	env.Payload = payload
-	return nil
-}
-
+// encodeRows turns the batch into the bytes that land.
 func (l *Loader) encodeRows(envelopes []core.Envelope) ([]byte, error) {
 	var buf bytes.Buffer
 

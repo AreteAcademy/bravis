@@ -45,14 +45,17 @@ func (l *Loader) prepareTable(ctx context.Context, table *bigquery.Table, data [
 		return false, l.createFromSQL(ctx, table)
 	}
 
-	// Without metadata there are no SDK columns to type, so the load job
-	// creates the table by inferring every column from the data.
-	if !l.cfg.Metadata {
+	// The SDK types a column only when the caller declared it. Columns is
+	// where the destination's shape is written, so a declaration that names
+	// ingestion_id is the fetcher asking for the SDK's column -- not a default
+	// deciding the table's shape behind its back.
+	//
+	// Nothing declared, nothing to type: the load job infers every column.
+	if !typesAnything(l.cfg.Columns) {
 		return false, nil
 	}
 
-	// With metadata, two of the columns are the SDK's, and they have a
-	// declared shape:
+	// Two of the declared columns are the SDK's, and they have a shape:
 	//
 	//	ingestion_id         STRING    NOT NULL
 	//	ingestion_loaded_at  TIMESTAMP NOT NULL
@@ -119,7 +122,7 @@ func (l *Loader) applyLayout(loader *bigquery.Loader, file *bigquery.FileConfig)
 	// at a table that already has a schema is how a REQUIRED column gets
 	// relaxed back to NULLABLE -- BigQuery refuses outright, which is the
 	// good outcome, but it refuses the whole load.
-	if l.cfg.CreateSQL != "" || l.cfg.Metadata {
+	if l.cfg.CreateSQL != "" || typesAnything(l.cfg.Columns) {
 		loader.CreateDisposition = bigquery.CreateNever
 		return
 	}
@@ -168,7 +171,23 @@ func provenanceOf(records []core.Envelope) provenance {
 	if len(records) == 0 {
 		return provenance{}
 	}
+
+	// From the row's own provider and entity columns when it has them: that
+	// is where a fetcher composes them, and reading them anywhere else would
+	// be a second place for the two to disagree.
+	if row, err := core.AsObject(records[0].Payload); err == nil {
+		if p, e := text(row["provider"]), text(row["entity"]); p != "" || e != "" {
+			return provenance{Provider: p, Entity: e}
+		}
+	}
+
+	// The low-level API hands envelopes with provenance on them instead.
 	return provenance{Provider: records[0].Provider, Entity: records[0].Entity}
+}
+
+func text(v any) string {
+	s, _ := v.(string)
+	return s
 }
 
 func tableDescription(cfg *core.LoadConfig, prov provenance) string {
@@ -176,7 +195,7 @@ func tableDescription(cfg *core.LoadConfig, prov provenance) string {
 	if prov.Provider != "" && prov.Entity != "" {
 		who = fmt.Sprintf("%s/%s via the Bravis SDK", prov.Provider, prov.Entity)
 	}
-	if cfg.Metadata {
+	if declares(cfg.Columns, core.MetadataID) {
 		return fmt.Sprintf("Written by %s since %s. Rows carry ingestion_id; deduplicate "+
 			"on it downstream. The SDK never alters this table.",
 			who, time.Now().UTC().Format("2006-01-02"))
@@ -234,8 +253,24 @@ func isNotFound(err error) bool {
 // The declared shape of the two columns the SDK writes. Everything else in
 // the table is the caller's, and its types come from BigQuery.
 var metadataSchema = map[string]*bigquery.FieldSchema{
-	metadataID:       {Name: metadataID, Type: bigquery.StringFieldType, Required: true},
-	metadataLoadedAt: {Name: metadataLoadedAt, Type: bigquery.TimestampFieldType, Required: true},
+	core.MetadataID:       {Name: core.MetadataID, Type: bigquery.StringFieldType, Required: true},
+	core.MetadataLoadedAt: {Name: core.MetadataLoadedAt, Type: bigquery.TimestampFieldType, Required: true},
+}
+
+// typesAnything reports whether the declaration names a column the SDK knows
+// the shape of.
+//
+// This is the whole trigger for the typed-creation path, and it is the
+// caller's own list -- which is what keeps it from being a default deciding
+// the table's shape without appearing in the fetcher. Declare the column, get
+// the guarantee; declare nothing, and autodetect infers everything nullable.
+func typesAnything(columns []string) bool {
+	for _, c := range columns {
+		if _, mine := metadataSchema[c]; mine {
+			return true
+		}
+	}
+	return false
 }
 
 // createTyped creates the destination with ingestion_id and
@@ -287,7 +322,7 @@ func typedTable(cfg *core.LoadConfig, inferred bigquery.Schema, prov provenance)
 		Labels:      tableLabels(prov),
 		TimePartitioning: &bigquery.TimePartitioning{
 			Type:                   bigquery.DayPartitioningType,
-			Field:                  metadataLoadedAt,
+			Field:                  core.MetadataLoadedAt,
 			Expiration:             cfg.PartitionExpiration,
 			RequirePartitionFilter: cfg.RequirePartitionFilter,
 		},

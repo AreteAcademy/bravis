@@ -128,9 +128,12 @@ rodam na CI, então uma quebra de superfície aparece antes de virar release. Tr
 defeitos passaram por testes que viviam dentro do pacote e provavam o que o
 autor enxergava.
 
-E, quando um campo depende de outro, **recuse em vez de ignorar**: `AutoID`
-junto de `Provider`/`Key` é erro nomeando os campos, porque seriam escritos e
-nunca lidos.
+E, quando um campo depende de outro, **recuse em vez de ignorar**. O bloco
+`Metadata` acabou removido na `v0.24.0` por essa razão levada ao limite: um
+"interruptor" com quatro campos obrigatórios não é um interruptor, e o `AutoID`
+— criado para dar um estado simples — virou o terceiro motivo de confusão. As
+duas colunas viraram transformers, e a exceção à regra "as colunas vêm do
+Transform" desapareceu.
 
 ---
 

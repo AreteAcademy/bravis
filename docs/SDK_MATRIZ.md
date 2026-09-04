@@ -1,6 +1,6 @@
 # SDK — o que cada driver suporta
 
-**Vale para** `sdk/v0.22.0` · **Atualizado em** 2026-09-04
+**Vale para** `sdk/v0.24.0` · **Atualizado em** 2026-09-04
 
 O que funciona com o quê, e o que acontece quando não funciona. Um driver que
 **ignora** uma opção não aparece aqui: neste SDK ele a recusa nomeando a opção
@@ -57,8 +57,7 @@ o arquivo.
 | | `bigquery.Table` | `to.Files` |
 |---|---|---|
 | `Columns` (declaração) | sim | sim |
-| `Metadata` (as duas colunas) | sim, `NOT NULL` | sim |
-| `Metadata.AutoID` | sim | sim |
+| as duas colunas de ingestão | do `Transform`; `NOT NULL` quando declaradas | do `Transform` |
 | `Dedup: DedupMerge` | sim, via `MERGE` | **recusado** |
 | criar o destino | `CreateTable`, `CreateSQL` | cria o diretório |
 | particionamento | dia em `ingestion_loaded_at` | `PartitionBy` vira `campo=valor/` |
@@ -71,11 +70,9 @@ o arquivo.
 
 | combinação | o que acontece |
 |---|---|
-| `DedupMerge` sem `Metadata` | **erro** — o merge casa em `ingestion_id`, que só existe com `Metadata` |
-| `DedupMerge` + `AutoID` | **erro** — id aleatório não casa com nada, e escreveria as duplicatas que o merge evita |
+| `DedupMerge` sem `ingestion_id` em `Columns` | **erro** — o merge casa nessa coluna |
 | `DedupMerge` + `RequirePartitionFilter` | **erro** — o merge varre todas as partições e não dá para escopar |
-| `PartitionExpiration` ou `RequirePartitionFilter` sem `Metadata` | **erro** — particiona-se em `ingestion_loaded_at`, que só existe com `Metadata` |
-| `Metadata` + `AutoID` + `Provider`/`Entity`/`Key`/`When` | **erro** — seriam escritos e nunca lidos |
+| opções de partição sem `ingestion_loaded_at` em `Columns` | **erro** — particiona-se nessa coluna |
 | `Dedup` em `to.Files` | **erro** — um diretório não tem chave para casar |
 | Parquet em `to.Files` | **erro** — traria o Arrow para quem só queria um arquivo |
 | `Records` + `DataKey` | **erro** — os dois dizem onde estão os registros |

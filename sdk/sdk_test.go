@@ -229,41 +229,36 @@ func TestExtractExpandeEMapeia(t *testing.T) {
 		t.Fatalf("Extract: %v", err)
 	}
 
-	target := Target{
-		Metadata: &Metadata{Provider: "open_meteo", Entity: "hourly_temperature", Key: Key("latitude", "longitude", "time"), When: Field("time")},
-	}
+	// A linha inteira é composta na cadeia, ingestion_id incluído. Nada é
+	// carimbado depois.
+	data = Transform(data,
+		Compute("provider", func(map[string]any) (any, error) { return "open_meteo", nil }),
+		Compute("entity", func(map[string]any) (any, error) { return "hourly_temperature", nil }),
+		Compute("source_key", func(r map[string]any) (any, error) {
+			return Key("latitude", "longitude", "time")(r)
+		}),
+		IngestionID("provider", "entity", "source_key", "time"),
+	)
 
-	envelopes, err := collect(data, target)
+	envelopes, err := collect(data, Target{})
 	if err != nil {
 		t.Fatalf("collect: %v", err)
 	}
-
 	if len(envelopes) != 2 {
 		t.Fatalf("expected 2 readings, got %d", len(envelopes))
 	}
 
-	e := envelopes[0]
-	if e.Provider != "open_meteo" || e.Entity != "hourly_temperature" {
-		t.Errorf("provenance was not stamped: %+v", e)
+	primeiro := envelopes[0].Payload.(map[string]any)
+	if primeiro["source_key"] != "-23.55|-46.63|2026-01-01T00:00" {
+		t.Errorf("source_key = %q", primeiro["source_key"])
 	}
-	if e.SourceKey != "-23.55|-46.63|2026-01-01T00:00" {
-		t.Errorf("SourceKey = %q", e.SourceKey)
-	}
-	if e.RecordTS != "2026-01-01T00:00" {
-		t.Errorf("RecordTS = %q", e.RecordTS)
+	if primeiro[ColumnIngestionID] == nil || primeiro[ColumnIngestionID] == "" {
+		t.Error("a cadeia não escreveu ingestion_id")
 	}
 
-	// ingestion_id must come out, and be stable.
-	id1, err := e.IngestionID()
-	if err != nil {
-		t.Fatalf("IngestionID: %v", err)
-	}
-	id2, _ := envelopes[0].IngestionID()
-	if id1 != id2 {
-		t.Errorf("unstable ingestion_id: %s != %s", id1, id2)
-	}
-	if envelopes[1].SourceKey == e.SourceKey {
-		t.Error("different readings collided on the same key")
+	segundo := envelopes[1].Payload.(map[string]any)
+	if primeiro[ColumnIngestionID] == segundo[ColumnIngestionID] {
+		t.Error("duas leituras diferentes colidiram no mesmo id")
 	}
 }
 
@@ -324,6 +319,9 @@ func TestErroDeFonteCarregaStatus(t *testing.T) {
 	}
 }
 
+// Um campo que não existe é erro de formato: a ação é consertar o mapeamento,
+// não esperar e tentar de novo. Agora o erro vem da cadeia, que é onde a
+// chave passou a ser computada.
 func TestErroDeFormatoEmChaveAusente(t *testing.T) {
 	srv := openMeteoServer(t)
 	defer srv.Close()
@@ -335,12 +333,11 @@ func TestErroDeFormatoEmChaveAusente(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	data = Transform(data, Compute("source_key", func(r map[string]any) (any, error) {
+		return Key("campo_inexistente")(r)
+	}))
 
-	// A field that does not exist is a format error, not a source error: the
-	// action is to fix the mapping, not to wait and retry.
-	_, err = collect(data, Target{
-		Metadata: &Metadata{Provider: "p", Entity: "e", Key: Key("campo_inexistente")},
-	})
+	_, err = collect(data, Target{})
 	var formato *FormatError
 	if !errors.As(err, &formato) {
 		t.Fatalf("expected *FormatError, got %T: %v", err, err)
@@ -447,7 +444,7 @@ func TestResultCountsPagesWalked(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := collect(data, Target{Metadata: &Metadata{Provider: "p", Entity: "e", Key: Key("id")}}); err != nil {
+	if _, err := collect(data, Target{}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -485,7 +482,7 @@ func TestResultCountsRetriedAttempts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := collect(data, Target{Metadata: &Metadata{Provider: "p", Entity: "e", Key: Key("id")}}); err != nil {
+	if _, err := collect(data, Target{}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -512,7 +509,7 @@ func TestTransformKeepsTheCounters(t *testing.T) {
 	}
 
 	data = Transform(data, Accept("time", "temperature_2m", "latitude"))
-	if _, err := collect(data, Target{Metadata: &Metadata{Provider: "p", Entity: "e", Key: Key("time")}}); err != nil {
+	if _, err := collect(data, Target{}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -623,118 +620,6 @@ func TestEveryCoreOptionIsReachable(t *testing.T) {
 // it must not read one field out of it. Proved with selectors that fail if
 // they are ever called: a selector that runs is a selector whose failure can
 // sink a load the caller never asked the SDK to inspect.
-func TestSemMetadataOSDKNaoTocaNoPayload(t *testing.T) {
-	srv := openMeteoServer(t)
-	defer srv.Close()
-
-	data, err := Extract(context.Background(), Source{From: from.HTTP{
-		URL:     srv.URL,
-		Records: records(ParallelArrays("hourly", "time", "temperature_2m")),
-	}})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// The old design took Key and When on Target, so a load that added no
-	// metadata still ran them over every record. Now they live inside the
-	// Metadata block: without it there are no selectors to run, and no way to
-	// hand the SDK one. The guarantee moved from a validation to the shape of
-	// the API, which is the stronger place for it.
-	envelopes, err := collect(data, Target{})
-	if err != nil {
-		t.Fatalf("collect: %v", err)
-	}
-	for i, e := range envelopes {
-		if e.Provider != "" || e.Entity != "" || e.SourceKey != "" || e.RecordTS != "" {
-			t.Errorf("record %d was stamped with provenance nobody asked for: %+v", i, e)
-		}
-	}
-	if len(envelopes) == 0 {
-		t.Fatal("no records came through")
-	}
-	for i, e := range envelopes {
-		if e.Provider != "" || e.Entity != "" || e.SourceKey != "" || e.RecordTS != "" {
-			t.Errorf("record %d was stamped with provenance nobody asked for: %+v", i, e)
-		}
-	}
-}
-
-// And what comes out is what went in, field for field.
-func TestSemMetadataOPayloadSaiComoEntrou(t *testing.T) {
-	srv := openMeteoServer(t)
-	defer srv.Close()
-
-	data, err := Extract(context.Background(), Source{From: from.HTTP{
-		URL:     srv.URL,
-		Records: records(ParallelArrays("hourly", "time", "temperature_2m")),
-	}})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	envelopes, err := collect(data, Target{})
-	if err != nil {
-		t.Fatalf("collect: %v", err)
-	}
-
-	got, ok := envelopes[0].Payload.(map[string]any)
-	if !ok {
-		t.Fatalf("payload changed shape: %T", envelopes[0].Payload)
-	}
-	want := []string{"latitude", "longitude", "temperature_2m", "time"}
-	if len(got) != len(want) {
-		t.Errorf("the SDK added or removed fields: %v", got)
-	}
-	for _, f := range want {
-		if _, present := got[f]; !present {
-			t.Errorf("field %q went missing", f)
-		}
-	}
-}
-
-// --- AutoID -------------------------------------------------------------
-
-// AutoID is the whole declaration: nothing about the record goes into the id,
-// so nothing about the record has to be described.
-func TestAutoIDNaoCarimbaProveniencia(t *testing.T) {
-	srv := openMeteoServer(t)
-	defer srv.Close()
-
-	data, err := Extract(context.Background(), Source{From: from.HTTP{
-		URL:     srv.URL,
-		Records: records(ParallelArrays("hourly", "time", "temperature_2m")),
-	}})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	envelopes, err := collect(data, Target{Metadata: &Metadata{AutoID: true}})
-	if err != nil {
-		t.Fatalf("collect: %v", err)
-	}
-	for i, e := range envelopes {
-		if e.SourceKey != "" || e.RecordTS != "" {
-			t.Errorf("registro %d ganhou proveniência que o id não usa: %+v", i, e)
-		}
-	}
-}
-
-// records adapta um Expander para o campo Records, que é onde a decisão de
-// "o que esta resposta carrega" mora agora.
-func records(e Expander) func(Response) ([]any, error) {
-	return func(r Response) ([]any, error) {
-		doc, err := r.Object()
-		if err != nil {
-			return nil, err
-		}
-		return e(doc)
-	}
-}
-
-// --- Records: por resposta, e todo 2xx chega ----------------------------
-
-// Um vendor que responde 204 numa janela vazia não pode ser pipeline
-// vermelho. Zero registros é um resultado, não uma falha.
 func TestTodoDoisXXChegaAoRecords(t *testing.T) {
 	casos := []struct {
 		status int
@@ -894,5 +779,17 @@ func TestDecodificarCorpoErradoEUmaRecusa(t *testing.T) {
 		t.Fatal("HTML não é o JSON esperado")
 	} else if !errors.Is(err, ErrRejected) {
 		t.Errorf("JSON() devolveu erro comum, não recusa: %T %v", err, err)
+	}
+}
+
+// records adapta um Expander para o campo Records, que é onde a decisão de
+// "o que esta resposta carrega" mora.
+func records(e Expander) func(Response) ([]any, error) {
+	return func(r Response) ([]any, error) {
+		doc, err := r.Object()
+		if err != nil {
+			return nil, err
+		}
+		return e(doc)
 	}
 }

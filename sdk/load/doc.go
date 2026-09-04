@@ -40,36 +40,36 @@
 // Your payload, as Transform left it. The SDK imposes no columns: what a row
 // looks like is your decision.
 //
-// Metadata adds two columns and nothing else, declared NOT NULL:
+// The ingestion transformers write two columns, and a declaration that names
+// them makes the SDK create them NOT NULL:
 //
 //	ingestion_id        STRING    NOT NULL
 //	ingestion_loaded_at TIMESTAMP NOT NULL
 //
 // The id is a deterministic UUID v5 over provider|entity|source_key|record_ts,
-// so a re-run writes the same id for the same record. AutoID makes it a fresh
-// random UUID instead, which gives up that guarantee -- see LoadConfig.AutoID.
+// so a re-run writes the same id for the same record.
 //
 // Provider, Entity and SourceKey stay provenance: they build the id, they do
 // not become columns. A record that already owns one of those two names is an
 // error naming the field, never a silent overwrite.
 //
-// Metadata is required by DedupMerge, which matches on ingestion_id, and
-// by the partition options, which partition on ingestion_loaded_at.
+// DedupMerge needs the ingestion_id column, and the partition options need
+// ingestion_loaded_at. Both are checked against Columns when it is declared.
 //
 // # Creating the table
 //
 // Off by default. With CreateTable the table is created on the first run and
 // the columns come from the data, because nothing else knows them.
 //
-// With Metadata the SDK creates the table itself, so it can declare its own
-// two columns NOT NULL -- autodetect infers them nullable, and BigQuery will
+// When Columns names a column the SDK knows the shape of, the SDK creates the
+// table itself, so it can declare that column NOT NULL -- autodetect infers them nullable, and BigQuery will
 // not tighten a column afterwards. Your columns are still typed by BigQuery,
 // from a schema it infers over the batch: the SDK infers no type of its own.
 // That costs one extra load job, on the run that creates the table and never
 // again.
 //
 // Either way the SDK sets what it can: day partitioning on
-// ingestion_loaded_at when Metadata provides it, and clustering on the
+// ingestion_loaded_at when the declaration names it, and clustering on the
 // columns you name in ClusterBy.
 //
 // CreateSQL runs your DDL instead, once, and the SDK then checks it produced

@@ -188,12 +188,13 @@ sdk.Run(sdk.Pipeline{
         sdk.Accept("time", "temperature_2m", "latitude", "longitude"),
         sdk.Compute("payload", …), sdk.Compute("provider", …),
         sdk.Compute("entity", …), sdk.Compute("source_key", sdk.Key(…)),
+        sdk.IngestionID("provider", "entity", "source_key", "time"),
+        sdk.IngestionLoadedAt(),
         sdk.Without("time", "temperature_2m", "latitude", "longitude"),
     },                                                    // que linha monta
     Target: sdk.Target{
         To:       bigquery.Table{Dataset: "bronze", Name: "vendors_open_meteo_hourly_temperatures"},
         Columns:  []string{"ingestion_id", "ingestion_loaded_at", "provider", "entity", "source_key", "payload"},
-        Metadata: &sdk.Metadata{Provider: …, Entity: …, Key: …, When: …},
         Dedup:    sdk.DedupMerge,
     },                                                    // para onde vai, e com que colunas
 })
@@ -201,18 +202,19 @@ sdk.Run(sdk.Pipeline{
 
 Três detalhes que só um consumidor real produz, e que valem para o próximo:
 
-- **`Metadata.Key` lê `source_key` de volta** em vez de recalculá-lo. O
-  `Transform` o computa uma vez com `sdk.Key(...)`, e o bloco o lê com
-  `Field("source_key")`. Um só lugar produz a chave, então a coluna e o
-  `ingestion_id` não podem divergir.
+- **`sdk.IngestionID` lê `source_key` de volta** em vez de recalculá-lo. O
+  `Transform` o computa uma vez com `sdk.Key(...)`, e o transformer o lê da
+  linha. Um só lugar produz a chave, então a coluna e o `ingestion_id` não podem
+  divergir.
 - **Um adaptador desce um nível e delega.** Os seletores rodam depois do
   `Transform`, quando a leitura já está aninhada sob `payload`. O adaptador
   chama o `sdk.Key` do SDK sobre o mapa interno — um `fmt.Sprintf` local
   pareceria idêntico e daria outro `ingestion_id` no primeiro float formatado
   diferente.
-- **`AutoID` não serve aqui.** A dedupe deste consumidor acontece no bronze, com
-  `ROW_NUMBER() OVER (PARTITION BY ingestion_id)`, e depende de o id ser estável
-  para a mesma `(lat, lon, hora)`. `AutoID` é para fonte sem chave natural.
+- **O id tem de ser estável.** A dedupe deste consumidor acontece no bronze, com
+  `ROW_NUMBER() OVER (PARTITION BY ingestion_id)`, e depende de o mesmo
+  `(lat, lon, hora)` dar sempre o mesmo id. É o que `sdk.IngestionID` garante, e
+  o motivo de a fórmula ser congelada.
 
 ---
 

@@ -104,13 +104,6 @@ func main() {
 				"payload",
 			},
 
-			Metadata: &sdk.Metadata{
-				Provider: provider,
-				Entity:   entity,
-				Key:      sdk.Key("source_key"),
-				When:     sdk.Field("source_key"),
-			},
-
 			// Re-running the same window is a no-op. Costs one scan of the
 			// destination per load, which is why it is never on by default.
 			Dedup: sdk.DedupMerge,

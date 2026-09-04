@@ -80,8 +80,9 @@ on one side, the declared columns, metadata and deduplication on the other.
 
 **The columns come from `Transform` and are declared in `Target.Columns`.**
 Whatever shape your transformers compose is exactly what is written; the SDK
-adds nothing on its own except the two `Metadata` fields, and those are named
-in the declaration too.
+adds nothing on its own — the two columns it knows how to write, `ingestion_id`
+and `ingestion_loaded_at`, are transformers you put in the chain like any
+other.
 
 Everything between the two calls that is not specific to the vendor lives in
 the SDK: config, retry, pagination, table creation, deduplication and the
@@ -172,12 +173,16 @@ wrong.
 
 It stays lazy, so a paginated source still does not have to fit in memory.
 
-**Order matters against `Metadata.Key`.** Provenance is read after every
-Transformer has run, so a rename here has to be reflected there:
+**Order matters inside the chain.** `sdk.IngestionID` reads the record after
+every Transformer before it, so a rename has to be reflected in the field names
+you give it:
 
 ```go
-sdk.Transform(data, sdk.Rename(map[string]string{"time": "observed_at"}))
-sdk.Metadata{Key: sdk.Key("latitude", "longitude", "observed_at")}  // the new name
+sdk.Rename(map[string]string{"time": "observed_at"}),
+sdk.Compute("source_key", func(r map[string]any) (any, error) {
+	return sdk.Key("latitude", "longitude", "observed_at")(r)
+}),
+sdk.IngestionID("provider", "entity", "source_key", "observed_at"),
 ```
 
 Naming the old one is an error listing what the record actually has — not a
@@ -201,21 +206,24 @@ exit code for free:
 ```go
 func main() {
 	sdk.Run(sdk.Pipeline{
-		Source: sdk.Source{URL: "..."},
-		Records: func(r sdk.Response) ([]any, error) {
-			doc, err := r.Object()
-			if err != nil {
-				return nil, err
-			}
-			return sdk.ArrayAt("results")(doc)
-		},
-		Target: sdk.Target{
-			Metadata: &sdk.Metadata{
-				Provider: "example", Entity: "events",
-				Key:  sdk.Key("id"),
-				When: sdk.Field("created_at"),
+		Source: sdk.Source{From: from.HTTP{
+			URL: "...",
+			Records: func(r sdk.Response) ([]any, error) {
+				doc, err := r.Object()
+				if err != nil {
+					return nil, err
+				}
+				return sdk.ArrayAt("results")(doc)
 			},
+		}},
+		Transform: []sdk.Transformer{
+			sdk.Compute("provider", func(map[string]any) (any, error) { return "example", nil }),
+			sdk.Compute("entity", func(map[string]any) (any, error) { return "events", nil }),
+			sdk.Compute("source_key", func(r map[string]any) (any, error) { return sdk.Key("id")(r) }),
+			sdk.IngestionID("provider", "entity", "source_key", "created_at"),
+			sdk.IngestionLoadedAt(),
 		},
+		Target: sdk.Target{To: bigquery.Table{Name: "events"}},
 	})
 }
 ```
@@ -602,24 +610,23 @@ stats := data.Stats()   // read after the stream is drained
 ## What gets written
 
 **The columns you declared.** `Target.Columns` is the destination's shape, in
-the order of its DDL, and it names every column — including the two that
-`Metadata` fills in:
+the order of its DDL, and it names every column — the `Transform` chain
+composes all of them:
 
 ```go
 Target: sdk.Target{
-	Dataset: "bronze",
-	Table:   "vendors_open_meteo_hourly_temperatures",
-
+	To: bigquery.Table{
+		Dataset: "bronze",
+		Name:    "vendors_open_meteo_hourly_temperatures",
+	},
 	Columns: []string{
-		"ingestion_id",        // from Metadata
-		"ingestion_loaded_at", // from Metadata
+		"ingestion_id",
+		"ingestion_loaded_at",
 		"provider",
 		"entity",
 		"source_key",
 		"payload",
 	},
-
-	Metadata: &sdk.Metadata{Provider: "open_meteo", Entity: "hourly", Key: sdk.Key("source_key")},
 },
 ```
 
@@ -630,13 +637,12 @@ It is checked three ways:
 
 | | |
 |---|---|
-| a declared column neither `Transform` nor `Metadata` delivered | error naming the column |
+| a declared column the `Transform` chain did not deliver | error naming the column |
 | a field the row carries that the list does not declare | error naming the field |
 | a declared column the real table does not have | error naming the column and the table's own |
 
-The row check runs **after** `Metadata` stamps its two fields, which is what
-lets `ingestion_id` be declared at all — inside the `Transform` chain it could
-never be, because that runs before the two exist.
+The row that reaches the check is exactly what the chain composed, so the check
+needs no special case: `ingestion_id` is a column like the others.
 
 Nil declares nothing and checks nothing. There is no fallback: this list is the
 only place the destination's columns are declared.
@@ -658,55 +664,67 @@ quietly one field short. `Columns` asks *"does the row have the table's
 columns?"*. Losing either one to have a single list would trade clarity for a
 detection hole.
 
-`Metadata` adds two columns, and nothing else:
+### As duas colunas que o SDK conhece
+
+`sdk.IngestionID()` e `sdk.IngestionLoadedAt()` são transformers, usados como
+qualquer outro:
+
+```go
+Transform: []sdk.Transformer{
+	sdk.Accept("time", "temperature_2m", "latitude", "longitude"),
+	sdk.Compute("provider", ...),
+	sdk.Compute("entity", ...),
+	sdk.Compute("source_key", func(r map[string]any) (any, error) {
+		return sdk.Key("latitude", "longitude", "time")(r)
+	}),
+	sdk.IngestionID("provider", "entity", "source_key", "time"),
+	sdk.IngestionLoadedAt(),
+},
+Target: sdk.Target{
+	To:      bigquery.Table{Dataset: "bronze", Name: "hourly"},
+	Columns: []string{"ingestion_id", "ingestion_loaded_at", "provider", "entity", "source_key", "payload"},
+},
+```
+
+Ler a cadeia dá a resposta inteira: **seis helpers, seis colunas.** Nada
+acontece fora dela.
+
+`ingestion_id` é um UUID v5 determinístico sobre
+`provider|entity|source_key|record_ts`, então o mesmo registro sempre recebe o
+mesmo id e uma reexecução é segura. A fórmula, o namespace e o separador são
+**congelados** — uma linha escrita aqui tem de casar com a que um fetcher
+Python escreve para o mesmo registro.
+
+É por isso que ele é um transformer do SDK e não algo que você escreve: um
+`fmt.Sprintf` no fetcher pareceria idêntico e daria outro id no primeiro float
+formatado diferente, e toda carga anterior deixaria de casar.
+
+Sem argumentos lê `provider`, `entity`, `source_key`, `record_ts`. Nomeie os
+campos quando os seus diferirem. Campo nomeado e ausente é erro nomeando-o —
+o que costuma significar que a cadeia está fora de ordem.
+
+`sdk.IngestionLoadedAt()` escreve o instante da carga em UTC, RFC 3339. Não
+recebe argumentos: um valor de fora transformaria "quando esta linha foi
+escrita" em outra coisa com o mesmo nome.
+
+### NOT NULL, quando você declara
+
+Quando `Target.Columns` nomeia uma dessas duas, o SDK cria a tabela ele mesmo
+para poder declarar aquela coluna `NOT NULL`:
 
 ```sql
 ingestion_id        STRING    NOT NULL,
 ingestion_loaded_at TIMESTAMP NOT NULL
 ```
 
-It is a **switch for those two columns, not a place to put data.** Nothing you
-write in the block becomes a column: `Provider`, `Entity`, `Key` and `When` are
-read to build the id and are never written. A record that already owns one of
-the two names is an error naming the field, never a silent overwrite.
+O autodetect as infere nullable e o BigQuery não aperta uma coluna depois, então
+a garantia tem de ser posta na criação. **Declare a coluna, tenha a garantia**;
+não declare nada e tudo é inferido nullable. O gatilho é a sua própria lista,
+então nada decide a forma da tabela pelas suas costas.
 
-`Metadata` is required by `DedupMerge`, which matches on `ingestion_id`, and by
-the partition options, which partition on `ingestion_loaded_at`.
-
-### Two kinds of id
-
-```go
-Metadata: &sdk.Metadata{AutoID: true}
-```
-
-`AutoID` makes `ingestion_id` a fresh random UUID per row. That is the whole
-declaration — nothing about the record goes into the id, so nothing about the
-record has to be described. What it gives up is idempotency: the same reading
-loaded twice gets two different ids, and `DedupMerge` is refused alongside it,
-because a merge on a random id matches nothing and would write the duplicates
-it exists to prevent.
-
-```go
-Metadata: &sdk.Metadata{
-	Provider: "open_meteo",
-	Entity:   "hourly_temperature",
-	Key:      sdk.Key("latitude", "longitude", "time"),
-	When:     sdk.Field("time"),
-}
-```
-
-Without `AutoID` the id is deterministic — a UUID v5 over
-`provider|entity|source_key|record_ts` — so the same record always gets the
-same id, which is what makes a re-run safe. Setting both is an error: with
-`AutoID` those four fields would be written and never read.
-
-Because the two columns are `NOT NULL`, the SDK creates the table itself when
-`Metadata` is on. Autodetect infers them as nullable, and BigQuery will not
-tighten a column afterwards. Your own columns are still typed by BigQuery from
-the data — the SDK infers no type of its own.
-
-`Metadata` is required by `DedupMerge`, which matches on `ingestion_id`, and by
-the partition options, which partition on `ingestion_loaded_at`.
+`DedupMerge` precisa de `ingestion_id`, e as opções de partição precisam de
+`ingestion_loaded_at` — as duas conferidas contra `Columns` quando ele é
+declarado.
 
 ### A row shape of your own
 
@@ -723,7 +741,7 @@ Transform: []sdk.Transformer{
 		}, nil
 	},
 },
-Target: sdk.Target{..., Metadata: &sdk.Metadata{...}},
+Target: sdk.Target{..., Columns: []string{"ingestion_loaded_at", ...}},
 ```
 
 See [`examples/07-own-shape`](../examples/07-own-shape/).

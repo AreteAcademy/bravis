@@ -68,10 +68,6 @@ func pipeline(url string) sdk.Pipeline {
 				// nil: quem decide é o engine, ou ninguém.
 				CreateTable: nil,
 			},
-			Metadata: &sdk.Metadata{
-				Provider: "proof", Entity: "entity",
-				Key: sdk.Key("id"), When: sdk.Field("id"),
-			},
 		},
 	}
 }
@@ -229,23 +225,6 @@ func TestConsumidorCarregaSemProvenienciaNenhuma(t *testing.T) {
 }
 
 // E com a flag ligada ele cobra, porque aí tem o que construir.
-func TestConsumidorComMetadataPrecisaDeProveniencia(t *testing.T) {
-	t.Setenv("GOOGLE_PROJECT_ID", "um-projeto")
-
-	srv := fonte(t)
-	data, err := sdk.Extract(context.Background(), sdk.Source{From: from.HTTP{URL: srv.URL}})
-	if err != nil {
-		t.Fatalf("Extract: %v", err)
-	}
-
-	_, err = sdk.Load(context.Background(), data, sdk.Target{To: bigquery.Table{Name: "minha_tabela"}, Metadata: &sdk.Metadata{Entity: "e", Key: sdk.Key("id")}})
-	if err == nil || !strings.Contains(err.Error(), "Metadata.Provider") {
-		t.Errorf("um bloco Metadata sem Provider deveria falhar nomeando o campo: %v", err)
-	}
-}
-
-// As colunas vêm do Transform. É o modelo inteiro numa asserção: o que o
-// Schema compõe é o que sai, e o que ele nomeia e não existe é erro.
 func TestConsumidorComponeAsColunasNoTransform(t *testing.T) {
 	srv := fonte(t)
 
@@ -297,21 +276,39 @@ func TestConsumidorVeOSchemaFalharQuandoOCampoSome(t *testing.T) {
 
 // AutoID é a declaração inteira: nada do registro entra no id, então nada do
 // registro precisa ser descrito.
-func TestConsumidorUsaAutoIDSozinho(t *testing.T) {
-	t.Setenv("GOOGLE_PROJECT_ID", "um-projeto")
 
+// Os dois transformers de ingestão são a superfície que substituiu o bloco.
+// Se o consumidor não os alcança, a mudança não aconteceu para quem importa.
+func TestConsumidorEscreveAsDuasColunasNaCadeia(t *testing.T) {
 	srv := fonte(t)
+
 	data, err := sdk.Extract(context.Background(), sdk.Source{From: from.HTTP{URL: srv.URL}})
 	if err != nil {
 		t.Fatalf("Extract: %v", err)
 	}
 
-	_, err = sdk.Load(context.Background(), data, sdk.Target{To: bigquery.Table{Name: "minha_tabela"}, Metadata: &sdk.Metadata{AutoID: true}})
-	if err != nil {
-		for _, proibido := range []string{"Provider", "Entity", "Key"} {
-			if strings.Contains(err.Error(), proibido) {
-				t.Errorf("AutoID ainda exige %s: %v", proibido, err)
+	data = sdk.Transform(data,
+		sdk.Compute("provider", func(map[string]any) (any, error) { return "prova", nil }),
+		sdk.Compute("entity", func(map[string]any) (any, error) { return "linhas", nil }),
+		sdk.Compute("source_key", func(r map[string]any) (any, error) { return sdk.Key("id")(r) }),
+		sdk.IngestionID("provider", "entity", "source_key", "id"),
+		sdk.IngestionLoadedAt(),
+	)
+
+	n := 0
+	for env, err := range data.Records {
+		if err != nil {
+			t.Fatalf("registro %d: %v", n, err)
+		}
+		linha := env.Payload.(map[string]any)
+		for _, coluna := range []string{sdk.ColumnIngestionID, sdk.ColumnIngestionLoadedAt} {
+			if v, tem := linha[coluna]; !tem || v == "" {
+				t.Errorf("registro %d saiu sem %s: %v", n, coluna, linha)
 			}
 		}
+		n++
+	}
+	if n == 0 {
+		t.Fatal("nenhum registro passou")
 	}
 }

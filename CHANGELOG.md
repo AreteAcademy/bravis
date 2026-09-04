@@ -8,6 +8,103 @@ A tag de um módulo aninhado leva o prefixo do diretório: `sdk/v0.2.1`.
 
 ---
 
+## [0.24.0] — 2026-09-04
+
+**BREAKING.** O bloco `Metadata` desaparece: as duas colunas viram transformers.
+Executa [`docs/plan/2026-09-04-sdk-metadado-vira-transformer.md`](docs/plan/2026-09-04-sdk-metadado-vira-transformer.md).
+
+A regra que a `v0.15.0` estabeleceu e a `v0.18.0` completou era uma só — *as
+colunas são compostas no `Transform`, e o SDK não inventa nenhuma* — e o
+`Metadata` era a última exceção a ela. O godoc dele admitia isso em voz alta.
+
+### Adicionado
+- **`sdk.IngestionID(campos...)`** e **`sdk.IngestionLoadedAt()`**, usados como
+  qualquer outro transformer:
+
+  ```go
+  Transform: []sdk.Transformer{
+      sdk.Accept("time", "temperature_2m", "latitude", "longitude"),
+      sdk.Compute("provider", ...), sdk.Compute("entity", ...),
+      sdk.Compute("source_key", ...),
+      sdk.IngestionID("provider", "entity", "source_key", "time"),
+      sdk.IngestionLoadedAt(),
+  },
+  Target: sdk.Target{
+      To:      bigquery.Table{Dataset: "bronze", Name: "hourly"},
+      Columns: []string{"ingestion_id", "ingestion_loaded_at", "provider", "entity", "source_key", "payload"},
+  },
+  ```
+
+  Ler a cadeia responde a pergunta inteira: **seis helpers, seis colunas.** Não
+  sobra nada acontecendo fora dela.
+
+- `sdk.ColumnIngestionID` e `sdk.ColumnIngestionLoadedAt`, para nomear as
+  colunas em `Columns` sem repetir a string.
+
+### Removido
+- **`Metadata`, `AutoID` e `StampMetadata`.** O `AutoID` era a tentativa de dar
+  um estado simples a um "interruptor" com quatro campos obrigatórios, e virou
+  o terceiro motivo de confusão.
+- `WithMetadata`, `WithAutoID`, e o carimbo de proveniência no `collect` — que
+  agora não faz nada além de drenar o fluxo.
+
+### Alterado
+- **As precondições passam a olhar a declaração, não uma flag.** `DedupMerge`
+  precisa da coluna `ingestion_id`; as opções de partição precisam de
+  `ingestion_loaded_at`. É melhor precondição: é a coluna que o merge de fato
+  usa, e é conferível contra `Columns`.
+- **A criação com `NOT NULL` passa a ser dirigida por `Columns`** — ver abaixo.
+- Os labels de atribuição de custo passam a vir das colunas `provider`/`entity`
+  da própria linha. Antes vinham do bloco.
+- `-dry-run` imprime a linha inteira: não há mais nada para computar depois.
+
+### A decisão do §3, e por que não é a que a spec recomenda
+A spec recomenda **aceitar** que uma tabela criada por `CreateTable` saia com as
+duas colunas `NULLABLE`, e proíbe "reconhecer os dois nomes na criação" como um
+*default escondido*.
+
+O caminho tomado é um terceiro: **o gatilho é `Target.Columns`.** Se a
+declaração do fetcher nomeia `ingestion_id`, o SDK cria aquela coluna
+`STRING NOT NULL`.
+
+A objeção da spec é contra um default que decide *sem aparecer no código de
+quem chama*. Aqui o nome está literalmente na lista que o fetcher escreveu — o
+teste da classe 3.3 (*"onde estão declaradas as colunas desta tabela?"*)
+continua respondido por `Target.Columns`. Isso mantém a garantia que a
+`v0.16.0` comprou, e degrada honestamente: **declare a coluna, tenha a
+garantia; não declare nada, e tudo sai inferido nullable.**
+
+### Migração
+```go
+// antes
+Transform: []sdk.Transformer{ sdk.Accept(...), sdk.Compute("payload", ...) },
+Target: sdk.Target{
+    Columns:  []string{"ingestion_id", "ingestion_loaded_at", "provider", "entity", "source_key", "payload"},
+    Metadata: &sdk.Metadata{Provider: p, Entity: e, Key: sdk.Field("source_key"), When: sdk.Field("time")},
+}
+
+// depois
+Transform: []sdk.Transformer{
+    sdk.Accept(...), sdk.Compute("payload", ...),
+    sdk.Compute("provider", func(map[string]any) (any, error) { return p, nil }),
+    sdk.Compute("entity", func(map[string]any) (any, error) { return e, nil }),
+    sdk.Compute("source_key", ...),
+    sdk.IngestionID("provider", "entity", "source_key", "time"),
+    sdk.IngestionLoadedAt(),
+},
+Target: sdk.Target{
+    Columns: []string{"ingestion_id", "ingestion_loaded_at", "provider", "entity", "source_key", "payload"},
+}
+```
+
+**O `ingestion_id` não muda.** A fórmula, o namespace e o separador continuam
+congelados, e há teste contra o valor que o `uuid.uuid5` do Python produz — não
+contra outra implementação nossa, que poderia mudar junto. Um teste de
+integração carrega a landing de seis colunas com `DedupMerge`, lê o id de volta
+e o confere.
+
+---
+
 ## [0.23.0] — 2026-09-04
 
 Fecha o §6 e o §7 de [`docs/SDK_V9.md`](docs/SDK_V9.md), os dois reportados pelo
@@ -1048,6 +1145,7 @@ Primeira versão que compila.
 > versão de `proxy.golang.org`, então ela permanece publicada e quebrada para
 > sempre. Comece pela `v0.1.1`.
 
+[0.24.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.24.0
 [0.23.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.23.0
 [0.22.0]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.22.0
 [0.21.1]: https://github.com/AreteAcademy/bravis/releases/tag/sdk%2Fv0.21.1

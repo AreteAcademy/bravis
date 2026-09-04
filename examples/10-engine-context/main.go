@@ -78,12 +78,6 @@ func main() {
 				// first run, and the engine would not override it.
 				CreateTable: nil,
 			},
-			Metadata: &sdk.Metadata{
-				Provider: "open_meteo",
-				Entity:   "hourly_temperature",
-				Key:      sdk.Key("latitude", "longitude", "time"),
-				When:     sdk.Field("time"),
-			},
 		},
 	})
 }
