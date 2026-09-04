@@ -54,6 +54,16 @@ jobs:
           cd sdk
           go test -v -race ./...
 
+      # O gate rodava só os testes, então uma árvore com o lint vermelho
+      # publicou duas versões antes de alguém olhar o test.yml. Uma release
+      # é imutável; o momento de descobrir é aqui.
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.13.2
+          working-directory: sdk
+          args: --timeout=5m
+
       - name: Gate - a clean consumer must compile against this tree
         # Roda ANTES do create-release e antes de avisar o proxy, para que um
         # go.mod ruim ainda possa ser consertado apagando a tag. Depois que o

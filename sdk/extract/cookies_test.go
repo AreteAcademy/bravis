@@ -27,7 +27,7 @@ func TestCookieDoCallerChegaInteiro(t *testing.T) {
 			return
 		}
 		recebido = c.Value
-		fmt.Fprint(w, `{"ok":1}`)
+		_, _ = fmt.Fprint(w, `{"ok":1}`)
 	}))
 	defer srv.Close()
 
@@ -56,10 +56,10 @@ func TestCookieRenovadoSobreveveAProximaPagina(t *testing.T) {
 		if len(vistos) == 1 {
 			// a api renova a sessao no meio da caminhada
 			http.SetCookie(w, &http.Cookie{Name: "session-token", Value: "renovado==", Path: "/"})
-			fmt.Fprint(w, `{"results":[{"n":1}]}`)
+			_, _ = fmt.Fprint(w, `{"results":[{"n":1}]}`)
 			return
 		}
-		fmt.Fprint(w, `{"results":[]}`)
+		_, _ = fmt.Fprint(w, `{"results":[]}`)
 	}))
 	defer srv.Close()
 
@@ -87,10 +87,10 @@ func TestCookieNaoVaiDuplicado(t *testing.T) {
 		bruto = r.Header.Get("Cookie")
 		http.SetCookie(w, &http.Cookie{Name: "session-token", Value: "renovado==", Path: "/"})
 		if strings.Contains(bruto, "renovado") {
-			fmt.Fprint(w, `{"results":[]}`)
+			_, _ = fmt.Fprint(w, `{"results":[]}`)
 			return
 		}
-		fmt.Fprint(w, `{"results":[{"n":1}]}`)
+		_, _ = fmt.Fprint(w, `{"results":[{"n":1}]}`)
 	}))
 	defer srv.Close()
 
@@ -125,7 +125,7 @@ func TestCookieMalformadoFalhaCedo(t *testing.T) {
 // mesmo mapa em outra pipeline.
 func TestHeaderDoCallerNaoEMutado(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, `{"ok":1}`)
+		_, _ = fmt.Fprint(w, `{"ok":1}`)
 	}))
 	defer srv.Close()
 

@@ -21,10 +21,10 @@ func TestResultCarregaAValidadeDaCredencial(t *testing.T) {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/auth", func(w http.ResponseWriter, _ *http.Request) {
-		fmt.Fprintf(w, `{"expires":%q}`, vence.Format(time.RFC3339))
+		_, _ = fmt.Fprintf(w, `{"expires":%q}`, vence.Format(time.RFC3339))
 	})
 	mux.HandleFunc("/dados", func(w http.ResponseWriter, _ *http.Request) {
-		fmt.Fprint(w, `{"results":[{"id":"1"}]}`)
+		_, _ = fmt.Fprint(w, `{"results":[{"id":"1"}]}`)
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()

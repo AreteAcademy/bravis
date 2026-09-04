@@ -33,7 +33,7 @@ func TestAuthAplicaOSegredo(t *testing.T) {
 			var visto string
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				visto = r.Header.Get(c.cabecalho)
-				fmt.Fprint(w, `{"ok":1}`)
+				_, _ = fmt.Fprint(w, `{"ok":1}`)
 			}))
 			defer srv.Close()
 
@@ -64,7 +64,7 @@ func TestRefreshRenovaOCookieParaAsPaginas(t *testing.T) {
 			return
 		}
 		http.SetCookie(w, &http.Cookie{Name: "session", Value: "renovado==", Path: "/"})
-		fmt.Fprint(w, `{"expires":"`+time.Now().Add(30*24*time.Hour).Format(time.RFC3339)+`"}`)
+		_, _ = fmt.Fprint(w, `{"expires":"`+time.Now().Add(30*24*time.Hour).Format(time.RFC3339)+`"}`)
 	})
 	mux.HandleFunc("/dados", func(w http.ResponseWriter, r *http.Request) {
 		c, _ := r.Cookie("session")
@@ -73,7 +73,7 @@ func TestRefreshRenovaOCookieParaAsPaginas(t *testing.T) {
 			dados = append(dados, c.Value)
 		}
 		mu.Unlock()
-		fmt.Fprint(w, `{"ok":1}`)
+		_, _ = fmt.Fprint(w, `{"ok":1}`)
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
@@ -111,7 +111,7 @@ func TestRefreshQueFalhaParaARun(t *testing.T) {
 	})
 	mux.HandleFunc("/dados", func(w http.ResponseWriter, r *http.Request) {
 		pediuDados.Store(true)
-		fmt.Fprint(w, `{"ok":1}`)
+		_, _ = fmt.Fprint(w, `{"ok":1}`)
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
@@ -226,7 +226,7 @@ func TestEnvAusenteFalaONome(t *testing.T) {
 // carregando o segredo.
 func TestAuthNaoMutaOHeaderDoCaller(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, `{"ok":1}`)
+		_, _ = fmt.Fprint(w, `{"ok":1}`)
 	}))
 	defer srv.Close()
 

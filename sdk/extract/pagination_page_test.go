@@ -30,10 +30,10 @@ func paginaNumerada(t *testing.T, chave string, vistos *[]string) *httptest.Serv
 			return
 		}
 		if n >= 3 {
-			fmt.Fprint(w, `{"results":[]}`)
+			_, _ = fmt.Fprint(w, `{"results":[]}`)
 			return
 		}
-		fmt.Fprintf(w, `{"results":[{"n":%d}]}`, n)
+		_, _ = fmt.Fprintf(w, `{"results":[{"n":%d}]}`, n)
 	}))
 }
 
