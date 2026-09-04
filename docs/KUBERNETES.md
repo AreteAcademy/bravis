@@ -112,6 +112,10 @@ adotar npm.
 A task não herda o ambiente do orquestrador — ele carrega `BREVIS_DATABASE_URL`
 com credencial, e um workflow é um comando arbitrário escrito por outra pessoa.
 
+Há dois caminhos, e a diferença entre eles é **quem escolhe**.
+
+### Da instalação, para toda task
+
 | modo | mecanismo |
 |---|---|
 | pod | `BREVIS_POD_ENV_FROM_SECRETS=meu-secret` → vira `envFrom.secretRef` no pod. As variáveis vão do Secret direto para a task, **sem passar pelo scheduler**. |
@@ -119,6 +123,53 @@ com credencial, e um workflow é um comando arbitrário escrito por outra pessoa
 
 Em ambos, `PATH` e `HOME` entram sempre: sem `PATH` nenhum comando resolve, e o
 erro seria um "not found" que não explica nada.
+
+O alcance é **todo passo de todo workflow**. Para uma credencial que só um
+fetcher usa, isso é mais alcance que necessidade: o cookie de um vendor entra
+também no pod do `dbt build` ao lado.
+
+### Do YAML, por passo
+
+```yaml
+steps:
+  - id: fetch_occurrences
+    run: /usr/local/bin/gabriel
+    env:
+      BREVIS_LOG_LEVEL: info              # literal — o arquivo está no git
+    secrets:
+      GABRIEL_SESSION_COOKIE: gabriel-session/cookie
+```
+
+São duas chaves e não uma de propósito. Com uma só, o caminho mais curto para
+fazer funcionar seria colar o segredo no YAML.
+
+| | `env:` | `secrets:` |
+|---|---|---|
+| o valor está no arquivo | sim | **não**, só a coordenada |
+| em pod | `env: [{name, value}]` | `valueFrom.secretKeyRef` — quem lê é o kubelet |
+| em local | literal | a variável de mesmo nome no ambiente do motor; **ausente é erro** |
+
+Os dois herdam do workflow para o passo, nome a nome, como `image` e
+`resources`. Precedência, do mais fraco ao mais forte: ambiente global do motor,
+`env:` do workflow, `env:` do passo.
+
+### E a instalação continua decidendo quais segredos existem
+
+`secrets:` inverte quem escolhe, e o YAML é escrito por outra pessoa. Sem
+limite, um workflow montaria qualquer Secret do namespace — inclusive o do banco
+do próprio Brevis — e rodaria um comando arbitrário com ele em mãos.
+
+```bash
+BREVIS_POD_ALLOWED_SECRETS=gabriel-session,ana-api
+```
+
+**Vazia nega tudo.** Negar por padrão custa uma variável na instalação; permitir
+por padrão custa o inverso, e o inverso é irreversível. A recusa acontece na
+montagem do pod, com o nome do Secret e onde liberá-lo — não no servidor, que
+aceitaria o `secretKeyRef` e falharia depois por outro motivo.
+
+A divisão final: **a instalação diz quais segredos existem para workflows, o
+YAML diz qual passo recebe cada um.**
 
 ## Segurança
 
@@ -133,8 +184,11 @@ O pod de task executa comandos vindos de um YAML. Se herdasse a conta do
 scheduler, qualquer workflow poderia criar pods, ler secrets e escalar sozinho.
 Com uma conta sem role, o pior que um comando arbitrário faz é usar as
 credenciais que a instalação deu explicitamente a ele — via
-`BREVIS_POD_ENV_FROM_SECRETS`, que vem do ambiente do scheduler e **nunca do
-YAML do workflow**.
+`BREVIS_POD_ENV_FROM_SECRETS`, que vem do ambiente do scheduler, ou via um
+`secrets:` do YAML **que só alcança os Secrets em `BREVIS_POD_ALLOWED_SECRETS`**.
+
+O YAML nunca amplia o conjunto; ele só escolhe, dentro do que a instalação
+liberou, qual passo recebe o quê.
 
 ## Concorrência: três limites
 

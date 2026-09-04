@@ -473,7 +473,7 @@ essa crença.
 
 | variável | padrão | |
 |---|---|---|
-| `BREVIS_TASK_ENV` | vazio | o que cada passo recebe |
+| `BREVIS_TASK_ENV` | vazio | o que **todo** passo recebe; para um passo só, use `env:`/`secrets:` no YAML |
 
 A task **não herda** o ambiente do orquestrador — herdar entregaria a
 credencial do Postgres a todo passo de todo pipeline. O que ela precisa é
@@ -505,6 +505,7 @@ escolher a service account com que roda.
 | `BREVIS_POD_PULL_SECRETS` | — | lista por vírgula | |
 | `BREVIS_POD_ENV_FROM_SECRETS` | — | lista por vírgula | em modo pod, é daqui que vem o ambiente da task |
 | `BREVIS_POD_ENV_FROM_CONFIGMAPS` | — | lista por vírgula | |
+| `BREVIS_POD_ALLOWED_SECRETS` | — | lista por vírgula | quais Secrets um `secrets:` de YAML pode citar. **Vazia nega todos** |
 | `BREVIS_POD_NODE_SELECTOR` | — | `chave=valor,outra=valor` | |
 | `BREVIS_POD_TOLERATIONS` | — | `chave=valor:efeito,...` | só o operador `Equal` |
 | `BREVIS_POD_MANTER_EM_FALHA` | `false` | `true` mantém o pod para inspeção | |

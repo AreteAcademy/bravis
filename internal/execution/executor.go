@@ -62,6 +62,14 @@ type TaskExec struct {
 	WorkDir string
 	Env     map[string]string
 
+	// Secrets sao variaveis cujo valor o motor NAO carrega: o mapa e
+	// nome-da-variavel -> `nome-do-secret/chave`, e quem resolve e o executor.
+	//
+	// Ficam separadas de Env por isso mesmo. Se o valor viesse resolvido aqui,
+	// ele passaria pelo dispatcher, pelo log de montagem da task e por
+	// qualquer dump de TaskExec que alguem escrever depois.
+	Secrets map[string]string
+
 	// Timeout zero significa sem limite. A secao 37 pede timeout na PHASE 3;
 	// deixar o padrao aberto e deliberado — impor um limite arbitrario mataria
 	// tasks legitimamente longas.

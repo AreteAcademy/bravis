@@ -73,8 +73,22 @@ type Container struct {
 }
 
 type Var struct {
-	Name  string `json:"name"`
-	Value string `json:"value"`
+	Name string `json:"name"`
+	// Value com omitempty porque uma Var que vem de secret manda `valueFrom`,
+	// e mandar `"value":""` junto faz o servidor recusar as duas.
+	Value     string    `json:"value,omitempty"`
+	ValueFrom *FonteVar `json:"valueFrom,omitempty"`
+}
+
+// FonteVar aponta uma variavel para uma chave de um Secret. O valor nunca
+// passa pelo motor: quem le e o kubelet, na hora de subir o container.
+type FonteVar struct {
+	SecretKeyRef *RefChave `json:"secretKeyRef,omitempty"`
+}
+
+type RefChave struct {
+	Name string `json:"name"`
+	Key  string `json:"key"`
 }
 
 type FonteEnv struct {
@@ -180,6 +194,21 @@ type Opcoes struct {
 	Tolerations       []Toleracao
 	EnvFromSecrets    []string
 	EnvFromConfigMaps []string
+
+	// SecretsPermitidos sao os Secrets que um YAML pode citar em `secrets:`.
+	//
+	// Existe porque `secrets:` inverte quem escolhe. EnvFromSecrets vem do
+	// ambiente do scheduler: a INSTALACAO decide. `secrets:` esta no arquivo,
+	// e o arquivo e escrito por outra pessoa -- sem esta lista, um workflow
+	// poderia montar qualquer Secret do namespace, inclusive o do banco do
+	// proprio Brevis, e rodar um comando arbitrario com ele em maos.
+	//
+	// Vazia nega tudo. Negar por padrao custa uma variavel na instalacao;
+	// permitir por padrao custa o inverso, e o inverso e irreversivel.
+	//
+	// A divisao final e essa: a instalacao diz QUAIS segredos existem para
+	// workflows, o YAML diz QUAL passo recebe cada um.
+	SecretsPermitidos []string
 	Labels            map[string]string
 	Shell             []string
 	// EsperaParaIniciar e quanto um pod pode ficar sem comecar antes de o passo
@@ -193,6 +222,25 @@ type Opcoes struct {
 	// sucesso e sempre apagado: milhares de pods Completed poluem o namespace e
 	// nao dizem nada que o historico do Brevis nao diga melhor.
 	ManterPodEmFalha bool
+}
+
+// permiteSecret decide se um YAML pode citar este Secret.
+//
+// A recusa acontece na MONTAGEM do pod e nao no servidor: um secretKeyRef para
+// um Secret proibido nem sequer e proibido pelo Kubernetes -- ele monta, e o
+// erro que se ve e outro. Aqui a mensagem diz o nome e onde liberar.
+func (o Opcoes) permiteSecret(nome string) error {
+	for _, p := range o.SecretsPermitidos {
+		if p == nome {
+			return nil
+		}
+	}
+	if len(o.SecretsPermitidos) == 0 {
+		return fmt.Errorf("o secret %q nao esta liberado para workflows, e nenhum esta: "+
+			"a instalacao decide quais existem, em BREVIS_POD_ALLOWED_SECRETS", nome)
+	}
+	return fmt.Errorf("o secret %q nao esta em BREVIS_POD_ALLOWED_SECRETS (liberados: %s)",
+		nome, strings.Join(o.SecretsPermitidos, ", "))
 }
 
 func (o Opcoes) comPadroes() Opcoes {
@@ -247,6 +295,26 @@ func MontarPod(t execution.TaskExec, o Opcoes) (Pod, error) {
 	for _, k := range chaves {
 		c.Env = append(c.Env, Var{Name: k, Value: t.Env[k]})
 	}
+
+	// Os segredos vao pela mesma lista, mas por referencia: o valor nao esta
+	// aqui e nunca esteve -- o kubelet o resolve ao subir o container. Um dump
+	// deste JSON mostra a coordenada, e nao o segredo.
+	segredos := make([]string, 0, len(t.Secrets))
+	for k := range t.Secrets {
+		segredos = append(segredos, k)
+	}
+	sort.Strings(segredos)
+	for _, k := range segredos {
+		nome, chave, _ := strings.Cut(t.Secrets[k], "/")
+		if err := o.permiteSecret(nome); err != nil {
+			return Pod{}, fmt.Errorf("step %q, secrets[%q]: %w", t.NodeID, k, err)
+		}
+		c.Env = append(c.Env, Var{
+			Name:      k,
+			ValueFrom: &FonteVar{SecretKeyRef: &RefChave{Name: nome, Key: chave}},
+		})
+	}
+
 	for _, s := range o.EnvFromSecrets {
 		c.EnvFrom = append(c.EnvFrom, FonteEnv{SecretRef: &RefLocal{Name: s}})
 	}

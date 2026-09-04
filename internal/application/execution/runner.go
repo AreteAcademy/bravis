@@ -455,13 +455,21 @@ func (r Runner) contextoDoRun(nodeID string, primeira bool, tentativa int) map[s
 // O do runner ganha em colisao: se alguem definiu BREVIS_RUN_PARAMS na
 // configuracao, foi porque quis, e o engine nao sobrescreve configuracao
 // explicita.
-func mesclarEnv(base, execucao map[string]string) map[string]string {
+// mesclarEnv junta os mapas em ordem crescente de precedencia, exceto o
+// primeiro: `base` (o ambiente global do motor) vence o contexto do run, que e
+// como sempre foi, e o que vem depois vence `base`.
+func mesclarEnv(base, execucao map[string]string, acima ...map[string]string) map[string]string {
 	out := make(map[string]string, len(base)+len(execucao))
 	for k, v := range execucao {
 		out[k] = v
 	}
 	for k, v := range base {
 		out[k] = v
+	}
+	for _, m := range acima {
+		for k, v := range m {
+			out[k] = v
+		}
 	}
 	return out
 }
@@ -505,8 +513,14 @@ func (r Runner) montar(w wf.Workflow, n wf.Node, tentativa int, primeira bool) (
 		CPUMax:     recursos.CPULimit,
 		MemoriaMax: recursos.MemoryLimit,
 		WorkDir:    r.WorkDir,
-		Env:        mesclarEnv(r.Env, r.contextoDoRun(n.ID, primeira, tentativa)),
-		Timeout:    r.Timeout,
+		// Ordem, do mais fraco ao mais forte: contexto do run, ambiente
+		// global do motor, `env:` do workflow, `env:` do passo. O passo
+		// vence o global de proposito -- na outra ordem, uma variavel
+		// declarada no arquivo perderia calada para um BREVIS_TASK_ENV que
+		// alguem configurou meses atras.
+		Env:     mesclarEnv(r.Env, r.contextoDoRun(n.ID, primeira, tentativa), w.EnvDe(n)),
+		Secrets: w.SecretsDe(n),
+		Timeout: r.Timeout,
 	}
 
 	if n.Action != "" {

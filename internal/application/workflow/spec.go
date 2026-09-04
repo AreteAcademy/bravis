@@ -25,6 +25,10 @@ type Spec struct {
 	Image     string       `yaml:"image"`
 	Resources ResourceSpec `yaml:"resources"`
 	Params    []ParamSpec  `yaml:"params"`
+
+	// Env e Secrets valem para todo passo; o passo sobrescreve nome a nome.
+	Env     map[string]string `yaml:"env"`
+	Secrets map[string]string `yaml:"secrets"`
 	// Concurrency e o `concurrency.limit` do Kestra, com o mesmo nome que a
 	// maioria dos orquestradores usa.
 	Concurrency int        `yaml:"concurrency"`
@@ -96,6 +100,19 @@ type StepSpec struct {
 	Image     string       `yaml:"image"`
 	Resources ResourceSpec `yaml:"resources"`
 
+	// Env sao variaveis com valor literal no arquivo.
+	//
+	//	env:
+	//	  BREVIS_LOG_LEVEL: info
+	Env map[string]string `yaml:"env"`
+
+	// Secrets sao variaveis cujo valor NAO esta no arquivo: a chave e o nome
+	// da variavel, o valor e onde encontra-la.
+	//
+	//	secrets:
+	//	  GABRIEL_SESSION_COOKIE: gabriel-session/cookie
+	Secrets map[string]string `yaml:"secrets"`
+
 	// Shell: ponteiro para distinguir "nao declarou" de "declarou false". Sem o
 	// ponteiro, todo passo sem a chave viraria `shell: false` e as imagens com
 	// shell — a maioria — passariam a receber argv, quebrando qualquer comando
@@ -136,6 +153,8 @@ func Parse(caminho string, conteudo []byte) (dominio.Workflow, error) {
 		Image:     strings.TrimSpace(s.Image),
 		Resources: s.Resources.dominio(),
 		MaxAtivos: s.Concurrency,
+		Env:       aparar(s.Env),
+		Secrets:   aparar(s.Secrets),
 	}
 	for _, ps := range s.Params {
 		w.Params = append(w.Params, ps.dominio())
@@ -145,6 +164,7 @@ func Parse(caminho string, conteudo []byte) (dominio.Workflow, error) {
 			ID: st.ID, Run: st.Run, Action: st.Action, With: st.With,
 			Image: strings.TrimSpace(st.Image), Resources: st.Resources.dominio(),
 			Shell: st.Shell,
+			Env:   aparar(st.Env), Secrets: aparar(st.Secrets),
 		})
 	}
 
@@ -157,6 +177,28 @@ func Parse(caminho string, conteudo []byte) (dominio.Workflow, error) {
 		return dominio.Workflow{}, fmt.Errorf("%s: %w", caminho, err)
 	}
 	return w, nil
+}
+
+// aparar tira espaco de nome e valor, e descarta entrada de nome vazio.
+//
+// `GABRIEL_SESSION_COOKIE : gabriel-session/cookie` com espaco antes dos dois
+// pontos e YAML valido, e o espaco iria junto no nome da variavel — o pod
+// sobe, o binario nao acha a variavel, e nada no caminho diz por que.
+func aparar(m map[string]string) map[string]string {
+	if len(m) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(m))
+	for k, v := range m {
+		if k = strings.TrimSpace(k); k == "" {
+			continue
+		}
+		out[k] = strings.TrimSpace(v)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 // normalizarTags apara espacos, descarta vazias e deduplica preservando a ordem

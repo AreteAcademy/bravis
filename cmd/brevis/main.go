@@ -527,6 +527,7 @@ func executorDePods(cfg config.Config, log *slog.Logger) (execution.Executor, er
 		PullSecrets:       cfg.Pods.PullSecrets,
 		EnvFromSecrets:    cfg.Pods.EnvFromSecrets,
 		EnvFromConfigMaps: cfg.Pods.EnvFromConfigMaps,
+		SecretsPermitidos: cfg.Pods.SecretsPermitidos,
 		NodeSelector:      cfg.Pods.NodeSelector,
 		Tolerations:       toleracoesDoPod(cfg.Pods.Toleracoes),
 		ManterPodEmFalha:  cfg.Pods.ManterEmFalha,

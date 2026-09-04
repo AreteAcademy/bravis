@@ -13,7 +13,10 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
+	"sort"
+	"strings"
 	"sync"
 
 	"github.com/AreteAcademy/brevis/internal/execution"
@@ -44,6 +47,49 @@ func New(env string) (*ProcessExecutor, error) {
 	return &ProcessExecutor{shell: "/bin/sh", rodando: map[string]context.CancelFunc{}}, nil
 }
 
+// ambienteDaTask monta o env do processo: os literais, e os segredos lidos do
+// ambiente do proprio motor.
+//
+// No Kubernetes a coordenada `gabriel-session/cookie` aponta um Secret. Aqui
+// nao ha Secret nenhum, entao o motor le a variavel de MESMO NOME do proprio
+// ambiente. A assimetria e deliberada e esta documentada no dominio; o que ela
+// nao pode fazer e falhar em silencio.
+//
+// Ausente e ERRO, e nao string vazia. Um GABRIEL_SESSION_COOKIE vazio vira um
+// header de cookie vazio e um 401 la na frente, culpando a API por uma
+// variavel que ninguem exportou.
+func ambienteDaTask(t execution.TaskExec) ([]string, error) {
+	env := make(map[string]string, len(t.Env)+len(t.Secrets))
+	for k, v := range t.Env {
+		env[k] = v
+	}
+
+	var faltando []string
+	for nome, coord := range t.Secrets {
+		v, existe := os.LookupEnv(nome)
+		if !existe || v == "" {
+			faltando = append(faltando, fmt.Sprintf("%s (secrets: %s)", nome, coord))
+			continue
+		}
+		env[nome] = v
+	}
+	if len(faltando) > 0 {
+		sort.Strings(faltando)
+		return nil, fmt.Errorf("task %q: no modo local os segredos vem do ambiente do "+
+			"proprio motor, e estes nao estao definidos: %s",
+			t.NodeID, strings.Join(faltando, ", "))
+	}
+
+	out := make([]string, 0, len(env))
+	for k, v := range env {
+		out = append(out, k+"="+v)
+	}
+	// Ordenado para que dois processos iguais tenham o mesmo env: sem isso, um
+	// diff entre duas execucoes vira ruido de ordem de mapa.
+	sort.Strings(out)
+	return out, nil
+}
+
 func (p *ProcessExecutor) Name() string { return "process" }
 
 // Execute dispara o comando e devolve o canal de eventos. O canal fecha quando o
@@ -71,10 +117,15 @@ func (p *ProcessExecutor) Execute(ctx context.Context, t execution.TaskExec) (<-
 
 	// Ambiente explicito, sem herdar o do processo pai: o orquestrador carrega
 	// credenciais que uma task nao deve enxergar por acidente.
-	cmd.Env = make([]string, 0, len(t.Env))
-	for k, v := range t.Env {
-		cmd.Env = append(cmd.Env, k+"="+v)
+	//
+	// `secrets:` e justamente o opt-in nominal contra essa regra -- "esta, de
+	// proposito" -- e por isso ele resolve DEPOIS, podendo sobrescrever.
+	ambiente, err := ambienteDaTask(t)
+	if err != nil {
+		cancel()
+		return nil, err
 	}
+	cmd.Env = ambiente
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {

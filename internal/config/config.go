@@ -60,6 +60,11 @@ type PodsConfig struct {
 	PullSecrets       []string
 	EnvFromSecrets    []string
 	EnvFromConfigMaps []string
+
+	// SecretsPermitidos limita o que um `secrets:` de YAML pode citar. Vazia
+	// nega tudo: a instalacao decide quais segredos existem para workflows, e
+	// o YAML decide qual passo recebe cada um.
+	SecretsPermitidos []string
 	NodeSelector      map[string]string
 	// Toleracoes no formato "chave=valor:efeito", separadas por virgula. O pool
 	// arm64 da Zarv tem taint, e sem toleracao o pod da task fica Pending para
@@ -100,6 +105,7 @@ func Load() (Config, error) {
 			PullSecrets:       lista("BREVIS_POD_PULL_SECRETS"),
 			EnvFromSecrets:    lista("BREVIS_POD_ENV_FROM_SECRETS"),
 			EnvFromConfigMaps: lista("BREVIS_POD_ENV_FROM_CONFIGMAPS"),
+			SecretsPermitidos: lista("BREVIS_POD_ALLOWED_SECRETS"),
 			NodeSelector:      pares("BREVIS_POD_NODE_SELECTOR"),
 			Toleracoes:        toleracoes("BREVIS_POD_TOLERATIONS"),
 			ManterEmFalha:     os.Getenv("BREVIS_POD_MANTER_EM_FALHA") == "true",

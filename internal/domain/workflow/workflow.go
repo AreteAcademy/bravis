@@ -8,6 +8,7 @@ package workflow
 import (
 	"fmt"
 	"regexp"
+	"strings"
 )
 
 // Kind distingue como o grafo foi declarado. `chain` e acucar sintatico: o
@@ -41,6 +42,13 @@ type Workflow struct {
 
 	// Resources e o pedido padrao de CPU e memoria, pela mesma razao.
 	Resources Resources
+
+	// Env sao variaveis de ambiente que todo passo recebe. Valor literal, e
+	// por isso NAO servem para segredo: o YAML esta no git.
+	Env map[string]string
+
+	// Secrets sao variaveis cujo valor o motor nao ve nem guarda. Ver Node.
+	Secrets map[string]string
 
 	// Params sao os valores que mudam entre dois disparos do mesmo workflow —
 	// `load_full`, uma janela de datas, um limite. Ver param.go.
@@ -78,6 +86,34 @@ type Node struct {
 	// imagem distroless — onde `sh -c` falharia com "no such file or directory",
 	// erro que nao diz nada sobre a causa.
 	Shell *bool
+
+	// Env sao variaveis de ambiente deste passo, com valor literal no arquivo.
+	// Sobrescrevem as do workflow, nome a nome.
+	//
+	//	env:
+	//	  BREVIS_LOG_LEVEL: info
+	Env map[string]string
+
+	// Secrets sao variaveis cujo VALOR nunca aparece no arquivo. A chave e o
+	// nome da variavel; o valor e onde encontra-la, no formato `secret/chave`.
+	//
+	//	secrets:
+	//	  GABRIEL_SESSION_COOKIE: gabriel-session/cookie
+	//
+	// Sao duas chaves e nao uma de proposito. Com uma so, o caminho mais curto
+	// para fazer funcionar seria colar o segredo no YAML — e o YAML esta no
+	// git. `env:` aceita literal, `secrets:` nao aceita.
+	//
+	// Onde a coordenada resolve depende do executor, e a assimetria e
+	// deliberada:
+	//
+	//   Kubernetes  valueFrom.secretKeyRef{name: gabriel-session, key: cookie}
+	//   local       a variavel de mesmo nome no ambiente do proprio motor,
+	//               e ausente e ERRO — nao string vazia
+	//
+	// Em qualquer um dos dois o motor repassa sem ler: o valor nao entra em
+	// log, nem no banco, nem no comando renderizado.
+	Secrets map[string]string
 }
 
 // Resources sao pedidos e limites de um pod, no formato do Kubernetes
@@ -127,6 +163,29 @@ func (w Workflow) ImagemDe(n Node) string {
 // RecursosDe resolve os recursos efetivos de um passo.
 func (w Workflow) RecursosDe(n Node) Resources {
 	return n.Resources.ComPadrao(w.Resources)
+}
+
+// EnvDe resolve as variaveis literais efetivas de um passo: as do workflow,
+// com as do passo por cima.
+func (w Workflow) EnvDe(n Node) map[string]string { return sobrepor(w.Env, n.Env) }
+
+// SecretsDe resolve os segredos efetivos de um passo, pela mesma regra.
+func (w Workflow) SecretsDe(n Node) map[string]string { return sobrepor(w.Secrets, n.Secrets) }
+
+// sobrepor devolve base com cima por cima, sem mutar nenhum dos dois: os mapas
+// vem do workflow publicado e sao lidos por todos os passos ao mesmo tempo.
+func sobrepor(base, cima map[string]string) map[string]string {
+	if len(base) == 0 && len(cima) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(base)+len(cima))
+	for k, v := range base {
+		out[k] = v
+	}
+	for k, v := range cima {
+		out[k] = v
+	}
+	return out
 }
 
 // UsaShell diz se o comando entra por `sh -c`.
@@ -216,8 +275,82 @@ func (w Workflow) Validate() error {
 		}
 	}
 
+	if err := validarAmbiente(w.Slug, "workflow", w.Env, w.Secrets); err != nil {
+		return err
+	}
+	for _, n := range w.Nodes {
+		// Contra o efetivo, e nao contra o declarado: um `env:` no workflow e
+		// um `secrets:` de mesmo nome no passo colidem exatamente igual, e so
+		// a visao herdada enxerga isso.
+		if err := validarAmbiente(w.Slug, "step "+n.ID, w.EnvDe(n), w.SecretsDe(n)); err != nil {
+			return err
+		}
+	}
+
 	if ciclo := w.encontrarCiclo(); ciclo != "" {
 		return fmt.Errorf("workflow %q tem ciclo: %s", w.Slug, ciclo)
+	}
+	return nil
+}
+
+// validarAmbiente recusa o que viraria uma variavel errada em silencio.
+//
+// O nome vem primeiro porque um nome invalido de variavel de ambiente e
+// aceito pelo YAML e recusado pelo servidor do Kubernetes muito depois, com
+// uma mensagem que fala de campo de container e nao de linha de arquivo.
+func validarAmbiente(slug, onde string, env, secrets map[string]string) error {
+	for nome := range env {
+		if err := validarNomeDeVar(nome); err != nil {
+			return fmt.Errorf("workflow %q, %s: env: %w", slug, onde, err)
+		}
+	}
+
+	for nome, coord := range secrets {
+		if err := validarNomeDeVar(nome); err != nil {
+			return fmt.Errorf("workflow %q, %s: secrets: %w", slug, onde, err)
+		}
+
+		// Uma variavel definida nos dois lugares e ambigua, e qualquer
+		// desempate que eu escolhesse seria uma regra que ninguem lembra.
+		if _, colide := env[nome]; colide {
+			return fmt.Errorf("workflow %q, %s: %q esta em `env` e em `secrets`; "+
+				"a mesma variavel nao pode ter valor literal e vir de um segredo", slug, onde, nome)
+		}
+
+		// O valor NAO entra na mensagem. O caso mais provavel de coordenada
+		// invalida e alguem ter colado o segredo de verdade -- e `brevis
+		// validate` roda na CI, cujo log muita gente le. Um erro que ensina o
+		// formato nao precisa repetir o que recebeu.
+		segredo, chave, ok := strings.Cut(coord, "/")
+		if !ok || segredo == "" || chave == "" || strings.Contains(chave, "/") {
+			return fmt.Errorf("workflow %q, %s: secrets[%q] nao e uma coordenada "+
+				"(recebi %d caracteres). Use `nome-do-secret/chave`, como "+
+				"`gabriel-session/cookie`. Se o valor colado ai for o segredo em si, "+
+				"ele ja esta no git: troque a chave e rotacione o segredo",
+				slug, onde, nome, len(coord))
+		}
+	}
+	return nil
+}
+
+// validarNomeDeVar aceita o que um shell POSIX aceita: letras, digitos e
+// sublinhado, sem comecar com digito.
+func validarNomeDeVar(nome string) error {
+	if nome == "" {
+		return fmt.Errorf("nome de variavel vazio")
+	}
+	if nome[0] >= '0' && nome[0] <= '9' {
+		return fmt.Errorf("nome de variavel %q comeca com digito", nome)
+	}
+	for _, r := range nome {
+		ok := r == '_' ||
+			(r >= 'a' && r <= 'z') ||
+			(r >= 'A' && r <= 'Z') ||
+			(r >= '0' && r <= '9')
+		if !ok {
+			return fmt.Errorf("nome de variavel %q tem caractere invalido %q; "+
+				"use letras, digitos e sublinhado", nome, r)
+		}
 	}
 	return nil
 }
