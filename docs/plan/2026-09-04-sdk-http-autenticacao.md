@@ -70,6 +70,28 @@ Então a sessão faz uma coisa só, e ela é real:
 Sem ela, alguém cola um cookie novo por mês, e a pipeline morre calada no dia 31.
 Com ela, a credencial se mantém indefinidamente enquanto o pipeline rodar.
 
+#### E a credencial é de uma PESSOA
+
+Chamando `/api/auth/session` com o cookie guardado, a resposta é:
+
+```
+user: { name, email, image, id, marketingOptIn }
+expires: 2026-10-04T22:15:07.197Z
+loginNonce: mthgirnwlwx65i
+```
+
+Uma conta de usuário nomeada — não uma integração máquina-a-máquina. **A pipeline
+se autentica como uma pessoa do time.** Três consequências:
+
+- a ingestão herda as permissões dela, e para com 401 no dia em que o acesso for
+  revogado ou ela sair da empresa — sem dizer que a causa é RH;
+- toda ação da pipeline aparece como sendo dela nos logs do fornecedor;
+- quem lê o token age como ela.
+
+Esse último ponto recoloca o problema do armazenamento. Não são "onze
+credenciais" num dataset analítico: são **onze cópias da credencial pessoal de
+alguém**, legíveis por qualquer `dataViewer` de `bronze`.
+
 **A sessão faz sentido. O lugar onde ela estava guardada é que não.**
 
 #### Por que o BigQuery está errado, e o motivo mais forte não é o óbvio
@@ -131,6 +153,14 @@ O encaixe é bom por três razões, não só por não ser o warehouse:
   entrega de graça o histórico que o `INSERT` no BigQuery existia para dar. "Desde
   quando a sessão parou de rotacionar?" vira "qual a data da última versão".
 - **Auditoria.** Acesso a segredo é logado; `SELECT` num dataset analítico, não.
+  Com uma credencial pessoal em jogo, saber quem a leu deixa de ser higiene e
+  passa a ser o mínimo.
+
+E uma pergunta que o SDK não resolve, mas que este caso levanta: **vale pedir ao
+fornecedor uma credencial de serviço.** Uma chave de API ligada à organização, e
+não à conta de uma pessoa, elimina a rotação, o store e o dia em que alguém sai
+da empresa e a ingestão morre. O trabalho abaixo é o certo para quando a resposta
+for não.
 
 Uma forma possível, com o caso comum simples e o raro explícito:
 
