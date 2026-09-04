@@ -138,65 +138,86 @@ rotativa sem login, e é só ele que precisa de armazenamento.
 Vale o armazenamento por um vendor? Sim — mas com peso de caso raro: interface
 pequena, um store de verdade, e nada obrigatório para os outros três.
 
-#### Onde a credencial deve viver
+#### A decisão: a credencial é uma env var, e o SDK não guarda nada
 
-**No Secret Manager, e o SDK já tem o padrão para isso.** `store/gcs`, `store/s3`
-e `to/bigquery` estabeleceram a regra: *um driver com SDK de fornecedor atrás
-mora no próprio pacote*. Um `sdk/secret/gcp` segue a mesma, e quem não usa não
-paga.
+Decidido por quem consome, e é a decisão certa:
 
-O encaixe é bom por três razões, não só por não ser o warehouse:
+> Devemos tratar isso como uma ENV, sem BigQuery — o consumidor passa uma env
+> nesse caso. O SDK precisa lidar com o cookie e essa sessão, tudo configurável,
+> que possa ser usado por mais times, genérico, e **não deve ser obrigatório**.
 
-- **IAM separado.** `secretmanager.secretAccessor` é concedido a quem roda o
-  pipeline, não a quem analisa dado. É a separação que hoje não existe.
-- **Versão é rotação.** Cada renovação é uma versão nova do segredo — nativo, e
-  entrega de graça o histórico que o `INSERT` no BigQuery existia para dar. "Desde
-  quando a sessão parou de rotacionar?" vira "qual a data da última versão".
-- **Auditoria.** Acesso a segredo é logado; `SELECT` num dataset analítico, não.
-  Com uma credencial pessoal em jogo, saber quem a leu deixa de ser higiene e
-  passa a ser o mínimo.
+Isso apaga o store do escopo. Não há `sdk/secret/gcp`, não há interface de
+armazenamento, não há nada que escreva em lugar nenhum. **A credencial entra por
+configuração e o SDK a usa.**
 
-E uma pergunta que o SDK não resolve, mas que este caso levanta: **vale pedir ao
-fornecedor uma credencial de serviço.** Uma chave de API ligada à organização, e
-não à conta de uma pessoa, elimina a rotação, o store e o dia em que alguém sai
-da empresa e a ingestão morre. O trabalho abaixo é o certo para quando a resposta
-for não.
+#### A pergunta que isso levanta, e a resposta medida
 
-Uma forma possível, com o caso comum simples e o raro explícito:
+Sem store, o valor rotacionado é descartado ao fim da execução. Isso funciona?
+Depende de uma coisa que ninguém adivinha: **o token antigo continua válido
+depois que a rotação emite um novo?**
+
+Se não continuasse, a segunda execução já falharia com 401, e a decisão não
+pararia de pé. Testado contra a API real:
+
+```
+1. GET /api/auth/session com o token guardado
+   -> Set-Cookie com um token NOVO (755 chars; o anterior tinha 1017)
+
+2. GET /api/proxy/occurrences com o token ANTIGO
+   -> HTTP 200
+```
+
+**O token antigo sobrevive à rotação.** Cada token vale a própria janela de 30
+dias, contada de quando ele foi emitido — e emitir um novo não mata o anterior.
+
+Então env-only funciona, e o custo é conhecido e único: **alguém recola o cookie
+por mês**, em vez de nunca. Em troca, nenhuma credencial pessoal fica em lugar
+nenhum além do secret do orquestrador, que é onde as outras já estão.
+
+#### O que o SDK ganha em vez do store: avisar antes de morrer
+
+Trocar "nunca recolar" por "recolar por mês" só é aceitável se alguém souber
+**quando**. Hoje a pipeline morreria calada no dia 31, com 401.
+
+A resposta da renovação diz a validade:
+
+```json
+{ "user": {...}, "expires": "2026-10-04T22:15:07.197Z" }
+```
+
+O SDK pode ler isso e avisar. É o que ele passa a entregar no lugar do
+armazenamento, e vale mais: **um store adia o problema; um aviso o resolve.**
 
 ```go
-// O comum: credencial obtida por login, viva só durante a execução.
-Auth: from.Login{
-    Obtain: func(ctx context.Context) (string, error) { ... },
-    TTL:    time.Hour,   // renova quando faltar menos que isto
-}
+Auth: from.Credential{
+    // De onde vem. Env é o caso comum; qualquer func serve.
+    Value: from.FromEnv("GABRIEL_SESSION_COOKIE"),
 
-// O raro: credencial rotativa que precisa sobreviver ao processo.
-Auth: from.Rolling{
-    Store:   secret.GCP{Name: "gabriel-session-cookie"},
-    Refresh: func(ctx context.Context, atual string) (string, error) { ... },
-    Seed:    os.Getenv("GABRIEL_SESSION_COOKIE"),  // o humano, uma vez
-    TTL:     30 * 24 * time.Hour,
+    // Como aplicar. Cookie, Bearer, header próprio.
+    Apply: from.AsCookie,
+
+    // Opcional: um GET antes do fetch que valida e, quando a API devolve
+    // Set-Cookie, é absorvido para esta execução.
+    Refresh: &from.Refresh{URL: "https://365.gabriel.com.br/api/auth/session"},
+
+    // Opcional: onde ler a validade na resposta da renovação, e a partir de
+    // quanto tempo restante avisar.
+    ExpiresAt: from.JSONField("expires"),
+    WarnAfter: 7 * 24 * time.Hour,
 }
 ```
 
-**O SDK não deve trazer um store que escreva no warehouse do cliente.** Nem como
-opção: um campo `Store: bigquery.Table{...}` seria copiado do exemplo por quem
-não pensou no assunto, e é assim que uma credencial acaba num dataset de
-análise. Se alguém precisar mesmo, a interface é pública e ele implementa.
+Nada disso é obrigatório. Um vendor com chave estática continua fazendo o que
+faz hoje:
 
-Três decisões que o SDK deve **tomar**, porque cada consumidor as toma diferente
-e uma delas é sutil:
+```go
+From: from.HTTP{URL: "...", Header: map[string][]string{"Authorization": {"Bearer " + chave}}}
+```
 
-1. **Renovar antes de buscar, e persistir na hora.** O comentário do vendor em
-   Python explica: a chamada de renovação é o que move a janela, e ela não pode
-   ser perdida porque a busca falhou depois. Persistir num `finally` depois da
-   carga — que foi o que o Python fez — é mais frágil e mais código.
-2. **Serializar a renovação.** O `ana` precisou de uma trava porque a API bloqueia
-   IP em rajada de autenticação. Isso não é detalhe do vendor, é propriedade de
-   qualquer API com login.
-3. **Nunca logar a credencial.** Nem truncada. O `Describe()` do driver já
-   redige a URL; o mesmo cuidado vale aqui, e é fácil esquecer num log de debug.
+E o `Auth` também serve os outros três vendors, que é o teste de "genérico o
+bastante para outro time": o `ana` e o `fogocruzado` fazem login por
+`POST` e cacheiam o Bearer — `Value` vira a função de login, `Apply` vira
+`AsBearer`, e o `TTL` cuida do cache que hoje cada um reimplementa.
 
 ### 3.2 Cookie jar — apaga 36 linhas e uma armadilha
 
@@ -256,24 +277,30 @@ nisso — `Columns` diz "add them to Columns, or drop them in Transform"; o
 
 ## 5. Critério de pronto para a `sdk/v0.26.0`
 
-1. `from.HTTP.Auth` cobre os dois casos, e o comum é o simples: credencial
-   obtida por login e viva só durante a execução (3 dos 4 vendors), e credencial
-   rotativa que sobrevive ao processo (1 dos 4).
-2. A renovação roda **antes** do fetch e persiste imediatamente. Teste que prova
-   que uma falha no fetch **não** desfaz a rotação.
+1. `from.HTTP.Auth` cobre os quatro vendors com uma forma só: valor de onde
+   vier (env, login por `POST`, função), aplicado como cookie ou Bearer, com
+   renovação e TTL opcionais.
+   1.1. Aviso de validade: quando a renovação devolve uma data, o SDK avisa a
+        partir de `WarnAfter`. É o que substitui o armazenamento — um store adia
+        o vencimento, um aviso o resolve.
+2. A renovação roda **antes** do fetch, e o que ela devolver vale para esta
+   execução. Teste com um servidor que devolve `Set-Cookie` na renovação e exige
+   o valor novo no fetch.
 3. A renovação é serializada. Teste com concorrência.
-4. O store é um valor com interface pequena, e o SDK **não** traz nenhum que
-   escreva no warehouse do cliente. `sdk/secret/gcp` (Secret Manager) primeiro,
-   no próprio pacote, como `store/gcs`; memória e arquivo saem de graça e servem
-   aos testes.
-   4.1. A credencial nunca aparece em log, nem truncada.
+4. **O SDK não guarda credencial.** Não há store, nem interface de
+   armazenamento — a credencial entra por configuração e vive na execução.
+   4.1. A credencial nunca aparece em log, nem truncada, nem em `Describe()`.
+   4.2. O `Auth` é **opcional**. Um vendor com header estático não o declara, e
+        nada muda para ele.
 5. Cookie jar no cliente HTTP, e o header final acessível. O teste do
    consumidor sobre o `=` do JWT passa a viver aqui.
 6. `PageKey` + `FirstPage` como paginação de primeira classe, e o `PageSize: 1`
    deixa de ser necessário.
 7. O erro do staging nomeia o bucket e as duas saídas.
 8. O `gabriel` do consumidor encolhe de 284 para ~100 linhas, e **as 100 que
-   sobram são todas sobre o Gabriel.** É esta a medida de pronto.
+   sobram são todas sobre o Gabriel.** É esta a medida de pronto — e agora as
+   183 que saem incluem o `sessao.go` inteiro, que deixa de existir dos dois
+   lados.
 
 ---
 
