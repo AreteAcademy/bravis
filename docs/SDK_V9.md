@@ -6,8 +6,10 @@
 > Para o SDK como ele é hoje: [`SDK_ARQUITETURA.md`](SDK_ARQUITETURA.md),
 > [`SDK_NOVO_DRIVER.md`](SDK_NOVO_DRIVER.md) e [`SDK_DECISOES.md`](SDK_DECISOES.md).
 
-> **TODOS OS OITO ITENS RESOLVIDOS**, o último na `sdk/v0.24.0`. Este documento
-> vira registro. O que os oito custaram e as classes que se repetiram estão em
+> **OS OITO PRIMEIROS ITENS ESTÃO RESOLVIDOS**, o último na `sdk/v0.24.0`.
+> O **§9 foi aberto depois**, na `v0.27.2`, e é da mesma classe de "telemetria que
+> mente": a renovação de credencial não renova nada quando a URL dela não
+> compartilha o prefixo de path com a da fonte — e falha em silêncio. O que os oito custaram e as classes que se repetiram estão em
 > [`SDK_CONSUMIDOR.md`](SDK_CONSUMIDOR.md).
 
 **Aberto em** 2026-09-03 · **Versões analisadas** `sdk/v0.9.0`, `sdk/v0.9.1`,
@@ -569,7 +571,68 @@ texto ainda não está certo.
 
 ---
 
-## 9. Critério de pronto para a `v0.10.1`
+## 9. A renovação de credencial vai sem a credencial — **v0.27.2**
+
+`Auth.Refresh` existe para empurrar a janela de uma sessão que expira. No
+consumidor ele **não empurra nada**, e não avisa que não empurrou.
+
+### Reproduzido, com a causa isolada
+
+Servidor local, imprimindo os cabeçalhos que chegam. Fetcher com
+`Apply: AsCookie` e `Value: FromEnv(...)`:
+
+| URL da fonte | URL da renovação | a renovação recebeu `Cookie`? |
+|---|---|---|
+| `/api/proxy/occurrences` | `/api/auth/session` | **não** |
+| `/api/proxy/occurrences` | `/api/proxy/session` | sim |
+
+A diferença é só o **prefixo de path**.
+
+### Por quê
+
+`AsCookie` põe a credencial no jar, semeada a partir da **URL da fonte**. O
+`cookiejar` do Go, quando o cookie não traz `Path`, usa como padrão o
+**diretório da URL que o originou** — aqui, `/api/proxy`. A renovação em
+`/api/auth/session` não casa com esse prefixo, e o jar não a envia.
+
+### Por que isso é grave, e não só chato
+
+O caminho de dados continua funcionando: as páginas saem com a credencial e a
+carga acontece. O que não acontece é a renovação — a resposta vem sem `user` e
+sem `Set-Cookie`, e:
+
+- a janela **nunca é empurrada**, então a credencial morre no prazo contado da
+  última vez que um humano a colou;
+- o `ExpiresAt` não encontra data, então o `WarnAfter` **nunca dispara**.
+
+É exatamente a morte silenciosa que o `Refresh` foi criado para evitar, com a
+agravante de o aviso também estar mudo. Uma execução bem-sucedida hoje não diz
+nada sobre a de daqui a 30 dias.
+
+### Por que o teste do SDK não pega
+
+`TestRefreshRenovaOCookieParaAsPaginas` usa `srv.URL + "/dados"` como fonte. O
+diretório dessa URL é `/`, que casa com qualquer path — inclusive
+`/auth/session`. **O teste passa porque a fonte está na raiz**, e nenhuma API de
+verdade está.
+
+### O conserto
+
+Semear o jar com `Path=/`, ou aplicar a credencial no header da requisição de
+renovação em vez de depender do jar. A segunda é mais direta e não muda o
+comportamento das páginas.
+
+**Como provar:** o teste existente, com a fonte em `/api/v1/dados` e a renovação
+em `/auth/session`. Hoje ele falha.
+
+> Não consegui conferir contra a API real do fornecedor: a credencial vivia numa
+> tabela que foi removida — corretamente, por ser o lugar errado — e ainda não
+> foi recolocada como variável de ambiente. O que está acima é do servidor local,
+> reproduzido nas duas direções.
+
+---
+
+## 10. Critério de pronto para a `v0.10.1`
 
 > Os itens 1 e 2 têm spec de execução própria, com implementação e provas:
 > [`plan/2026-09-03-sdk-conserto-do-merge.md`](plan/2026-09-03-sdk-conserto-do-merge.md).
