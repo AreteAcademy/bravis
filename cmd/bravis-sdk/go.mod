@@ -3,7 +3,7 @@ module github.com/AreteAcademy/bravis/cmd/bravis-sdk
 go 1.23
 
 require (
-	github.com/AreteAcademy/bravis/sdk v0.17.1
+	github.com/AreteAcademy/bravis/sdk v0.18.0
 	github.com/spf13/cobra v1.10.2
 )
 

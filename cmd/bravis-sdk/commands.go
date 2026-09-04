@@ -52,13 +52,13 @@ Examples:
 
 		switch format {
 		case "csv":
-			lines, err = extract.CSV(ctx, source)
+			lines, err = extract.CSV(ctx, source, nil)
 		case "json":
-			lines, err = extract.JSON(ctx, source)
+			lines, err = extract.JSON(ctx, source, nil)
 		case "ndjson":
-			lines, err = extract.NDJSON(ctx, source)
+			lines, err = extract.NDJSON(ctx, source, nil)
 		default:
-			lines, err = extract.CSV(ctx, source)
+			lines, err = extract.CSV(ctx, source, nil)
 		}
 
 		if err != nil {
@@ -176,7 +176,7 @@ Examples:
 		fmt.Fprintf(cmd.OutOrStderr(), "📥 Extracting from %s...\n", url)
 
 		source := sdk.Source{URL: url}
-		lines, err := extract.CSV(ctx, source)
+		lines, err := extract.CSV(ctx, source, nil)
 		if err != nil {
 			log.Fatalf("Extract failed: %v", err)
 		}
