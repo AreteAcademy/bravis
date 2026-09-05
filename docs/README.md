@@ -47,6 +47,8 @@ de fato saiu — **não** como descrição do estado atual.
 | [`2026-09-04-sdk-metadado-vira-transformer.md`](plan/2026-09-04-sdk-metadado-vira-transformer.md) | `v0.24.0` |
 | [`2026-09-04-sdk-http-autenticacao.md`](plan/2026-09-04-sdk-http-autenticacao.md) | §3.2/3.3/3.4 = `v0.26.0`, §3.1 = `v0.27.0`; desvios na §6 da própria spec |
 
+| [`2026-09-05-contexto-entre-passos.md`](plan/2026-09-05-contexto-entre-passos.md) | **proposta** — o que um passo diz ao seguinte |
+
 `phases/` é do **engine**, não do SDK: as fases de construção do orquestrador.
 
 ## Histórico — não são o estado atual
