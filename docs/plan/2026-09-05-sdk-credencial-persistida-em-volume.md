@@ -96,6 +96,31 @@ O caminho do volume perde em quase tudo, e o único ponto em que ganharia — ma
 o SDK sem dependência de nuvem — já está resolvido pela separação em pacotes, que
 é a regra que o próprio SDK estabeleceu com `to/bigquery` e `store/s3`.
 
+**E há um argumento que não estava nesta tabela, trazido por quem consome:
+sobrevive a refazer a infraestrutura.** Um PVC morre com o cluster; um volume
+montado morre com o nó que o hospedava. Um objeto num bucket atravessa recriar o
+cluster, trocar o node pool, refazer o namespace — e é justamente numa recriação
+de ambiente que ninguém lembra de que havia uma credencial rotativa em algum
+lugar. É provavelmente a razão mais forte das seis.
+
+**O mesmo desenho serve S3.** `store/s3` já tem a interface idêntica à do
+`store/gcs` — `Scheme`, `List`, `Open`, `Create` —, então AWS entra trocando o
+valor, sem redesenho.
+
+### Uma ressalva: o CAS não vem de graça
+
+`store/gcs` tem `Open`, `Create` e `List`, e **não** tem escrita condicional. O
+`ifGenerationMatch` que resolve a concorrência precisa ser acrescentado — ou como
+um método a mais na interface, ou como um tipo próprio do store de credencial.
+
+Não é muito trabalho, mas não está lá, e é a diferença entre "compare-and-swap de
+verdade" e "último a escrever vence". Se for adiado, que seja **escrito** que foi
+adiado.
+
+E ao levar para o S3, conferir antes: escrita condicional no S3 existe, mas a
+semântica não é a mesma do GCS, e supor paridade aqui é como supor que
+`INSERT ROW` casa por nome.
+
 **Então o volume sai do caminho crítico.** Ele continua fazendo sentido para quem
 não tem GCS: um `FileStore` apontando para um diretório serve tanto para um
 volume montado quanto para `./.brevis` na máquina de alguém — e é o mesmo
