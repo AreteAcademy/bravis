@@ -73,7 +73,38 @@ trocar um segredo que muda por um que não muda.
 
 ---
 
-## 2. A forma: o SDK escreve um arquivo, a plataforma fornece o caminho
+## 1.5 Correção de rumo: o volume não é necessário
+
+A primeira versão desta spec — e as duas seguintes — foram atrás de um volume,
+porque foi a ideia trazida no pedido e eu a segui sem questionar. **Estava mais
+caro do que precisa ser.**
+
+O SDK **já tem `sdk/store/gcs`**, com `Open`, `Create` e `List`, em pacote
+próprio — quem não importa não paga a dependência. E o pod das tasks já alcança
+o GCS por Workload Identity, que funciona hoje.
+
+| | volume (GCS Fuse) | store GCS direto |
+|---|---|---|
+| **muda o cluster** | **sim, addon global** | **não** |
+| como o pod alcança | sidecar injetado, mais anotação | Workload Identity, que já existe |
+| objeto de cluster | não, se inline | não |
+| escrita atômica | `rename` no gcsfuse **não** é atômico | escrita de objeto **é** |
+| concorrência | lock de arquivo, aproximado | `ifGenerationMatch`: compare-and-swap de verdade |
+| passos até funcionar | 7 | **2** |
+
+O caminho do volume perde em quase tudo, e o único ponto em que ganharia — manter
+o SDK sem dependência de nuvem — já está resolvido pela separação em pacotes, que
+é a regra que o próprio SDK estabeleceu com `to/bigquery` e `store/s3`.
+
+**Então o volume sai do caminho crítico.** Ele continua fazendo sentido para quem
+não tem GCS: um `FileStore` apontando para um diretório serve tanto para um
+volume montado quanto para `./.brevis` na máquina de alguém — e é o mesmo
+`Store`, sem código novo.
+
+E some com ele: habilitar addon no cluster, injetar volume no pod, anotação do
+gcsfuse, e a mudança no motor. **Os passos 2, 4 e 5 deixam de existir.**
+
+## 2. A forma: o SDK escreve num Store, e há dois
 
 O SDK **não** aprende Kubernetes, nem GCS, nem banco. Ele lê e escreve um
 arquivo num diretório que alguém lhe disse. Quem monta o volume é problema da
@@ -94,6 +125,16 @@ Auth: &from.Credential{
         Store: from.FileStore{Name: "gabriel-session"},
     },
 },
+```
+
+São **dois stores**, atrás da mesma interface de duas funções:
+
+```go
+// No cluster: o objeto vive no bucket, e o pod chega nele por Workload Identity.
+Store: gcs.Credential{Bucket: "zarv-data-pipeline-credentials", Object: "gabriel-session"}
+
+// Local, ou onde não houver GCS: um arquivo num diretório.
+Store: from.FileStore{Name: "gabriel-session"}
 ```
 
 `FileStore` resolve o diretório assim, e nesta ordem:
@@ -160,12 +201,17 @@ brevis-cred/1\n            <- versão, em texto, primeira linha
 morto no meio da escrita não pode deixar um arquivo pela metade — que
 decifraria com erro e mandaria o próximo run para a semente, silenciosamente.
 
-**Concorrência.** Dois pods renovando ao mesmo tempo gravam dois valores. Com
-`concurrency: 1` no workflow isso não acontece, mas o SDK não pode supor o
-orquestrador. Um lock por `O_EXCL` com expiração, ou último-a-escrever-vence
-**documentado**. A escolha depende de um fato do fornecedor: **verificado no
-Gabriel que rotacionar não invalida o token anterior**, então último-vence é
-seguro ali; para um fornecedor que invalide, não é.
+**Concorrência.** Dois pods renovando ao mesmo tempo gravam dois valores, e o
+mais velho pode chegar por último.
+
+No GCS isso tem resposta exata: gravar com `ifGenerationMatch` na geração que foi
+lida. Se outro escreveu no meio, a gravação falha com 412 e o processo relê em
+vez de sobrescrever — compare-and-swap, sem lock e sem coordenação.
+
+No `FileStore` não há equivalente: fica lock por `O_EXCL` com expiração, ou
+último-a-escrever-vence **documentado**. A escolha importa menos do que parece
+porque **foi verificado no Gabriel que rotacionar não invalida o token
+anterior** — mas para um fornecedor que invalide, importa muito.
 
 **Permissões.** Arquivo `0600`, diretório `0700`. E se o diretório vier com
 permissão mais frouxa, recusar — um volume compartilhado com `0777` é um
@@ -287,33 +333,30 @@ risco é baixo, mas precisa estar escrito — e é mais um argumento para o lock
 
 ## 6.1 A ordem dos passos, e quem faz cada um
 
-Nada aqui pode começar pelo meio. A ordem importa porque três dos passos são de
-repositórios e times diferentes.
+Depois da correção do §1.5, sobraram **dois**:
 
-| # | passo | onde | bloqueia |
+| # | passo | onde | estado |
 |---|---|---|---|
-| 1 | **Consertar o §9** | `brevis/sdk` | tudo — sem ele não há o que salvar |
-| 2 | Confirmar o **GCS Fuse CSI** habilitado no cluster de dev | GKE, addon `gcsFuseCsiDriver` | o 4 |
-| 3 | Criar o **bucket** e dar `roles/storage.objectAdmin` à service account dos pods | GCP | o 4 |
-|   | *(feito: `zarv-data-pipeline-credentials`, us-central1, acesso uniforme, público bloqueado, versionamento com expurgo de versões antigas em 7 dias, IAM só para `zarv-data@`)* | | |
-| 4 | **Config do volume** no deployment do scheduler | `zarv-applications`, via ArgoCD | o 6 |
-| 5 | `Volumes`/`VolumeMounts` no `PodSpec` e as duas env vars | `brevis` motor → release `0.4.0` | o 6 |
-| 6 | `Refresh.Store` e o `FileStore` | `brevis/sdk` → `v0.28.0` | o 7 |
-| 7 | Religar o `Refresh` no fetcher e provar | `zarv-data-pipeline` | — |
+| 1 | **Consertar o §9** | `brevis/sdk` | bloqueia o 2; tem repro e conserto escritos |
+| 2 | `Refresh.Store`, com `gcs.Credential` e `FileStore` | `brevis/sdk` → `v0.28.0` | — |
 
-Os passos **2 e 3 podem ser feitos hoje**, em paralelo com o 1, e são os únicos
-que dependem de acesso a console.
+E um pré-requisito de infra, **já feito**: o bucket
+`zarv-data-pipeline-credentials` existe em `us-central1`, com acesso uniforme,
+acesso público bloqueado, versionamento com expurgo de versões antigas em 7 dias,
+e IAM só para `zarv-data@zarv-development-94b6` — a GSA que as tasks já usam por
+Workload Identity.
 
-### Duas coisas que travam a cadeia e não são desta spec
+**Nada muda no cluster, no motor, nem em `zarv-applications`.** O que some da
+lista anterior: habilitar o addon do GCS Fuse, o volume no pod, a anotação do
+sidecar, `PodSpec.Volumes` no motor, e a release `0.4.0` que existia só para
+carregar isso.
 
-**A imagem do motor ainda se chama `bravis`.** `daniel3843/brevis` existe no
-Docker Hub **sem tags**, e a `VERSION 0.3.0` foi marcada antes da renomeação —
-então a imagem publicada ainda lê `BRAVIS_*`. O passo 5 produz uma release nova;
-é a hora de resolver isso junto, ou a env do volume nasce com o prefixo errado.
+### O que sobra do volume
 
-**O passo 7 depende do 1 para valer.** Religar o `Refresh` sem o §9 devolve o
-erro `refresh response has no field "expires"` — que foi como esta sequência
-começou.
+Vira o caso de quem **não** tem GCS. `FileStore` aponta para um diretório, e um
+diretório pode ser um volume montado, um `hostPath`, ou `./.brevis` na máquina de
+alguém. Mesmo `Store`, mesma interface, zero código a mais — e quando alguém
+precisar do volume no Kubernetes, o trabalho é de infraestrutura, não de SDK.
 
 ## 7. Critério de pronto
 
@@ -333,20 +376,15 @@ começou.
 9. Teste com dois processos concorrentes, provando o comportamento escolhido —
    seja lock, seja último-vence documentado.
 
-**Motor (`0.4.0`)**
-
-10. `PodSpec.Volumes` e `Container.VolumeMounts` existem, e o motor os injeta
-    **literalmente** do que a config disser — sem conhecer driver nenhum.
-11. `BREVIS_POD_VOLUMES`, `BREVIS_POD_VOLUME_MOUNTS` e `BREVIS_POD_ANNOTATIONS`
-    são pass-through. Ausentes, nada muda. JSON inválido falha **na subida do
-    scheduler**, não no primeiro pod.
-12. Documentado em `docs/KUBERNETES.md`, com o bloco de config do GCS Fuse — e
-    dizendo que o motor **não** conhece o driver, só repassa o volume.
+10. `gcs.Credential` grava com `ifGenerationMatch`, e um 412 faz reler em vez de
+    sobrescrever. Teste com duas gravações concorrentes.
+11. **Nada no motor.** Se esta spec exigir mudança no motor ou no cluster, o
+    desenho saiu do trilho — ver §1.5.
 
 **A prova**
 
-13. O `gabriel` roda duas vezes em dev com `GABRIEL_SESSION_COOKIE` **removida
-    depois da primeira**. A segunda execução autentica com o que veio do volume.
+12. O `gabriel` roda duas vezes em dev com `GABRIEL_SESSION_COOKIE` **removida
+    depois da primeira**. A segunda execução autentica com o que veio do store.
     É a única prova que importa: é literalmente o que o consumidor pediu.
 
 ---
