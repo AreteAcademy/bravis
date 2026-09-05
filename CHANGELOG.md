@@ -8,6 +8,56 @@ A tag de um módulo aninhado leva o prefixo do diretório: `sdk/v0.2.1`.
 
 ---
 
+## [0.29.0] — 2026-09-05
+
+### Adicionado
+
+**`gcs.Credential`: a credencial rotacionada num objeto do GCS**, com escrita
+condicional de verdade.
+
+```go
+import "github.com/AreteAcademy/brevis/sdk/store/gcs"
+
+Refresh: &from.Refresh{
+    URL:       "https://api.example.com/auth/session",
+    ExpiresAt: from.JSONField("expires"),
+    Store:     gcs.Credential{Bucket: "meu-projeto-credentials", Object: "app-session"},
+}
+```
+
+A gravação leva `ifGenerationMatch` na geração que o `Load` leu. Se outro
+processo rotacionou no meio, o GCS recusa com 412 e **esta execução mantém o
+valor do outro** em vez de sobrescrever — compare-and-swap, sem trava. Perder a
+corrida não é erro: o outro renovou também, o valor dele também vale, e o desta
+execução serve até o fim dela. O que não pode é o mais velho chegar por último e
+apagar o mais novo.
+
+A primeira gravação usa `DoesNotExist`, senão duas primeiras execuções
+simultâneas gravariam as duas.
+
+Importar `store/gcs` custa o cliente do Google Storage. Um fetcher que use
+`from.FileStore` nunca o compila.
+
+### Mudado
+
+**A cifragem virou opcional.** A `v0.28.0` recusava ligar o store sem chave. O
+cálculo muda com o store sendo um bucket dedicado, com IAM para uma única
+service account e acesso público bloqueado: uma chave de aplicação protegeria
+contra quem tem leitura e não tem a chave — mas a chave vive no mesmo secret das
+tasks, então quem lê o bucket também a tem. **Isso é teatro**, e chamar de
+segurança o que não protege é pior que não ter.
+
+Então `Key` é opcional. Sem ela, grava em claro e loga **uma vez** — deduplicado
+por store, porque um aviso repetido a cada pipeline vira ruído, e ruído é como um
+aviso deixa de ser lido. Para o `FileStore` a recomendação é usar chave: um
+diretório é mais fácil de acabar compartilhado do que um bucket com IAM.
+
+O valor guardado carrega versão na primeira linha nos dois modos
+(`brevis-cred/1` cifrado, `brevis-cred/1p` em claro), e uma versão que este build
+não lê é tratada como ausente — durante um rollout o mesmo store tem as duas.
+
+---
+
 ## [0.28.1] — 2026-09-05
 
 Sem mudança de comportamento. A `v0.27.3` e a `v0.28.0` foram marcadas com

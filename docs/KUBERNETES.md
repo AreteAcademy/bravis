@@ -205,6 +205,16 @@ há credencial.
 head -c 32 /dev/urandom | base64    # a chave, uma vez
 ```
 
+> **A recomendação mudou.** O caminho abaixo continua funcionando e é o que
+> serve quem não tem GCS — mas para guardar uma credencial rotativa, prefira
+> `gcs.Credential{Bucket, Object}` do SDK: não mexe no cluster, não cria
+> `PersistentVolume` (que não é namespaced), a escrita de objeto **é** atômica
+> onde o `rename` do gcsfuse não é, e a concorrência sai por
+> `ifGenerationMatch` em vez de uma trava aproximada. O mais forte: um objeto
+> **sobrevive a refazer a infraestrutura**, e um PVC morre com o cluster — e é
+> justamente numa recriação de ambiente que ninguém lembra que havia uma
+> credencial rotativa em algum lugar.
+
 ### O PV, para GCS Fuse
 
 O cluster de dev é GKE, e `ReadWriteMany` ali não é EFS. Das três opções, a que

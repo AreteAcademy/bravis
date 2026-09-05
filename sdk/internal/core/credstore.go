@@ -1,13 +1,8 @@
 package core
 
 import (
-	"crypto/aes"
-	"crypto/cipher"
-	"crypto/rand"
-	"encoding/base64"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -49,13 +44,6 @@ const (
 	EnvCredentialKey = "BREVIS_CREDENTIAL_KEY"
 )
 
-// formatoEmDisco e a primeira linha do arquivo, e o contrato.
-//
-// Um arquivo persistido nao se muda sem migracao, e migracao de credencial e a
-// que ninguem quer fazer as pressas. A versao em texto na primeira linha e o
-// que permite mudar o resto depois sem adivinhacao.
-const formatoEmDisco = "brevis-cred/1"
-
 // FileStore guarda a credencial num arquivo cifrado dentro de um diretorio que
 // alguem forneceu.
 //
@@ -74,9 +62,12 @@ type FileStore struct {
 	Dir string
 
 	// Key e a chave de 32 bytes em base64. Vazia consulta
-	// BREVIS_CREDENTIAL_KEY. Sem chave o store RECUSA a ligar -- gravar em
-	// claro seria repetir, num arquivo, o erro que acabamos de tirar de uma
-	// tabela do BigQuery.
+	// BREVIS_CREDENTIAL_KEY; vazia nos dois grava em claro, dizendo uma vez
+	// no log que esta em claro.
+	//
+	// Para um diretorio a recomendacao e USAR: um diretorio e mais facil de
+	// acabar compartilhado do que um bucket com IAM. O que protege quando nao
+	// ha chave e a permissao 0700, e so.
 	Key string
 }
 
@@ -93,6 +84,7 @@ func (f FileStore) CheckStore() error {
 			"effect", "the rotated credential lives for this run only")
 		return nil
 	}
+	WarnIfPlaintext(arq.env, arq.caminho)
 	slog.Debug("credential store is on", "file", arq.caminho)
 	return nil
 }
@@ -132,7 +124,7 @@ func (f FileStore) Save(valor string) error {
 //
 // Devolve (nil, nil) quando nao ha diretorio: o store desligado e um estado
 // normal -- e como a feature continua sendo atalho e nao requisito.
-func (f FileStore) resolver() (*arquivoCifrado, error) {
+func (f FileStore) resolver() (*arquivoDeCredencial, error) {
 	if strings.TrimSpace(f.Name) == "" {
 		return nil, fmt.Errorf("FileStore.Name is empty: it names the file, and it must " +
 			"come from you rather than from the URL -- a URL carries secrets in its " +
@@ -142,9 +134,9 @@ func (f FileStore) resolver() (*arquivoCifrado, error) {
 		return nil, fmt.Errorf("FileStore.Name %q is a path, and it must be a plain name", f.Name)
 	}
 
-	dir, origem := f.Dir, "FileStore.Dir"
+	dir := f.Dir
 	if dir == "" {
-		dir, origem = os.Getenv(EnvCredentialDir), EnvCredentialDir
+		dir = os.Getenv(EnvCredentialDir)
 	}
 	if dir == "" {
 		return nil, nil
@@ -154,33 +146,16 @@ func (f FileStore) resolver() (*arquivoCifrado, error) {
 	if chave == "" {
 		chave = os.Getenv(EnvCredentialKey)
 	}
-	if chave == "" {
-		return nil, fmt.Errorf("credential store: %s is set (%s) but there is no key. "+
-			"Set %s to 32 random bytes in base64 -- writing a credential in the clear "+
-			"would put it somewhere backups reach, which is the thing this store exists "+
-			"to stop. Generate one with: head -c 32 /dev/urandom | base64",
-			origem, dir, EnvCredentialKey)
-	}
-
-	bruta, err := base64.StdEncoding.DecodeString(strings.TrimSpace(chave))
+	env, err := NewCredentialBox(chave)
 	if err != nil {
-		return nil, fmt.Errorf("credential store: %s is not valid base64: %w", EnvCredentialKey, err)
-	}
-	if len(bruta) != 32 {
-		return nil, fmt.Errorf("credential store: %s decodes to %d bytes, and AES-256 needs 32",
-			EnvCredentialKey, len(bruta))
+		return nil, err
 	}
 
 	if err := prepararDiretorio(dir); err != nil {
 		return nil, err
 	}
 
-	gcm, err := novoGCM(bruta)
-	if err != nil {
-		return nil, err
-	}
-
-	return &arquivoCifrado{caminho: filepath.Join(dir, f.Name+".cred"), gcm: gcm}, nil
+	return &arquivoDeCredencial{caminho: filepath.Join(dir, f.Name+".cred"), env: env}, nil
 }
 
 // prepararDiretorio cria o diretorio a 0700, e recusa um que ja exista com
@@ -209,32 +184,17 @@ func prepararDiretorio(dir string) error {
 	return nil
 }
 
-func novoGCM(chave []byte) (cipher.AEAD, error) {
-	bloco, err := aes.NewCipher(chave)
-	if err != nil {
-		return nil, fmt.Errorf("credential store: %w", err)
-	}
-	gcm, err := cipher.NewGCM(bloco)
-	if err != nil {
-		return nil, fmt.Errorf("credential store: %w", err)
-	}
-	return gcm, nil
-}
-
-type arquivoCifrado struct {
+type arquivoDeCredencial struct {
 	caminho string
-	gcm     cipher.AEAD
+	env     CredentialBox
 }
 
-func (a *arquivoCifrado) Describe() string { return a.caminho }
+func (a *arquivoDeCredencial) Describe() string { return a.caminho }
 
 // Load devolve o valor guardado, ou "" quando nao ha um utilizavel.
 //
-// Arquivo ausente, versao desconhecida, truncado ou que nao decifra sao todos
-// "nao ha valor": o chamador cai na semente e a execucao segue. Falhar aqui
-// seria trocar uma credencial velha por nenhuma -- e uma versao futura num
-// volume compartilhado e cenario normal durante um rollout.
-func (a *arquivoCifrado) Load() (string, error) {
+// Arquivo ausente e "nao ha valor", nao erro: e a primeira execucao de todas.
+func (a *arquivoDeCredencial) Load() (string, error) {
 	bruto, err := os.ReadFile(a.caminho)
 	if errors.Is(err, fs.ErrNotExist) {
 		return "", nil
@@ -242,30 +202,7 @@ func (a *arquivoCifrado) Load() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("credential store: read %s: %w", a.caminho, err)
 	}
-
-	cabecalho, corpo, ok := bytes3Cut(bruto)
-	if !ok || cabecalho != formatoEmDisco {
-		slog.Warn("credential store: ignoring a file this version does not read",
-			"file", a.caminho, "falling_back_to", "Credential.Value")
-		return "", nil
-	}
-
-	n := a.gcm.NonceSize()
-	if len(corpo) < n+a.gcm.Overhead() {
-		slog.Warn("credential store: the stored credential is truncated",
-			"file", a.caminho, "falling_back_to", "Credential.Value")
-		return "", nil
-	}
-
-	claro, err := a.gcm.Open(nil, corpo[:n], corpo[n:], []byte(formatoEmDisco))
-	if err != nil {
-		// Chave trocada, arquivo corrompido ou adulterado. Nao se diz qual:
-		// distinguir daria a quem adultera um oraculo.
-		slog.Warn("credential store: the stored credential does not decrypt",
-			"file", a.caminho, "falling_back_to", "Credential.Value")
-		return "", nil
-	}
-	return string(claro), nil
+	return a.env.Open(bruto, a.caminho), nil
 }
 
 // Save grava o valor, cifrado, de forma atomica.
@@ -279,16 +216,11 @@ func (a *arquivoCifrado) Load() (string, error) {
 // anterior, entao dois pods renovando ao mesmo tempo gravam dois valores que
 // ambos funcionam. Para um fornecedor que invalide o anterior, isto nao serve
 // -- e a advertencia esta na doc de Refresh.Store.
-func (a *arquivoCifrado) Save(valor string) error {
-	nonce := make([]byte, a.gcm.NonceSize())
-	// Sorteado a cada escrita. Reusar nonce com a mesma chave em GCM quebra a
-	// cifra, e e o erro mais comum de quem faz isto pela primeira vez.
-	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
-		return fmt.Errorf("credential store: nonce: %w", err)
+func (a *arquivoDeCredencial) Save(valor string) error {
+	conteudo, err := a.env.Seal(valor)
+	if err != nil {
+		return err
 	}
-
-	conteudo := append([]byte(formatoEmDisco+"\n"), nonce...)
-	conteudo = a.gcm.Seal(conteudo, nonce, []byte(valor), []byte(formatoEmDisco))
 
 	dir := filepath.Dir(a.caminho)
 	tmp, err := os.CreateTemp(dir, ".cred-*")
@@ -317,14 +249,4 @@ func (a *arquivoCifrado) Save(valor string) error {
 		return fmt.Errorf("credential store: rename into place: %w", err)
 	}
 	return nil
-}
-
-// bytes3Cut separa a primeira linha do resto.
-func bytes3Cut(b []byte) (string, []byte, bool) {
-	for i, c := range b {
-		if c == '\n' {
-			return string(b[:i]), b[i+1:], true
-		}
-	}
-	return "", nil, false
 }

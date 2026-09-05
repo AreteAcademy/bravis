@@ -54,8 +54,11 @@ import (
 	"$MODULO"
 	"$MODULO/from"
 	"$MODULO/to"
+	"$MODULO/store/gcs"
 	"$MODULO/to/bigquery"
 )
+
+var _ = from.Refresh{Store: gcs.Credential{Bucket: "b", Object: "o"}}
 
 // Toca a porta da frente e um driver de cada lado, para que um rename que
 // quebre quem chama falhe aqui e não depois da release.
@@ -78,6 +81,9 @@ func main() {
 					// FileStore por VALOR, como a doc mostra: se ele
 					// deixasse de satisfazer CredentialStore, so um
 					// consumidor de fora do modulo pegaria.
+					// Os dois stores, por valor: se um deixasse de
+					// satisfazer CredentialStore, so um consumidor de
+					// fora do modulo pegaria.
 					Store: from.FileStore{Name: "app-session"},
 				},
 			},

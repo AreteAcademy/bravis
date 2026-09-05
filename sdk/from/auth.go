@@ -32,12 +32,17 @@ type Applier = core.Applier
 //	Store: from.FileStore{Name: "gabriel-session"}
 //
 // The directory comes from Dir, then BREVIS_CREDENTIAL_DIR, then nowhere -- and
-// nowhere turns the store off, saying so once in the log. The key comes from
-// Key, then BREVIS_CREDENTIAL_KEY, and without one the store REFUSES rather
-// than writing a credential in the clear.
+// nowhere turns the store off, saying so once in the log.
+//
+// The key comes from Key, then BREVIS_CREDENTIAL_KEY, and is optional: without
+// one the file is written in the clear, and the log says so once. For a
+// directory, use one -- a directory is easier to end up shared than a bucket
+// with IAM, and 0700 is then the only thing protecting it.
 type FileStore = core.FileStore
 
-// CredentialStore is what Refresh.Store takes. FileStore implements it.
+// CredentialStore is what Refresh.Store takes. FileStore implements it, and so
+// does gcs.Credential in sdk/store/gcs -- which is where the cloud dependency
+// stays, so a fetcher that uses a directory never compiles the Google client.
 type CredentialStore = core.CredentialStore
 
 // Names of the two variables the platform injects.

@@ -1,9 +1,11 @@
 package core
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -56,7 +58,7 @@ func TestGuardaEDevolve(t *testing.T) {
 	if strings.Contains(string(bruto), "eyJhbGciOiJkaXIi") {
 		t.Error("a credencial esta em claro no arquivo")
 	}
-	if !strings.HasPrefix(string(bruto), formatoEmDisco+"\n") {
+	if !strings.HasPrefix(string(bruto), formatoCifrado+"\n") {
 		t.Errorf("o arquivo nao comeca com a versao: %q", bruto[:min(20, len(bruto))])
 	}
 }
@@ -88,7 +90,7 @@ func TestNonceNaoSeRepete(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		_, corpo, _ := bytes3Cut(bruto)
+		_, corpo, _ := primeiraLinha(bruto)
 		nonce := string(corpo[:12])
 		if vistos[nonce] {
 			t.Fatalf("nonce repetido na escrita %d", i)
@@ -97,27 +99,115 @@ func TestNonceNaoSeRepete(t *testing.T) {
 	}
 }
 
-// TestSemChaveRecusaNaMontagem: gravar em claro seria repetir, num arquivo, o
-// erro que acabamos de tirar de uma tabela do BigQuery.
-func TestSemChaveRecusaNaMontagem(t *testing.T) {
-	t.Setenv(EnvCredentialDir, t.TempDir())
+// TestSemChaveGravaEmClaro: a cifra e opcional. O controle de verdade e o do
+// storage -- permissao do diretorio, IAM do bucket -- e uma chave que vive no
+// mesmo secret de quem le o store nao protege de ninguem.
+func TestSemChaveGravaEmClaro(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Chmod(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(EnvCredentialDir, dir)
 	t.Setenv(EnvCredentialKey, "")
 
-	err := FileStore{Name: "x"}.CheckStore()
-	if err == nil {
-		t.Fatal("sem chave, o store ligou")
+	s := FileStore{Name: "x"}
+	if err := s.CheckStore(); err != nil {
+		t.Fatalf("sem chave virou erro: %v", err)
 	}
-	for _, exigido := range []string{EnvCredentialKey, "base64"} {
-		if !strings.Contains(err.Error(), exigido) {
-			t.Errorf("o erro nao diz %q: %v", exigido, err)
-		}
+
+	const valor = "session=abc=="
+	if err := s.Save(valor); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	got, err := s.Load()
+	if err != nil || got != valor {
+		t.Fatalf("Load = (%q, %v)", got, err)
+	}
+
+	bruto, err := os.ReadFile(filepath.Join(dir, "x.cred"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(string(bruto), formatoClaro+"\n") {
+		t.Errorf("o claro tambem precisa de versao na primeira linha: %q", bruto)
 	}
 }
 
+// TestClaroAvisaUmaVezSo: um aviso repetido a cada pipeline vira ruido, e
+// ruido e como um aviso deixa de ser lido.
+func TestClaroAvisaUmaVezSo(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Chmod(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(EnvCredentialDir, dir)
+	t.Setenv(EnvCredentialKey, "")
+	avisos.Delete(filepath.Join(dir, "x.cred"))
+
+	var buf bytes.Buffer
+	anterior := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	defer slog.SetDefault(anterior)
+
+	s := FileStore{Name: "x"}
+	for i := 0; i < 5; i++ {
+		if err := s.CheckStore(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if n := strings.Count(buf.String(), "writing in the clear"); n != 1 {
+		t.Errorf("avisou %d vezes, esperado 1", n)
+	}
+}
+
+// TestComChaveNaoGravaEmClaro: e o outro lado -- a opcao de cifrar tem de
+// realmente cifrar.
+func TestComChaveNaoGravaEmClaro(t *testing.T) {
+	s, dir := storePronto(t)
+	if err := s.Save("session=abc=="); err != nil {
+		t.Fatal(err)
+	}
+	bruto, err := os.ReadFile(filepath.Join(dir, "gabriel-session.cred"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(bruto), "session=abc==") {
+		t.Error("com chave, gravou em claro")
+	}
+	if !strings.HasPrefix(string(bruto), formatoCifrado+"\n") {
+		t.Errorf("cabecalho errado: %q", bruto[:min(20, len(bruto))])
+	}
+}
+
+// TestCifradoSemChaveCaiNaSemente: durante um rollout, ou depois de alguem
+// remover a chave, o store tem um valor que este processo nao le. Cair na
+// semente e o certo; devolver lixo seria pior.
+func TestCifradoSemChaveCaiNaSemente(t *testing.T) {
+	s, dir := storePronto(t)
+	if err := s.Save("segredo"); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(EnvCredentialKey, "")
+
+	got, err := FileStore{Name: "gabriel-session"}.Load()
+	if err != nil {
+		t.Fatalf("virou erro: %v", err)
+	}
+	if got != "" {
+		t.Errorf("Load = %q, esperado vazio", got)
+	}
+	_ = dir
+}
+
 // TestChaveDeTamanhoErrado: AES-256 quer 32 bytes, e uma chave curta falharia
-// mais tarde com uma mensagem sobre tamanho de bloco.
+// mais tarde com uma mensagem sobre tamanho de bloco. Chave presente e ruim e
+// erro; chave AUSENTE e escolha.
 func TestChaveDeTamanhoErrado(t *testing.T) {
-	t.Setenv(EnvCredentialDir, t.TempDir())
+	dir := t.TempDir()
+	if err := os.Chmod(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(EnvCredentialDir, dir)
 	for _, ruim := range []string{
 		base64.StdEncoding.EncodeToString([]byte("curta")),
 		"isto nao e base64!!",
@@ -201,8 +291,8 @@ func TestArquivoIlegivelCaiNaSemente(t *testing.T) {
 	casos := map[string][]byte{
 		"versao futura": []byte("brevis-cred/9\nqualquer coisa aqui dentro"),
 		"sem versao":    []byte("nao tem newline nenhum"),
-		"truncado":      []byte(formatoEmDisco + "\ncurto"),
-		"nao decifra":   append([]byte(formatoEmDisco+"\n"), make([]byte, 60)...),
+		"truncado":      []byte(formatoCifrado + "\ncurto"),
+		"nao decifra":   append([]byte(formatoCifrado+"\n"), make([]byte, 60)...),
 		"arquivo vazio": {},
 	}
 	for nome, conteudo := range casos {

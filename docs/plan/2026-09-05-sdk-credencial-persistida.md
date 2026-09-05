@@ -2,6 +2,12 @@
 
 **Escrito em** 2026-09-05 · **Base** `sdk/v0.27.2` · **Alvo** `sdk/v0.28.0`
 
+> **EXECUTADO** em 2026-09-05. O passo 1 saiu sozinho na `sdk/v0.27.3`, como a
+> spec manda; o passo 2 na `sdk/v0.29.0`. Os onze critérios estão cobertos,
+> exceto o 11, que depende de dev de pé e de alguém com o cookie válido — a
+> forma dele sem cluster está em `TestSegundaExecucaoUsaOQueVeioDoVolume`.
+> O §"O que saiu diferente" no fim registra três desvios.
+
 Spec executável. **São dois passos, os dois no SDK** — nada no motor, nada no
 cluster, nada em `zarv-applications`.
 
@@ -255,3 +261,65 @@ E o único ponto em que o volume ganharia — manter o SDK sem dependência de n
 — já estava resolvido pela separação em pacotes, que é a regra que o próprio SDK
 estabeleceu com `to/bigquery` e `store/s3`. Eu não tinha visto que `store/gcs` já
 existia.
+
+---
+
+## O que saiu diferente
+
+### O passo 1 não se resolvia com o conserto que a spec descreve
+
+A spec diz: "aplicar a credencial no header da requisição de renovação, em vez
+de depender do jar". Isso conserta a **ida** — e só apareceu ao escrever a
+asserção certa que não basta.
+
+O cookie que a renovação **reemite** volta pelo jar e fica preso ao diretório da
+URL de renovação. As páginas, em `/api/proxy/...`, seguem com o valor velho: a
+renovação renova para ninguém, e o store gravaria um valor que nunca foi usado —
+que é exatamente o "guardar lixo" do §0 da spec anterior, por outro caminho.
+
+Então a credencial deixou de ser cookie de jar **nas duas direções**. Um
+`credentialJar` desvia os nomes dela antes que o jar os guarde, o que mantém a
+invariante da `v0.26.0` (cada cookie num lugar só, nenhum nome duas vezes) e dá
+de brinde o que o passo 2 precisa: **o valor rotacionado fica na mão**.
+
+A rotação também é aplicada no laço de páginas, porque uma API pode reemitir a
+sessão em qualquer resposta — sem isso, uma regressão que o teste da `v0.26.0`
+pegou.
+
+### A escrita condicional não foi adiada
+
+O critério 5 abre a porta para adiar, "por escrito". Não foi: `gcs.Credential`
+grava com `ifGenerationMatch` na geração que o `Load` leu, e o 412 faz a
+execução **manter o valor do outro** em vez de sobrescrever.
+
+Perder a corrida não é erro e não vai como erro: o outro processo renovou
+também, o valor dele também vale, e o desta execução serve até o fim dela. O que
+não pode acontecer — e é o que o critério pede — é o mais velho chegar por
+último e apagar o mais novo.
+
+A primeira gravação usa `DoesNotExist` em vez de geração, senão duas primeiras
+execuções simultâneas gravariam as duas.
+
+### O que já existia da spec anterior, e ficou
+
+A `v0.28.0` foi entregue contra a spec do volume, e três coisas dela
+sobreviveram porque esta spec as mantém:
+
+- **`FileStore`** — esta spec o lista como um dos dois stores, e o diretório
+  pode ser um volume montado. Ele não é sobra do desenho antigo.
+- **A cifragem** virou **opcional**, que é a mudança desta spec. Antes o store
+  recusava a ligar sem chave; agora grava em claro e avisa **uma vez**, com o
+  aviso deduplicado por store para não virar ruído a cada pipeline.
+- **`PodSpec.Volumes` no motor** ficou. Não é órfão: é o que faz
+  `BREVIS_CREDENTIAL_DIR` funcionar num pod para quem escolher `FileStore`. Mas
+  a recomendação do `docs/KUBERNETES.md` passou a ser o `gcs.Credential`, com o
+  volume como alternativa — e o anexo desta spec diz por quê melhor do que eu
+  diria.
+
+### Uma coisa a conferir antes do S3
+
+A spec já avisa, e vale repetir onde alguém vá olhar: a escrita condicional
+existe no S3, mas a semântica **não é a mesma** — não há geração de objeto, e o
+equivalente mais próximo depende de `If-Match` com ETag, que nem toda operação
+aceita. Supor paridade seria o mesmo erro de supor que `INSERT ROW` casa por
+nome.

@@ -470,49 +470,62 @@ Without a store, the renewed value lives for this run only — and somebody
 re-pastes the credential once per expiry window, forever.
 
 ```go
+import "github.com/AreteAcademy/brevis/sdk/store/gcs"
+
 Refresh: &from.Refresh{
     URL:       "https://api.example.com/auth/session",
     ExpiresAt: from.JSONField("expires"),
-    Store:     from.FileStore{Name: "app-session"},
+    Store:     gcs.Credential{Bucket: "myproject-credentials", Object: "app-session"},
 }
 ```
 
 The trade this makes is the point: the environment variable stops holding the
-**rotating** value and starts holding a **static** key. Pasted once.
-
-| | reads | order |
-|---|---|---|
-| directory | `Dir`, then `BREVIS_CREDENTIAL_DIR`, then nowhere | nowhere turns the store off, saying so once |
-| key | `Key`, then `BREVIS_CREDENTIAL_KEY` | **no key refuses**, rather than writing in the clear |
+**rotating** value and starts holding the **seed**, pasted once.
 
 The read order is: the store, then `Value` as the seed, then renew, then save.
 
-The file is AES-256-GCM with a fresh nonce per write, `0600` in a `0700`
-directory, and written to a temporary file then renamed. A stored value that
-does not decrypt — a rotated key, a truncated file, a version this build does
-not read — is treated as absent: the run falls back to the seed rather than
-failing, because a future version on a shared volume is normal during a rollout.
+**Two stores, and `Store` is optional** — without it, nothing changes.
 
-**Last writer wins.** Two processes renewing at once write two values, and both
-work only because rotating does not invalidate the previous token at the vendor
-this was built for. For a vendor that invalidates it, do not use this without a
-lock of your own.
+| | where | concurrency |
+|---|---|---|
+| `gcs.Credential{Bucket, Object}` | an object in GCS | conditional write on the generation read; a concurrent rotation loses the write, not the run |
+| `from.FileStore{Dir, Name}` | a file in a directory | last writer wins |
 
-Failing to save does **not** stop the run — the extract already happened; what
-was lost is the rotation. It goes out at `ERROR` and in
-`Result.CredentialStoreError`, because the effect is deferred (the next run
-falls back to a seed that one day expires) and a deferred effect that only
-exists in a log is the one nobody sees in time.
+`gcs.Credential` writes with `ifGenerationMatch` on the generation `Load` saw.
+If another process rotated in between, the write is refused and **this run keeps
+theirs** — that is compare-and-swap, not a lock, and it is why an object beats a
+file on a shared mount, where `rename` is not atomic.
 
-The SDK does not learn Kubernetes, GCS or databases: it opens a file. Under
-Brevis the engine mounts a volume and injects `BREVIS_CREDENTIAL_DIR`; on a
-laptop, `BREVIS_CREDENTIAL_DIR=./.brevis` is the whole setup. Same code.
+`FileStore` resolves its directory from `Dir`, then `BREVIS_CREDENTIAL_DIR`, then
+nowhere — and nowhere turns the store **off**, saying so once. The directory can
+be `./.brevis`, a compose volume, or a mount: same `Store`, and it is what makes
+this work without GCS. File `0600`, directory `0700`, temp file then rename, and
+a directory with looser permissions is refused.
 
-Generate the key once:
+**Encryption is optional.** `Key`, then `BREVIS_CREDENTIAL_KEY`; without either,
+the value is written in the clear and the log says so once. What protects it is
+then whatever guards the store — bucket IAM, directory permissions. A key that
+lives in the same secret as whoever can read the store protects against nobody,
+and calling that security is worse than not having it. For a **directory**, use
+a key: a directory is easier to end up shared than a bucket with IAM.
 
 ```bash
 head -c 32 /dev/urandom | base64
 ```
+
+With a key it is AES-256-GCM, a fresh nonce per write. Either way the stored
+value carries a version line, and a version this build does not read is treated
+as absent — the run falls back to the seed rather than failing, because during a
+rollout the same store holds both.
+
+Failing to save does **not** stop the run — the extract already happened; what
+was lost is the rotation. It goes out at `ERROR` and in
+`Result.CredentialStoreError`, because the effect is deferred (the next run falls
+back to a seed that one day expires) and a deferred effect that only exists in a
+log is the one nobody sees in time.
+
+Importing `store/gcs` costs you the Google storage client. A fetcher that uses
+`FileStore` never compiles it.
 
 A refresh that fails stops the run. Continuing would send every page out with a
 credential the API has just refused, and the failure would come back blaming
