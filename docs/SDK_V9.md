@@ -571,7 +571,7 @@ texto ainda não está certo.
 
 ---
 
-## 9. A renovação de credencial vai sem a credencial — **v0.27.2**
+## 9. A renovação de credencial vai sem a credencial, e a execução morre — **v0.27.2**
 
 `Auth.Refresh` existe para empurrar a janela de uma sessão que expira. No
 consumidor ele **não empurra nada**, e não avisa que não empurrou.
@@ -595,19 +595,40 @@ A diferença é só o **prefixo de path**.
 **diretório da URL que o originou** — aqui, `/api/proxy`. A renovação em
 `/api/auth/session` não casa com esse prefixo, e o jar não a envia.
 
-### Por que isso é grave, e não só chato
+### Não é um aviso mudo: é a execução inteira
 
-O caminho de dados continua funcionando: as páginas saem com a credencial e a
-carga acontece. O que não acontece é a renovação — a resposta vem sem `user` e
-sem `Set-Cookie`, e:
+Corrigindo o que este relatório dizia na primeira versão. Eu descrevi o efeito
+como silencioso — a carga funcionaria e só a renovação ficaria inerte. **Está
+errado, e o consumidor descobriu em produção:**
 
-- a janela **nunca é empurrada**, então a credencial morre no prazo contado da
-  última vez que um humano a colou;
-- o `ExpiresAt` não encontra data, então o `WarnAfter` **nunca dispara**.
+```
+step "fetch_occurrences": saiu com codigo 1
+error="format error in …/occurrences: refresh …/auth/session:
+       refresh response has no field \"expires\""
+```
 
-É exatamente a morte silenciosa que o `Refresh` foi criado para evitar, com a
-agravante de o aviso também estar mudo. Uma execução bem-sucedida hoje não diz
-nada sobre a de daqui a 30 dias.
+A cadeia é: a renovação vai sem credencial → o endpoint responde `null` para não
+autenticado → `ExpiresAt` não acha `expires` → **erro, e a execução morre antes
+da primeira página.**
+
+Verificado que `null` é mesmo a resposta de não autenticado, com e sem cookie:
+
+```
+/auth/session COM cookie válido    -> 200, {"user":{…},"expires":"…"}
+/auth/session sem credencial       -> 200, null
+```
+
+Então **um `Refresh` com `ExpiresAt` é hoje inutilizável** para qualquer fonte
+cuja URL de renovação não compartilhe o prefixo de path com a dos dados — que é
+a disposição normal (`/api/proxy/dados` e `/api/auth/session`).
+
+O consumidor teve de remover o bloco. Com isso perde a renovação **e** o aviso —
+volta a ter uma credencial que morre calada no prazo de quem a colou, que era o
+problema que a `v0.27.0` foi escrita para resolver.
+
+Vale registrar o lado bom: o `ExpiresAt` **falhar** em vez de seguir sem data é o
+que tornou o defeito visível. Se ele tivesse tratado a ausência como "sem
+validade conhecida", isto teria ficado invisível até o dia 31.
 
 ### Por que o teste do SDK não pega
 
