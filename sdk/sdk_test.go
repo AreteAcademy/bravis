@@ -524,11 +524,16 @@ func TestTransformKeepsTheCounters(t *testing.T) {
 
 // --- Removed surface -------------------------------------------------------
 
-func TestIngestionIDNamespaceIsNotConfigurable(t *testing.T) {
-	// WithMetadataNamespace used to be accepted, validated and defaulted, and
-	// then ignored: IngestionID hardcodes the namespace. Anyone setting it got
-	// identical ids and believed otherwise. It is gone; this locks the value
-	// that the Python implementation was checked against.
+func TestIngestionIDDoNamespacePadraoNaoMuda(t *testing.T) {
+	// O nome deste teste era "NamespaceIsNotConfigurable", e virou falso na
+	// v0.38.0: sdk.Namespace escolhe outro. O que ele SEMPRE afirmou continua
+	// valendo e é o que importa -- o valor do padrão, que é o que quem já
+	// gravou tem na tabela.
+	//
+	// WithMetadataNamespace, antes disso, era aceito, validado, defaultado e
+	// então IGNORADO: quem o setava recebia ids idênticos e acreditava no
+	// contrário. Foi removido, e é por isso que a configuração de agora entra
+	// por um caminho que o teste acima prova que é usado.
 	env := Envelope{
 		Provider: "gov", Entity: "tx", SourceKey: "k1", RecordTS: "2026-01-01T00:00:00Z",
 	}

@@ -317,3 +317,44 @@ func Compute(name string, fn func(record map[string]any) (any, error)) Transform
 
 // ensure Transform's iterator type matches Data.Records.
 var _ func(func(Envelope, error) bool) = iter.Seq2[Envelope, error](nil)
+
+// SkipWithout descarta o registro quando um dos campos nomeados estiver
+// ausente ou nulo.
+//
+//	sdk.SkipWithout("id", "atualizado_em")
+//
+// O nome diz o nivel, e isso importa: RequireFields recusa a RESPOSTA inteira
+// quando um campo falta -- e a fonte mudou de forma. SkipWithout descarta UM
+// registro. Duas coisas diferentes com nomes parecidos seriam a mesma armadilha
+// que este SDK ja encontrou em si mesmo.
+//
+// Descartar e nao falhar: uma linha sem o campo que compoe a chave nao pode
+// entrar -- ela nao tem identidade estavel --, mas ela tambem nao e motivo
+// para derrubar a janela inteira. Quem quiser que seja usa Accept, que recusa.
+//
+// Vale para o caso que todo consumidor escreve a mao: um closure com type
+// assertion por campo, repetido em cada fetcher, onde errar um deles e
+// silencioso.
+//
+// Ausente e nulo sao a mesma coisa aqui, e e deliberado: uma chave composta com
+// um nulo no meio produz um id que parece valido e colide com outro registro
+// que tenha o mesmo nulo na mesma posicao.
+func SkipWithout(fields ...string) Transformer {
+	return func(payload any) (any, error) {
+		if len(fields) == 0 {
+			return nil, fmt.Errorf("SkipWithout precisa de ao menos um campo")
+		}
+		obj, ok := payload.(map[string]any)
+		if !ok {
+			// Sem campos para exigir, o registro passa: e a mesma escolha que
+			// Accept e Without fazem para um payload que nao e objeto.
+			return payload, nil
+		}
+		for _, f := range fields {
+			if v, present := obj[f]; !present || v == nil {
+				return nil, SkipRecord
+			}
+		}
+		return obj, nil
+	}
+}

@@ -1,6 +1,8 @@
 package sdk
 
 import (
+	"github.com/google/uuid"
+
 	"fmt"
 	"strings"
 	"time"
@@ -46,7 +48,8 @@ var defaultIDFields = []string{"provider", "entity", "source_key", "record_ts"}
 // Accept is. It usually means the chain is out of order, or that Without ran
 // first.
 func IngestionID(fields ...string) Transformer {
-	return IngestionIDWith(func(v any) (string, error) { return asText(v), nil }, fields...)
+	return ingestionIDCom(core.NamespacePadrao,
+		func(v any) (string, error) { return asText(v), nil }, fields...)
 }
 
 // IngestionIDWith e IngestionID com a renderizacao injetada.
@@ -60,10 +63,46 @@ func IngestionID(fields ...string) Transformer {
 // producao passaria a escrever ids novos para as mesmas leituras, e o resultado
 // e a tabela inteira duplicada no proximo merge. A escolha e por fetcher.
 func IngestionIDWith(render Renderer, fields ...string) Transformer {
-	return ingestionIDCom(render, fields...)
+	return ingestionIDCom(core.NamespacePadrao, render, fields...)
 }
 
-func ingestionIDCom(render func(any) (string, error), fields ...string) Transformer {
+// Namespace escolhe o namespace UUID em que a identidade e computada.
+//
+//	sdk.Namespace(meuNamespace).IngestionID()
+//
+// Namespaces diferentes produzem ids diferentes para o MESMO registro, e e
+// para isso que servem: dois pipelines que leem a mesma fonte e escrevem em
+// tabelas diferentes nao devem colidir, e dois que escrevem na MESMA tabela
+// precisam do mesmo.
+//
+// O padrao existe e continua existindo porque quem ja gravou linhas com ele
+// nao pode ter os ids reescritos. Um pipeline NOVO deveria escolher o seu:
+// um namespace por landing e o que impede que duas fontes diferentes gerem o
+// mesmo id por coincidencia de chave.
+//
+//	// uma vez, no fetcher, e nunca mais
+//	var meuNamespace = uuid.MustParse("...")
+//
+// Trocar o namespace de um pipeline que ja gravou reescreve todo id dele. Nao
+// ha migracao barata: a proxima execucao grava tudo de novo, e o merge do
+// bronze duplica a tabela.
+func Namespace(ns uuid.UUID) Identidade { return Identidade{ns: ns} }
+
+// Identidade compoe os transformers de identidade num namespace escolhido.
+// Ver Namespace.
+type Identidade struct{ ns uuid.UUID }
+
+// IngestionID e sdk.IngestionID no namespace escolhido.
+func (i Identidade) IngestionID(fields ...string) Transformer {
+	return i.IngestionIDWith(func(v any) (string, error) { return asText(v), nil }, fields...)
+}
+
+// IngestionIDWith e sdk.IngestionIDWith no namespace escolhido.
+func (i Identidade) IngestionIDWith(render Renderer, fields ...string) Transformer {
+	return ingestionIDCom(i.ns, render, fields...)
+}
+
+func ingestionIDCom(ns uuid.UUID, render Renderer, fields ...string) Transformer {
 	names := defaultIDFields
 	if len(fields) > 0 {
 		names = fields
@@ -111,7 +150,7 @@ func ingestionIDCom(render func(any) (string, error), fields ...string) Transfor
 				"stable identity, and the id would change on every run", names[2])
 		}
 
-		id, err := core.ComputeIngestionID(parts[0], parts[1], parts[2], parts[3])
+		id, err := core.ComputeIngestionIDNo(ns, parts[0], parts[1], parts[2], parts[3])
 		if err != nil {
 			return nil, err
 		}

@@ -92,7 +92,56 @@ func Extract(ctx context.Context, source Source) (*Data, error) {
 		return nil, classifyExtract(source.From.Describe(), err)
 	}
 
+	if source.Snapshot != "" {
+		lines = comRetrato(lines, source.Snapshot)
+	}
+
 	return &Data{Records: lines, source: source, start: start, stats: stats}, nil
+}
+
+// comRetrato grava o registro como a fonte entregou, sob o nome pedido.
+//
+// Roda AQUI, entre a leitura e o Transform, e nao como transformer: assim ele
+// nao depende da posicao na cadeia, e nao ha ordem que possa contaminar o
+// retrato com campos que a propria cadeia escreveu.
+func comRetrato(linhas iter.Seq2[Envelope, error], nome string) iter.Seq2[Envelope, error] {
+	return func(yield func(Envelope, error) bool) {
+		for env, err := range linhas {
+			if err != nil {
+				if !yield(env, err) {
+					return
+				}
+				continue
+			}
+
+			obj, ok := env.Payload.(map[string]any)
+			if !ok {
+				// Um registro que nao e objeto nao tem campos para retratar, e
+				// inventar um envelope aqui seria dar forma ao dado de quem
+				// deliberadamente nao usa objetos.
+				if !yield(env, nil) {
+					return
+				}
+				continue
+			}
+			if _, ocupado := obj[nome]; ocupado {
+				yield(Envelope{}, fmt.Errorf("Source.Snapshot quer gravar o retrato em %q, "+
+					"e a fonte já manda um campo com esse nome -- gravar por cima perderia o "+
+					"que veio da fonte. Escolha outro nome", nome))
+				return
+			}
+
+			retrato := make(map[string]any, len(obj))
+			for k, v := range obj {
+				retrato[k] = v
+			}
+			obj[nome] = retrato
+
+			if !yield(env, nil) {
+				return
+			}
+		}
+	}
 }
 
 // Load stamps provenance on every record and writes them to BigQuery.

@@ -46,7 +46,7 @@ func TestUUIDv5NoNamespaceReal(t *testing.T) {
 		make([]byte, 1000),
 	}
 	for _, dados := range entradas {
-		if got, quero := uuidV5(namespaceDeIngestao, dados), uuid.NewSHA1(namespaceDeIngestao, dados); got != quero {
+		if got, quero := uuidV5(NamespacePadrao, dados), uuid.NewSHA1(NamespacePadrao, dados); got != quero {
 			t.Errorf("%d bytes: meu %s, uuid %s", len(dados), got, quero)
 		}
 	}
@@ -79,7 +79,7 @@ func TestChaveMaiorQueOBufferDePilha(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	quero := uuid.NewSHA1(namespaceDeIngestao,
+	quero := uuid.NewSHA1(NamespacePadrao,
 		[]byte(longo+"|entidade|chave|2026-09-05T12:00:00Z")).String()
 	if got != quero {
 		t.Errorf("chave longa divergiu:\n  meu  %s\n  uuid %s", got, quero)

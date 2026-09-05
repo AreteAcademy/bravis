@@ -291,7 +291,7 @@ cada item.
 |---|---|---|
 | 1 | **aceito**, com ressalva sobre os nomes das colunas | `v0.38.0` |
 | 2 | **aceito**, é o maior e o mais genérico | `v0.39.0` |
-| 3 | **aceito** | `v0.38.0` |
+| 3 | **aceito, com desvio** | `v0.38.0` |
 | 4 | **aceito, com desvio** | `v0.37.0` |
 | 5 | **aceito, com desvio** | `v0.37.0` |
 | 6 | **adiado** — depende do 2 e o próprio documento pede medir antes | — |
@@ -319,6 +319,15 @@ conceito de ETL, mas "casar com a identidade de um sistema que já gravou" é.
 
 O subpacote foi feito junto, e não "talvez": a estrutura diz o que a prosa
 dizia.
+
+**Item 3 — o `Snapshot` não é um transformer.** Como transformer ele dependeria
+da POSIÇÃO na cadeia, que é exatamente a classe de erro que o item descreve. Ele
+foi para `Source.Snapshot`, onde a garantia é estrutural: tirado onde o registro
+sai da fonte, não há ordem que possa contaminá-lo.
+
+E o `Exigir` virou `SkipWithout`, porque `RequireFields` já existe e recusa a
+RESPOSTA inteira. Dois nomes parecidos para níveis diferentes é a armadilha que
+o próprio SDK já encontrou em si mesmo.
 
 ### As ressalvas do item 1
 

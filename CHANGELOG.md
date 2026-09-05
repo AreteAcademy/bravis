@@ -8,6 +8,53 @@ A tag de um módulo aninhado leva o prefixo do diretório: `sdk/v0.2.1`.
 
 ---
 
+## [0.38.0] — 2026-09-05
+
+Itens 1 e 3 da contribuição de consumidor.
+
+### O namespace da identidade é de quem usa
+
+```go
+var meuNamespace = uuid.MustParse("...")
+sdk.Namespace(meuNamespace).IngestionID()
+```
+
+O valor cravado veio do `VENDOR_NAMESPACE` do pipeline de **um** consumidor, e
+estava dentro de uma biblioteca que vai para todos os times. Continua como
+**padrão** — quem já gravou não pode ter os ids reescritos —, e há teste fixando
+que o id do padrão não mudou.
+
+O que é congelado é o que sempre foi: o algoritmo, a ordem dos campos e o `|`. A
+documentação passou a dizer isso; ela dizia que o contrato era "casar com um
+fetcher em Python", que descreve a migração de um consumidor e não quer dizer
+nada para quem começa um ETL novo em Go.
+
+### `Source.Snapshot`
+
+```go
+Source: sdk.Source{From: ..., Snapshot: "payload"}
+```
+
+Guarda o registro **como a fonte entregou**, antes de qualquer `Transform`.
+
+A proposta pedia um transformer. **Como transformer ele dependeria da posição** —
+colocá-lo depois de um `Compute` produz um registro "cru" carregando o campo que
+a cadeia acabou de escrever, e isso não dá erro: dá um dado errado que ninguém
+percebe até alguém consultá-lo meses depois. Tirado onde o registro sai da
+fonte, não há ordem que possa contaminá-lo.
+
+### `sdk.SkipWithout`
+
+Descarta o registro cujo campo está ausente **ou nulo**. Ausente e nulo são a
+mesma coisa aqui: uma chave composta com um nulo no meio produz um id que parece
+válido e colide com outro registro que tenha o mesmo nulo na mesma posição.
+
+Chamava-se `Exigir` na proposta. O nome mudou porque `RequireFields` já existe e
+recusa a **resposta** inteira — dois nomes parecidos para níveis diferentes é a
+mesma armadilha que este SDK já encontrou em si mesmo.
+
+---
+
 ## [0.37.0] — 2026-09-05
 
 Primeira leva da contribuição de consumidor em

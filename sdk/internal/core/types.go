@@ -37,19 +37,39 @@ func (e *Envelope) IngestionID() (string, error) {
 	return ComputeIngestionID(e.Provider, e.Entity, e.SourceKey, e.RecordTS)
 }
 
-// ComputeIngestionID is the frozen formula, and the only implementation.
+// ComputeIngestionID computa a identidade deterministica de um registro.
 //
-// FROZEN, and deliberately not configurable. This namespace, the field order
-// and the "|" separator together define ingestion_id. A row written here has
-// to match the row a Python fetcher writes for the same record, and it does --
-// checked against uuid.uuid5. Make any of the three a setting and the
-// guarantee is gone, silently, for whoever changes it.
+// O contrato e: **determinista e estavel**. O mesmo registro produz o mesmo id,
+// hoje e daqui a tres anos, em qualquer maquina -- e e isso que faz uma
+// re-execucao ser um no-op em vez de uma duplicata.
 //
-// It lives here, exported, because sdk.IngestionID -- the transformer that
-// writes the column -- needs it, and there must be exactly one place that
-// computes this. A fmt.Sprintf in a fetcher would look identical and produce a
-// different id on the first float formatted differently.
+// Tres coisas definem o valor: o algoritmo (UUID v5 sobre SHA-1), a ORDEM dos
+// campos, e o separador "|". As tres sao congeladas, porque mudar qualquer uma
+// muda todo id ja gravado.
+//
+// O NAMESPACE nao e congelado, e nao deveria ter sido: o valor padrao veio do
+// pipeline de um consumidor, e uma biblioteca que vai para todos os times nao
+// deve carregar a constante de um deles. Ver ComputeIngestionIDNo e
+// sdk.Namespace.
+//
+// Ela vive aqui, exportada, porque tem de haver exatamente UM lugar que
+// computa isto. Um fmt.Sprintf num fetcher pareceria identico e produziria um
+// id diferente no primeiro float formatado de outro jeito.
 func ComputeIngestionID(provider, entity, sourceKey, recordTS string) (string, error) {
+	return ComputeIngestionIDNo(NamespacePadrao, provider, entity, sourceKey, recordTS)
+}
+
+// ComputeIngestionIDNo computa o id num namespace escolhido.
+//
+// Namespaces diferentes produzem ids diferentes para o MESMO registro, e e para
+// isso que eles servem: dois pipelines que leem a mesma fonte e escrevem em
+// tabelas diferentes nao devem colidir, e dois que escrevem na MESMA tabela
+// precisam do mesmo namespace.
+//
+// Trocar o namespace de um pipeline que ja gravou reescreve todo id dele. Nao
+// ha migracao barata disso: a proxima execucao grava tudo de novo com ids
+// novos, e o merge do bronze duplica a tabela.
+func ComputeIngestionIDNo(namespace uuid.UUID, provider, entity, sourceKey, recordTS string) (string, error) {
 	// A chave e montada num buffer de pilha em vez de fmt.Sprintf: o Sprintf
 	// alocava a fatia de varargs e a string, e o []byte(key) alocava de novo,
 	// uma vez por registro. O RESULTADO e byte a byte o mesmo -- a formula e
@@ -72,7 +92,7 @@ func ComputeIngestionID(provider, entity, sourceKey, recordTS string) (string, e
 	chave = append(chave, '|')
 	chave = append(chave, recordTS...)
 
-	return formatarUUID(uuidV5(namespaceDeIngestao, chave)), nil
+	return formatarUUID(uuidV5(namespace, chave)), nil
 }
 
 // digestos guarda os sha1 entre chamadas.
@@ -107,14 +127,16 @@ func uuidV5(espaco uuid.UUID, dados []byte) uuid.UUID {
 	return u
 }
 
-// namespaceDeIngestao e o namespace UUID v5, resolvido UMA vez.
+// NamespacePadrao e o namespace usado por quem nao escolhe outro.
 //
-// Ele era parseado a cada registro -- a string e constante, e o parse dela e
-// trabalho identico repetido milhoes de vezes numa carga.
+// O valor veio do VENDOR_NAMESPACE do pipeline de um consumidor, e esta aqui
+// como PADRAO e nao como constante por um motivo pratico: quem ja gravou
+// linhas com ele nao pode ter os ids reescritos. Um pipeline novo pode -- e
+// provavelmente deve -- escolher o seu, com sdk.Namespace.
 //
-// O valor e CONGELADO: mudar qualquer coisa aqui muda todo ingestion_id que
-// ja existe, e uma carga anterior deixaria de casar com uma nova.
-var namespaceDeIngestao = uuid.MustParse("e3a4f8c0-1b9d-4ea0-9c2e-77f6a6c4a4d7")
+// Resolvido uma vez, e nao a cada registro: a string e constante, e parsea-la
+// por linha e trabalho identico repetido milhoes de vezes numa carga.
+var NamespacePadrao = uuid.MustParse("e3a4f8c0-1b9d-4ea0-9c2e-77f6a6c4a4d7")
 
 // formatarUUID escreve o formato canonico direto num array de pilha.
 //

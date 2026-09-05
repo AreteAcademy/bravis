@@ -508,6 +508,49 @@ it, then `MERGE … WHEN NOT MATCHED THEN INSERT` with the column list **named**
 Named always: the BigQuery `INSERT ROW` matches by position, and v0.12.0 shipped
 with the columns swapped because nobody had seen the generated SQL.
 
+## Identity is yours, not the library's
+
+`ingestion_id` is a UUID v5 over `provider|entity|source_key|record_ts`. The
+algorithm, the field order and the `|` are frozen: changing any of them rewrites
+every id ever written.
+
+**The namespace is not.** The default exists because rows are already written
+with it, but a new pipeline should pick its own — one namespace per landing is
+what stops two different sources producing the same id by coincidence of key:
+
+```go
+var meuNamespace = uuid.MustParse("...")   // once, in the fetcher
+
+Transform: []sdk.Transformer{
+    sdk.Namespace(meuNamespace).IngestionID(),
+},
+```
+
+Changing the namespace of a pipeline that has already written rewrites every id
+it has. There is no cheap migration: the next run writes everything again with
+new ids, and the bronze merge duplicates the table.
+
+## Snapshotting the record as the source sent it
+
+```go
+Source: sdk.Source{From: ..., Snapshot: "payload"}
+```
+
+It lives on `Source` and not in the chain on purpose. As a transformer, the
+snapshot would depend on its **position**: put it after a `Compute` and the
+"raw" record carries the field the chain just wrote. That does not fail — it
+produces a wrong row that nobody notices until somebody queries the data months
+later. Taken where the record leaves the source, no ordering can contaminate it.
+
+It is a shallow copy: top-level fields are isolated from what the chain does
+next, which is where transformers write. A **nested** value stays shared.
+
+`sdk.SkipWithout("id", "atualizado_em")` drops a record whose field is missing
+**or null** — a row without the field that composes the key has no stable
+identity and cannot go in, but it is also no reason to bring down the whole
+window. Note the level: `RequireFields` rejects the whole *response*;
+`SkipWithout` drops one *record*.
+
 ## Declaring the destination
 
 `Columns` names the destination's columns. `Schema` names them **with a type**,

@@ -40,6 +40,31 @@ type Source struct {
 	// Stats, when not nil, is filled in as the read proceeds. Read it after
 	// the stream is drained: that is when the counters are final.
 	Stats *core.Stats
+
+	// Snapshot guarda o registro COMO A FONTE ENTREGOU, sob este nome, antes
+	// de qualquer Transform. Vazio nao guarda nada.
+	//
+	//	Source: sdk.Source{From: ..., Snapshot: "payload"}
+	//
+	// # Por que aqui e nao um Transformer
+	//
+	// O retrato do registro cru precisa ser tirado antes de qualquer campo
+	// derivado. Como transformer, ele dependeria da POSICAO na cadeia -- e
+	// inverter a ordem nao da erro: da um registro "cru" que carrega os campos
+	// que a propria cadeia acabou de escrever, e ninguem percebe ate alguem
+	// consultar o dado meses depois.
+	//
+	// Aqui a garantia e estrutural: o retrato e tirado onde o registro sai da
+	// fonte, e nao ha ordem que possa contamina-lo.
+	//
+	// # O que ele copia
+	//
+	// Uma copia rasa do mapa. Os campos de primeiro nivel ficam isolados do
+	// que a cadeia faz depois, que e onde os transformers escrevem. Um valor
+	// ANINHADO continua compartilhado -- um transformer que altere o conteudo
+	// de um sub-objeto altera o retrato tambem. Nenhum transformer embutido
+	// faz isso.
+	Snapshot string
 }
 
 func (s Source) validate() error {
