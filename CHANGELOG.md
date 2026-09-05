@@ -8,6 +8,28 @@ A tag de um módulo aninhado leva o prefixo do diretório: `sdk/v0.2.1`.
 
 ---
 
+## [0.42.1] — 2026-09-05
+
+Sem mudança de código no SDK.
+
+### O gate de publicação passou a rodar a poda por driver
+
+A `v0.41.0` saiu com uma regressão de dependência — o `pycompat` arrastando o
+`net/http`, de 66 para 68 pacotes com 8 de rede num pacote que só formata texto.
+A `v0.42.0` corrigiu, mas a versão errada **está no proxy para sempre**.
+
+O `pruning-check.sh` existia e pegou: o `Integration` do `test.yml` ficou
+vermelho naquele commit. **O publish passou mesmo assim**, porque o gate rodava
+`go test`, `golangci-lint` e o consumidor limpo — e não a poda.
+
+É a mesma lacuna que o lint teve até a `v0.27.2`, pela mesma razão: a
+verificação existia e não estava no caminho que importa. Uma release é imutável;
+o momento de descobrir é antes da tag, e não num workflow que roda em paralelo.
+
+Verificado rodando o gate contra a árvore da `v0.41.0`: ele reprova.
+
+---
+
 ## [0.42.0] — 2026-09-05
 
 Item 9 da segunda rodada, e o último dela. **A requisição mais sensível do

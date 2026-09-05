@@ -64,6 +64,17 @@ jobs:
           working-directory: sdk
           args: --timeout=5m
 
+      # A poda por driver estava só no test.yml, então a v0.41.0 publicou com
+      # uma regressão de dependência: o pycompat passou a arrastar o net/http,
+      # o Integration ficou vermelho, e o publish passou mesmo assim. Uma
+      # release é imutável -- a verificação tem de estar ANTES da tag, e não
+      # num workflow que roda em paralelo.
+      #
+      # É a mesma lacuna que o lint teve até a v0.27.2, pela mesma razão: a
+      # verificação existia e não estava no caminho que importa.
+      - name: Gate - a poda por driver
+        run: .github/scripts/pruning-check.sh
+
       - name: Gate - a clean consumer must compile against this tree
         # Roda ANTES do create-release e antes de avisar o proxy, para que um
         # go.mod ruim ainda possa ser consertado apagando a tag. Depois que o
