@@ -123,7 +123,7 @@ func TestArrayEm(t *testing.T) {
 // --- Guardas ---------------------------------------------------------------
 
 func resp(status int, body string) Response {
-	return core.NewResponse(status, nil, "http://exemplo", []byte(body))
+	return core.NewResponse(status, nil, "http://exemplo", []byte(body), false)
 }
 
 func TestRecusarSe(t *testing.T) {

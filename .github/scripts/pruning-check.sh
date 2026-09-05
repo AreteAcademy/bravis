@@ -50,6 +50,11 @@ verificar "mysql" \
   "_ = mysql.Query{}" \
   "jackc/pgx cloud.google.com aws-sdk-go"
 
+verificar "pycompat" \
+  "	\"$MODULO/pycompat\"" \
+  "_, _ = pycompat.Texto(nil)" \
+  "jackc/pgx cloud.google.com aws-sdk-go net/http"
+
 verificar "bigquery" \
   "	\"$MODULO/to/bigquery\"" \
   "_ = bigquery.Table{}" \

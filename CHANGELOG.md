@@ -8,6 +8,56 @@ A tag de um módulo aninhado leva o prefixo do diretório: `sdk/v0.2.1`.
 
 ---
 
+## [0.37.0] — 2026-09-05
+
+Primeira leva da contribuição de consumidor em
+`plan/2026-09-05-sdk-o-que-cabe-a-uma-lib-de-etl.md`. As decisões item a item
+estão registradas lá, na seção nova no fim.
+
+### BREAKING: as funções de Python foram para `sdk/pycompat`
+
+`TextoPython` → `pycompat.Texto`, e `KeyPython`/`IngestionIDPython` deixaram de
+existir em favor de um seam genérico:
+
+```go
+// antes (v0.36.0)
+sdk.KeyPython("provider", "id")
+sdk.IngestionIDPython()
+
+// depois
+sdk.KeyWith(pycompat.Texto, "provider", "id")
+sdk.IngestionIDWith(pycompat.Texto)
+```
+
+O subpacote diz na estrutura o que a proposta diz em prosa: **é uma ponte para
+uma migração, não um conceito de ETL.** Um time que começa um pipeline novo em
+Go não tem com o que casar.
+
+E o seam ficou **genérico**, que é mais do que foi pedido: `Renderer` é qualquer
+`func(any) (string, error)`, então um port de Ruby ou de Scala usa a mesma
+porta. O `pycompat` é a implementação que o SDK traz, não a única possível.
+
+### Adicionado
+
+**`pycompat.TextoOuVazio`** — o `str(x or "")`, que 14 dos fetchers levantados
+usam. Repare que `0` e `0.0` viram `""` e não `"0"`: é a verdade-falsidade do
+Python, e é o caso que uma versão escrita à mão erra.
+
+**`User-Agent` do SDK**, sobreponível por `Header`. Alguns provedores públicos
+limitam o `Go-http-client/1.1`, e isso aparece como 403 intermitente — o tipo de
+falha que custa meia manhã. A versão **não** entra: ela viria de um const que
+ninguém lembra de subir, e um UA que mente a versão é pior que um que não a diz.
+
+**`Response.JSON` e `Response.Object` honram `PreserveNumbers`.** Quem define
+`Records` decodifica o corpo por conta própria e precisava lembrar do
+`UseNumber` sozinho — e esquecer é silencioso, porque cai na chave.
+
+A proposta pedia um `Response.Decode` novo. Um terceiro método que decodifica
+diferente dos dois que já existem seria uma armadilha para quem chama o errado,
+e quem chama o errado não recebe erro: recebe uma chave diferente.
+
+---
+
 ## [0.36.0] — 2026-09-05
 
 Para quem está portando fetchers de Python mantendo a **mesma landing e o mesmo

@@ -70,28 +70,26 @@ func Key(fields ...string) KeySelector {
 	}
 }
 
-// KeyPython e Key rendendo cada campo como o str() do Python renderiza.
+// Renderer transforma um valor do registro no texto que entra na chave.
 //
-// Existe para o porte: se o fetcher em Python compunha a chave com
-// `str(record["id"])`, esta e a unica forma de o Go produzir o MESMO
-// ingestion_id -- e "o mesmo" e o que decide se a linha portada casa com a que
-// ja esta na landing ou vira uma duplicata depois do merge.
+// Ele existe porque a IDENTIDADE de uma linha e a concatenacao desses textos,
+// e um sistema de origem que renderizava diferente produz ids diferentes para
+// as mesmas leituras. Nao ha erro nesse dia: ha uma duplicata semanas depois.
 //
-// Um valor que TextoPython recusa -- a faixa exponencial, um mapa, uma lista --
-// vira erro nomeando o campo. Recusar e melhor que divergir numa chave: a
-// divergencia so aparece semanas depois, num relatorio, sem ninguem saber de
-// onde veio.
-//
-// Ligue Source.PreserveNumbers junto. Sem ele, `{"id": 19}` e `{"id": 19.0}`
-// chegam identicos ao Go, e esta funcao rende os dois como o float do Python
-// ("19.0") -- certo para o segundo, errado para o primeiro.
-func KeyPython(fields ...string) KeySelector {
-	return chaveCom(TextoPython, fields...)
-}
+// O SDK traz uma implementacao pronta em sdk/pycompat, para quem esta portando
+// de Python. Qualquer outra origem -- um ETL em Ruby, um job em Scala -- passa
+// a sua.
+type Renderer func(any) (string, error)
 
-// chaveCom e Key com a renderizacao injetada, para que as duas variantes nao
-// sejam duas copias que envelhecem separadas.
-func chaveCom(render func(any) (string, error), fields ...string) KeySelector {
+// KeyWith e Key com a renderizacao injetada.
+//
+// Use quando a chave precisa casar com a de um sistema que ja gravou linhas:
+//
+//	Key: sdk.KeyWith(pycompat.Texto, "provider", "id")
+//
+// Um valor que o Renderer recusa vira erro nomeando o CAMPO -- sem o nome,
+// quem le o erro nao sabe qual dos seis e.
+func KeyWith(render Renderer, fields ...string) KeySelector {
 	return func(payload any) (string, error) {
 		if len(fields) == 0 {
 			return "", fmt.Errorf("Key precisa from ao menos um campo")

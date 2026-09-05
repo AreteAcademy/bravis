@@ -553,7 +553,7 @@ cluster — simply do not, rather than pretending to.
 If a Python fetcher composed its key with `str(record["id"])`, the Go SDK does
 **not** produce the same text, and the difference lands in the identity:
 
-| valor | Go (`asText`, o padrão) | Python (`str`) |
+| valor | Go (o padrão) | Python (`str`) |
 |---|---|---|
 | `nil` | `""` | `"None"` |
 | `true` | `"true"` | `"True"` |
@@ -562,38 +562,42 @@ If a Python fetcher composed its key with `str(record["id"])`, the Go SDK does
 The same reading gets a different `ingestion_id` — and that does not surface as
 an error. It surfaces as a duplicate row after the bronze merge, weeks later.
 
-**The default stays as it is**, and that is a decision, not an oversight:
-changing the rendering would rewrite the `ingestion_id` of every row Go has
-already written. A fetcher in production would start writing new ids for the
-same readings, and the result is the whole table duplicated on the next merge.
+**The default stays as it is**, and that is a decision: changing the rendering
+would rewrite the `ingestion_id` of every row Go has already written, and the
+result is the whole table duplicated on the next merge.
 
-For a port, ask for the Python rendering explicitly:
+The seam is generic — `KeyWith` and `IngestionIDWith` take any `Renderer`, so a
+port from Ruby or Scala uses the same door. `sdk/pycompat` is the one the SDK
+ships:
 
 ```go
+import "github.com/AreteAcademy/brevis/sdk/pycompat"
+
 From: from.HTTP{URL: url, PreserveNumbers: true},
 
-Transform: []sdk.Transformer{
-    sdk.IngestionIDPython(),          // instead of sdk.IngestionID()
-},
-// and sdk.KeyPython(...) instead of sdk.Key(...)
+Key:       sdk.KeyWith(pycompat.Texto, "provider", "id"),
+Transform: []sdk.Transformer{sdk.IngestionIDWith(pycompat.Texto)},
 ```
 
-`sdk.TextoPython(v)` is the rendering on its own, if you compose keys yourself.
+`pycompat.TextoOuVazio` is `str(x or "")`, the idiom most ports use. Note that
+`0` and `0.0` become `""` and not `"0"` — that is Python's truthiness, and it is
+the case a hand-written version gets wrong.
 
 **It refuses rather than diverges.** Python's `str()` switches to exponent
-notation outside `[1e-4, 1e16)` — `"1e-05"`, `"1e+16"` — and the exact shape of
-that text is a CPython implementation detail. Imitating it would be a bet placed
-inside a key, so those values return an error naming the field. A key that fails
-loudly costs one line; a key that diverges quietly costs a duplicate nobody can
-trace.
+notation outside `[1e-4, 1e16)` and the exact shape is a CPython implementation
+detail. Imitating it would be a bet placed inside a key, so those values return
+an error naming the field.
 
 **`PreserveNumbers` is not optional for integer ids.** `encoding/json` decodes
 every number as `float64`, so `{"id": 19}` and `{"id": 19.0}` arrive identical —
 and in Python the first was an `int` (`"19"`) and the second a `float`
-(`"19.0"`). With `PreserveNumbers` the literal survives as a `json.Number` and
-the decision is the same one Python's `json` makes. The cost: a transformer
-doing `r["x"].(float64)` stops working, because the value is now a
-`json.Number`.
+(`"19.0"`). With it, the literal survives as a `json.Number` and the decision is
+the one Python's `json` makes. `Response.JSON` and `Response.Object` honour it
+too, so a fetcher that decodes the body itself through `Records` does not have
+to remember `UseNumber`.
+
+The cost: a transformer doing `r["x"].(float64)` stops working, because the
+value is now a `json.Number`.
 
 ## The record belongs to the chain
 

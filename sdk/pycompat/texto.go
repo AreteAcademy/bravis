@@ -1,4 +1,14 @@
-package sdk
+// Package pycompat renderiza valores como o Python renderiza, para quem esta
+// portando um fetcher de Python mantendo a MESMA landing e os MESMOS ids.
+//
+// Ele vive num subpacote, e nao no nucleo, porque e uma PONTE PARA UMA
+// MIGRACAO e nao um conceito de ETL. Um time que comeca um pipeline novo em Go
+// nao tem com o que casar, e a estrutura diz isso: quem precisa importa, quem
+// nao precisa nem sabe que existe.
+//
+//	Key:       sdk.KeyWith(pycompat.Texto, "provider", "id"),
+//	Transform: []sdk.Transformer{sdk.IngestionIDWith(pycompat.Texto)},
+package pycompat
 
 import (
 	"encoding/json"
@@ -8,7 +18,7 @@ import (
 	"strings"
 )
 
-// TextoPython renderiza um valor como o `str()` do Python renderiza.
+// Texto renderiza um valor como o `str()` do Python renderiza.
 //
 // Ela existe para quem esta portando um fetcher de Python para Go mantendo a
 // MESMA landing e o MESMO ingestion_id. Se o Python fazia `str(record["id"])`
@@ -16,7 +26,7 @@ import (
 // a mesma leitura recebe um id diferente, e o que aparece do outro lado nao e
 // um erro: e uma linha duplicada depois do merge do bronze.
 //
-// O SDK NAO usa esta funcao por padrao. Ver IngestionID e Key para o porque, e
+// O SDK NAO usa esta funcao por padrao. Ver sdk.IngestionIDWith e sdk.KeyWith, e
 // para como pedir que usem.
 //
 //	Go (asText, o padrao)      Python (str)
@@ -48,7 +58,7 @@ import (
 // depender disso, ligue Source.PreserveNumbers: o literal chega intacto como
 // json.Number, e aqui ele decide sozinho -- com ponto ou expoente e float, sem
 // e int, exatamente como o json do Python decide.
-func TextoPython(v any) (string, error) {
+func Texto(v any) (string, error) {
 	switch t := v.(type) {
 	case nil:
 		return "None", nil
@@ -107,7 +117,7 @@ func TextoPython(v any) (string, error) {
 		return floatPython(t)
 
 	default:
-		return "", fmt.Errorf("TextoPython não sabe renderizar %T como o str() do Python "+
+		return "", fmt.Errorf("pycompat.Texto não sabe renderizar %T como o str() do Python "+
 			"renderizaria. Ela cobre nil, bool, string, número e json.Number -- o resto o "+
 			"Python formata com regras do tipo, e adivinhar numa chave produz duplicata "+
 			"silenciosa", v)
@@ -126,7 +136,7 @@ func floatPython(f float64) (string, error) {
 	}
 
 	if forcaExpoente(f) {
-		return "", fmt.Errorf("TextoPython recusa %g: nessa faixa o str() do Python usa "+
+		return "", fmt.Errorf("pycompat.Texto recusa %g: nessa faixa o str() do Python usa "+
 			"notação exponencial (\"1e-05\", \"1e+16\"), cujo formato exato é detalhe do "+
 			"CPython. Imitar seria apostar numa CHAVE -- e uma chave que diverge em silêncio "+
 			"vira duplicata semanas depois. Componha esse campo você mesmo, ou tire-o da chave", f)
@@ -153,4 +163,68 @@ func forcaExpoente(f float64) bool {
 	}
 	abs := math.Abs(f)
 	return abs < 1e-4 || abs >= 1e16
+}
+
+// TextoOuVazio e o idioma `str(x or "")` do Python, que e o mais comum na
+// composicao de chave -- 14 dos fetchers levantados o usam.
+//
+// O `or ""` e a verdade-falsidade do Python, e ela nao e a do Go: `None`, `""`,
+// `0`, `0.0`, `[]` e `{}` sao todos falsos la, e viram string vazia. Escrever
+// isso a mao da cerca de 25 linhas por consumidor, e errar um dos seis casos e
+// silencioso -- o valor falso vira texto na chave e o id sai diferente.
+//
+// Repare que `0` e `0.0` viram "" e nao "0": e contraintuitivo, e e o que o
+// Python faz. Um port que escrever isso a mao vai acertar None e errar o zero.
+func TextoOuVazio(v any) (string, error) {
+	if falsoNoPython(v) {
+		return "", nil
+	}
+	return Texto(v)
+}
+
+// falsoNoPython implementa a verdade-falsidade dos tipos que um registro JSON
+// produz. O resto -- um objeto qualquer -- e verdadeiro no Python por padrao, e
+// aqui cai no Texto, que recusa o que nao sabe renderizar.
+func falsoNoPython(v any) bool {
+	switch t := v.(type) {
+	case nil:
+		return true
+	case bool:
+		return !t
+	case string:
+		return t == ""
+	case json.Number:
+		f, err := t.Float64()
+		return err == nil && f == 0
+	case int:
+		return t == 0
+	case int8:
+		return t == 0
+	case int16:
+		return t == 0
+	case int32:
+		return t == 0
+	case int64:
+		return t == 0
+	case uint:
+		return t == 0
+	case uint8:
+		return t == 0
+	case uint16:
+		return t == 0
+	case uint32:
+		return t == 0
+	case uint64:
+		return t == 0
+	case float32:
+		return t == 0
+	case float64:
+		return t == 0
+	case []any:
+		return len(t) == 0
+	case map[string]any:
+		return len(t) == 0
+	default:
+		return false
+	}
 }

@@ -278,3 +278,66 @@ O SDK acertou em entregar o corpo cru via `Records` e sair do caminho. Um SDK qu
 tentasse abraçar isso viraria um catálogo de formatos de fornecedor.
 
 A fronteira importa tanto quanto os pedidos.
+
+---
+
+## Decisão do time do SDK
+
+O documento pede que o SDK decida o que aceita, e o teste que ele propõe — *"um
+time sem relação nenhuma com quem escreveu isto iria querer?"* — foi aplicado a
+cada item.
+
+| # | decisão | onde |
+|---|---|---|
+| 1 | **aceito**, com ressalva sobre os nomes das colunas | `v0.38.0` |
+| 2 | **aceito**, é o maior e o mais genérico | `v0.39.0` |
+| 3 | **aceito** | `v0.38.0` |
+| 4 | **aceito, com desvio** | `v0.37.0` |
+| 5 | **aceito, com desvio** | `v0.37.0` |
+| 6 | **adiado** — depende do 2 e o próprio documento pede medir antes | — |
+| 7 | **adiado** — o próprio documento diz não ter evidência | — |
+| 8 | **aceito, e mais fundo** | `v0.37.0` |
+
+### Os desvios, e por quê
+
+**Item 4 — não entrou um `Response.Decode`.** O `JSON` e o `Object`, que o
+consumidor já chama, passaram a honrar o `PreserveNumbers`. Um terceiro método
+que decodifica diferente dos dois existentes seria uma armadilha para quem chama
+o errado — e quem chama o errado não recebe erro nenhum: recebe uma chave
+diferente, que é exatamente o defeito que o item descreve.
+
+**Item 5 — o UA não carrega a versão.** Ela viria de um const que envelhece a
+cada release e que ninguém lembra de subir, e um UA que MENTE a versão é pior
+que um que não a diz. Quem precisa dela põe no próprio `Header`.
+
+**Item 8 — o seam ficou genérico, e é mais do que foi pedido.** Em vez de
+`KeyPython`/`IngestionIDPython`, entraram `KeyWith`/`IngestionIDWith`, que
+aceitam qualquer `Renderer`. O `pycompat` é a implementação que o SDK traz, não
+a única possível — um port de Ruby ou de Scala usa a mesma porta. Isso passa
+melhor no teste do próprio documento: "compatibilidade com uma linguagem" não é
+conceito de ETL, mas "casar com a identidade de um sistema que já gravou" é.
+
+O subpacote foi feito junto, e não "talvez": a estrutura diz o que a prosa
+dizia.
+
+### As ressalvas do item 1
+
+O namespace configurável é aceito. **Os nomes das colunas, não como estão
+propostos** — `ColumnIngestionID` não é só uma constante de nome: ele aparece no
+`ON CONFLICT`, no `MERGE ... ON`, no `metadataSchema` que sobrepõe o tipo, no
+índice único que os drivers SQL exigem e no padrão de particionamento. Torná-los
+configuráveis é fiar essa configuração por cinco caminhos, e o ganho é uma
+convenção de nome.
+
+Fica como sobreponível **no que é declaração** (o `Schema`, que já aceita
+qualquer nome) e fixo no que é mecanismo. Se um time precisar de outro nome na
+coluna de dedup, isso volta como pedido com o caso concreto.
+
+### O item 6 depende do 2, e é assim que ele deve ser medido
+
+O `MaxIdleConnsPerHost: 2` só dói sob concorrência, e a concorrência só existe
+quando a fonte composta existir. Medir antes seria medir um cenário que o SDK
+ainda não produz.
+
+Quando o item 2 estiver de pé, o banco de prova é o fan-out de 4.803 origens que
+o documento cita — e a decisão sai do número, não da suposição.

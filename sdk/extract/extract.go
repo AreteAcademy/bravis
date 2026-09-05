@@ -427,6 +427,13 @@ func checkPagination(source core.Source) error {
 	return nil
 }
 
+// UserAgent e como o SDK se identifica.
+//
+// A versao nao entra: ela viria de um const que envelhece a cada release e que
+// ninguem lembra de subir -- e um UA que MENTE a versao e pior que um que nao
+// a diz. Quem precisa dela poe no proprio Header.
+const UserAgent = "brevis-sdk (+https://github.com/AreteAcademy/brevis)"
+
 // newClient builds the one client the whole walk shares.
 //
 // It carries a cookie jar, which is why it is built once instead of per
@@ -530,6 +537,15 @@ func fetchPage(ctxTotal context.Context, client *http.Client, source core.Source
 		// nome -- entao nenhum nome vai duas vezes. Os outros cookies o
 		// cliente acrescenta a partir do jar.
 
+		// Uma biblioteca HTTP que nao se identifica manda
+		// "Go-http-client/1.1", e alguns provedores publicos limitam ou
+		// bloqueiam esse UA -- o que aparece como 403 intermitente, o tipo de
+		// falha que custa meia manha para diagnosticar. Um Header do chamador
+		// vence: quem precisa se passar por outra coisa continua podendo.
+		if req.Header.Get("User-Agent") == "" {
+			req.Header.Set("User-Agent", UserAgent)
+		}
+
 		resp, err = client.Do(req)
 
 		if err != nil {
@@ -598,7 +614,8 @@ func fetchPage(ctxTotal context.Context, client *http.Client, source core.Source
 
 		if records != nil {
 			found, err := records(core.NewResponse(
-				resp.StatusCode, resp.Header, redactURL(pageURL), buffered))
+				resp.StatusCode, resp.Header, redactURL(pageURL), buffered,
+				source.PreserveNumbers))
 			if err != nil {
 				p.body = nil
 				p.close()

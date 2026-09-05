@@ -46,31 +46,21 @@ var defaultIDFields = []string{"provider", "entity", "source_key", "record_ts"}
 // Accept is. It usually means the chain is out of order, or that Without ran
 // first.
 func IngestionID(fields ...string) Transformer {
-	return ingestionIDCom(func(v any) (string, error) { return asText(v), nil }, fields...)
+	return IngestionIDWith(func(v any) (string, error) { return asText(v), nil }, fields...)
 }
 
-// IngestionIDPython e IngestionID rendendo cada componente como o str() do
-// Python renderiza.
+// IngestionIDWith e IngestionID com a renderizacao injetada.
 //
-// Existe para o porte: se o fetcher em Python compunha a chave com `str(...)`
-// sobre os mesmos quatro campos, esta e a unica forma de o Go produzir o MESMO
-// id -- e "o mesmo" e o que decide se a linha portada casa com a que ja esta
-// na landing ou vira uma duplicata depois do merge do bronze.
+// Use quando o id precisa casar com o de um sistema que ja gravou linhas:
 //
-// O padrao NAO e este, e o motivo nao e preferencia: trocar a renderizacao
-// mudaria o ingestion_id de toda linha que o Go ja gravou. A escolha e por
-// fetcher, escrita no fetcher.
+//	sdk.IngestionIDWith(pycompat.Texto)
 //
-//	Go (padrao)              Python
-//	nil    ""                None   "None"
-//	true   "true"            True   "True"
-//	19.0   "19"              19.0   "19.0"
-//
-// Um valor que TextoPython recusa vira erro nomeando o campo. E ligue
-// Source.PreserveNumbers junto: sem ele, `{"id": 19}` e `{"id": 19.0}` chegam
-// identicos ao Go, e o rendimento e o do float do Python nos dois.
-func IngestionIDPython(fields ...string) Transformer {
-	return ingestionIDCom(TextoPython, fields...)
+// O padrao NAO usa isto, e o motivo nao e preferencia: trocar a renderizacao
+// mudaria o ingestion_id de toda linha que o Go ja gravou. Um fetcher em
+// producao passaria a escrever ids novos para as mesmas leituras, e o resultado
+// e a tabela inteira duplicada no proximo merge. A escolha e por fetcher.
+func IngestionIDWith(render Renderer, fields ...string) Transformer {
+	return ingestionIDCom(render, fields...)
 }
 
 func ingestionIDCom(render func(any) (string, error), fields ...string) Transformer {
