@@ -65,7 +65,12 @@ type PodsConfig struct {
 	// nega tudo: a instalacao decide quais segredos existem para workflows, e
 	// o YAML decide qual passo recebe cada um.
 	SecretsPermitidos []string
-	NodeSelector      map[string]string
+
+	// CredencialPVC e CredencialPath montam o volume onde o SDK guarda a
+	// credencial rotacionada. Sem o PVC, nada muda.
+	CredencialPVC  string
+	CredencialPath string
+	NodeSelector   map[string]string
 	// Toleracoes no formato "chave=valor:efeito", separadas por virgula. O pool
 	// arm64 da Zarv tem taint, e sem toleracao o pod da task fica Pending para
 	// sempre — sem erro, so parado.
@@ -106,6 +111,8 @@ func Load() (Config, error) {
 			EnvFromSecrets:    lista("BREVIS_POD_ENV_FROM_SECRETS"),
 			EnvFromConfigMaps: lista("BREVIS_POD_ENV_FROM_CONFIGMAPS"),
 			SecretsPermitidos: lista("BREVIS_POD_ALLOWED_SECRETS"),
+			CredencialPVC:     get("BREVIS_POD_CREDENTIAL_PVC", ""),
+			CredencialPath:    get("BREVIS_POD_CREDENTIAL_PATH", ""),
 			NodeSelector:      pares("BREVIS_POD_NODE_SELECTOR"),
 			Toleracoes:        toleracoes("BREVIS_POD_TOLERATIONS"),
 			ManterEmFalha:     os.Getenv("BREVIS_POD_MANTER_EM_FALHA") == "true",

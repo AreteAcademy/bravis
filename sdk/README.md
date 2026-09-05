@@ -464,6 +464,56 @@ not invalidate the previous one, so the cost is that somebody re-pastes the
 credential once per window; `ExpiresAt` and `WarnAfter` are what make sure they
 know before it lapses, on the log line *and* in `Stats.CredentialExpiry`.
 
+### Keeping the rotated credential between runs
+
+Without a store, the renewed value lives for this run only — and somebody
+re-pastes the credential once per expiry window, forever.
+
+```go
+Refresh: &from.Refresh{
+    URL:       "https://api.example.com/auth/session",
+    ExpiresAt: from.JSONField("expires"),
+    Store:     from.FileStore{Name: "app-session"},
+}
+```
+
+The trade this makes is the point: the environment variable stops holding the
+**rotating** value and starts holding a **static** key. Pasted once.
+
+| | reads | order |
+|---|---|---|
+| directory | `Dir`, then `BREVIS_CREDENTIAL_DIR`, then nowhere | nowhere turns the store off, saying so once |
+| key | `Key`, then `BREVIS_CREDENTIAL_KEY` | **no key refuses**, rather than writing in the clear |
+
+The read order is: the store, then `Value` as the seed, then renew, then save.
+
+The file is AES-256-GCM with a fresh nonce per write, `0600` in a `0700`
+directory, and written to a temporary file then renamed. A stored value that
+does not decrypt — a rotated key, a truncated file, a version this build does
+not read — is treated as absent: the run falls back to the seed rather than
+failing, because a future version on a shared volume is normal during a rollout.
+
+**Last writer wins.** Two processes renewing at once write two values, and both
+work only because rotating does not invalidate the previous token at the vendor
+this was built for. For a vendor that invalidates it, do not use this without a
+lock of your own.
+
+Failing to save does **not** stop the run — the extract already happened; what
+was lost is the rotation. It goes out at `ERROR` and in
+`Result.CredentialStoreError`, because the effect is deferred (the next run
+falls back to a seed that one day expires) and a deferred effect that only
+exists in a log is the one nobody sees in time.
+
+The SDK does not learn Kubernetes, GCS or databases: it opens a file. Under
+Brevis the engine mounts a volume and injects `BREVIS_CREDENTIAL_DIR`; on a
+laptop, `BREVIS_CREDENTIAL_DIR=./.brevis` is the whole setup. Same code.
+
+Generate the key once:
+
+```bash
+head -c 32 /dev/urandom | base64
+```
+
 A refresh that fails stops the run. Continuing would send every page out with a
 credential the API has just refused, and the failure would come back blaming
 the data endpoint.

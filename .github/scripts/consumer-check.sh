@@ -75,6 +75,10 @@ func main() {
 					URL:       "http://x/session",
 					ExpiresAt: from.JSONField("expires"),
 					WarnAfter: 7 * 24 * time.Hour,
+					// FileStore por VALOR, como a doc mostra: se ele
+					// deixasse de satisfazer CredentialStore, so um
+					// consumidor de fora do modulo pegaria.
+					Store: from.FileStore{Name: "app-session"},
 				},
 			},
 			Records: func(r sdk.Response) ([]any, error) {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"sync"
@@ -79,6 +80,25 @@ type Refresh struct {
 	// WarnAfter has nothing to compare against.
 	ExpiresAt func(body []byte) (time.Time, error)
 
+	// Store keeps the rotated credential between runs. Nil keeps today's
+	// behaviour: the renewed value lives for this run only.
+	//
+	// It exists because the alternative is a person re-pasting the credential
+	// once per expiry window, forever. With it, the environment variable stops
+	// holding the ROTATING value and starts holding a STATIC key -- pasted
+	// once, never again. That asymmetry is the whole point; it is not "an
+	// environment variable versus a file".
+	//
+	//	Store: from.FileStore{Name: "gabriel-session"}
+	//
+	// The read order is store, then Value as the seed, then renew, then save.
+	//
+	// Last writer wins. Two processes renewing at once write two values, and
+	// both work only because rotating does not invalidate the previous token
+	// at the vendor this was built for. For a vendor that DOES invalidate the
+	// previous one, do not use this without a lock of your own.
+	Store CredentialStore
+
 	// WarnAfter warns once the credential has less than this left. Requires
 	// ExpiresAt. Zero warns at 7 days.
 	//
@@ -102,6 +122,24 @@ func (c *Credential) Get(ctx context.Context) (string, error) {
 
 	if c.TTL > 0 && c.cached != "" && time.Since(c.cachedAt) < c.TTL {
 		return c.cached, nil
+	}
+
+	// O store vem antes da semente. Um valor guardado e o resultado da ultima
+	// rotacao; a semente e o que alguem colou uma vez, e pode ja ter vencido.
+	if c.Refresh != nil && c.Refresh.Store != nil {
+		guardado, err := c.Refresh.Store.Load()
+		if err != nil {
+			// Ler falhou de verdade -- permissao, disco. Nao e motivo para
+			// parar: a semente ainda pode servir, e parar aqui trocaria uma
+			// credencial talvez velha por nenhuma.
+			slog.WarnContext(ctx, "credential store: could not be read",
+				"store", c.Refresh.Store.Describe(),
+				"falling_back_to", "Credential.Value",
+				"error", err)
+		} else if guardado != "" {
+			c.cached, c.cachedAt = guardado, time.Now()
+			return guardado, nil
+		}
 	}
 
 	v, err := c.Value(ctx)
@@ -135,6 +173,13 @@ func (c *Credential) Check() error {
 	if c.Refresh.URL == "" {
 		return fmt.Errorf("Auth.Refresh.URL is empty: it is the endpoint that reissues " +
 			"the credential")
+	}
+	// A recusa do store acontece aqui, na montagem: descobrir que a
+	// credencial nao seria guardada depois da carga inteira e tarde demais.
+	if v, ok := c.Refresh.Store.(CredentialStoreChecker); ok {
+		if err := v.CheckStore(); err != nil {
+			return err
+		}
 	}
 	if c.Refresh.WarnAfter != 0 && c.Refresh.ExpiresAt == nil {
 		return fmt.Errorf("Auth.Refresh.WarnAfter says when to warn and Auth.Refresh." +

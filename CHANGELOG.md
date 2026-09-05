@@ -8,6 +8,60 @@ A tag de um módulo aninhado leva o prefixo do diretório: `sdk/v0.2.1`.
 
 ---
 
+## [0.28.0] — 2026-09-05
+
+### Adicionado
+
+**`Refresh.Store`: a credencial rotacionada sobrevive ao pod.** Sem ele, o valor
+renovado valia só para aquela execução — e alguém recolava a semente por janela,
+para sempre.
+
+```go
+Refresh: &from.Refresh{
+    URL:       "https://api.example.com/auth/session",
+    ExpiresAt: from.JSONField("expires"),
+    Store:     from.FileStore{Name: "app-session"},
+}
+```
+
+A troca que faz a feature valer não é "env var por arquivo": é a env deixar de
+guardar o valor **rotativo** e passar a guardar uma chave **estática**. Cola-se
+uma vez.
+
+A ordem de leitura é: o store, depois `Value` como semente, depois renova,
+depois grava.
+
+**`FileStore`.** O diretório vem de `Dir`, depois `BREVIS_CREDENTIAL_DIR`,
+depois lugar nenhum — e lugar nenhum **desliga** o store, dizendo uma vez no
+log. A chave vem de `Key`, depois `BREVIS_CREDENTIAL_KEY`, e **sem chave o store
+recusa a ligar**, na montagem, em vez de gravar em claro.
+
+O SDK não aprende Kubernetes, nem GCS, nem banco: ele abre um arquivo. Sob o
+Brevis o motor monta o volume e injeta a variável; numa máquina,
+`BREVIS_CREDENTIAL_DIR=./.brevis` e acabou. **O mesmo código nos dois.**
+
+AES-256-GCM, nonce novo a cada escrita, arquivo `0600` em diretório `0700`,
+temporário mais `rename`. Um valor guardado que não decifra — chave trocada,
+arquivo truncado, versão que este build não lê — é tratado como ausente, e a
+execução cai na semente: falhar trocaria uma credencial talvez velha por
+nenhuma, e uma versão futura num volume compartilhado é normal durante um
+rollout.
+
+**Último a escrever vence**, e é escolha: no fornecedor que motivou isto,
+rotacionar não invalida o token anterior. Para um fornecedor que invalide, não
+use sem uma trava sua.
+
+Falhar ao gravar **não derruba a execução** — a extração já aconteceu; o que se
+perdeu foi a rotação. Sai como `ERROR` e em `Result.CredentialStoreError`,
+porque o efeito é diferido (a próxima execução cai numa semente que um dia
+vence) e efeito diferido que só existe em log é o que ninguém vê a tempo.
+
+O formato em disco é contrato, e está fixado: `brevis-cred/1` na primeira linha,
+nonce e texto cifrado depois. Nada de metadado — nem `expires`, nem quem, nem
+quando: o `mtime` já diz o quando, e o resto envelhece.
+
+---
+
 ## [0.27.3] — 2026-09-05
 
 ### Corrigido

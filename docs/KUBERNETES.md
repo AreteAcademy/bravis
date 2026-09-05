@@ -171,6 +171,83 @@ aceitaria o `secretKeyRef` e falharia depois por outro motivo.
 A divisão final: **a instalação diz quais segredos existem para workflows, o
 YAML diz qual passo recebe cada um.**
 
+## O volume da credencial
+
+Uma credencial que **rotaciona** — um cookie de sessão com janela deslizante —
+morre com o pod se o valor novo não for a lugar nenhum. Sem isso, alguém recola
+a semente por janela, para sempre.
+
+Com um volume, a troca é outra: a variável de ambiente deixa de guardar o valor
+**rotativo** e passa a guardar uma chave **estática**. Cola-se uma vez.
+
+```bash
+BREVIS_POD_CREDENTIAL_PVC=brevis-credentials
+BREVIS_POD_CREDENTIAL_PATH=/var/brevis/credentials   # opcional, é o padrão
+```
+
+Com o PVC definido, **todo pod de passo** ganha o volume e a env
+`BREVIS_CREDENTIAL_DIR` apontando para o mount — que é a mesma variável que o
+SDK lê quando alguém roda na própria máquina com `BREVIS_CREDENTIAL_DIR=./.brevis`.
+O mesmo código nos dois. Sem o PVC, nada muda.
+
+Um passo que declare o próprio `BREVIS_CREDENTIAL_DIR` no `env:` vence a
+injeção, e a variável não vai duplicada.
+
+### O conteúdo é cifrado, e o motor não tem a chave
+
+O SDK grava AES-256-GCM com a chave de `BREVIS_CREDENTIAL_KEY`, que é um Secret
+comum e entra por `BREVIS_POD_ENV_FROM_SECRETS` ou por `secrets:` no YAML. **Sem
+chave o SDK recusa a ligar o store** em vez de gravar em claro — um volume vira
+snapshot, snapshot vira backup, e backup vira um lugar onde ninguém lembra que
+há credencial.
+
+```bash
+head -c 32 /dev/urandom | base64    # a chave, uma vez
+```
+
+### O PV, para GCS Fuse
+
+O cluster de dev é GKE, e `ReadWriteMany` ali não é EFS. Das três opções, a que
+serve é o **GCS Fuse CSI**: RWX de verdade, e o custo de guardar alguns KB é de
+centavos. `Filestore` tem instância mínima de 1 TiB; um Persistent Disk RWO não
+compartilha entre nós.
+
+```yaml
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: brevis-credentials
+spec:
+  accessModes: [ReadWriteMany]
+  capacity: {storage: 1Gi}      # ignorado pelo gcsfuse; o campo é obrigatório
+  storageClassName: ""
+  # O SDK recusa diretório com permissão frouxa, então o modo vem do mount:
+  # um volume compartilhado a 0755 é legível por todo pod que o monta.
+  mountOptions:
+    - implicit-dirs
+    - uid=0
+    - gid=0
+    - dir-mode=0700
+    - file-mode=0600
+  csi:
+    driver: gcsfuse.csi.storage.gke.io
+    volumeHandle: SEU-BUCKET
+```
+
+Confirme antes que o driver está habilitado (`gcsFuseCsiDriver` no addon config)
+e que a service account dos pods tem `roles/storage.objectAdmin` no bucket.
+
+**Uma ressalva honesta:** `rename` no gcsfuse **não é atômico** como num POSIX de
+verdade. O SDK grava em temporário e renomeia, o que cobre a queda no meio da
+escrita num sistema de arquivos normal; no gcsfuse, para um arquivo de poucos KB
+escrito por um pod de cada vez, o risco é baixo — mas é real, e é mais um motivo
+para manter `concurrency: 1` no workflow que usa isso.
+
+O SDK grava **último a escrever vence**, e isso é escolha: no fornecedor que
+motivou a feature, rotacionar não invalida o token anterior, então dois valores
+concorrentes ambos funcionam. Para um fornecedor que invalide o anterior, não
+use sem uma trava sua.
+
 ## Segurança
 
 Duas contas, e é a separação que importa:

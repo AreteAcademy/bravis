@@ -133,6 +133,7 @@ func loadWith(ctx context.Context, data *Data, target Target, run RunContext) (*
 		res.Attempts = data.stats.Attempts
 		res.ExtractBytes = data.stats.Bytes
 		res.CredentialExpiry = data.stats.CredentialExpiry
+		res.CredentialStoreError = data.stats.CredentialStoreError
 	}
 
 	if len(envelopes) == 0 {

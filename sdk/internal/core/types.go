@@ -200,6 +200,15 @@ type Stats struct {
 	// pipeline dying silently the day the window closes. A warning nobody
 	// reads is the same failure with extra steps.
 	CredentialExpiry time.Time
+
+	// CredentialStoreError diz que a credencial rotacionada NAO foi guardada,
+	// e por que. Vazio quando nao ha store ou quando gravou.
+	//
+	// A execucao nao para por isso: a carga acontece igual, e o que se perde e
+	// a rotacao. Mas o efeito e diferido -- a proxima execucao cai na semente,
+	// que um dia vence -- e um efeito diferido que so aparece em log e o que
+	// ninguem ve a tempo.
+	CredentialStoreError string
 }
 
 // Format names the wire format of a response.

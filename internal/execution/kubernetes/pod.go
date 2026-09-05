@@ -47,7 +47,27 @@ type PodSpec struct {
 	NodeSelector          map[string]string `json:"nodeSelector,omitempty"`
 	Tolerations           []Toleracao       `json:"tolerations,omitempty"`
 	ActiveDeadlineSeconds *int64            `json:"activeDeadlineSeconds,omitempty"`
+	Volumes               []Volume          `json:"volumes,omitempty"`
 	Containers            []Container       `json:"containers"`
+}
+
+// Volume e um PersistentVolumeClaim montado no pod.
+//
+// So PVC, e nao a uniao de tudo que o Kubernetes aceita: o motor monta volume
+// para um proposito -- guardar a credencial rotacionada entre execucoes -- e
+// um campo que existe para um proposito nao deve aceitar dez formas.
+type Volume struct {
+	Name string    `json:"name"`
+	PVC  *FontePVC `json:"persistentVolumeClaim,omitempty"`
+}
+
+type FontePVC struct {
+	ClaimName string `json:"claimName"`
+}
+
+type MontagemDeVolume struct {
+	Name      string `json:"name"`
+	MountPath string `json:"mountPath"`
 }
 
 type RefLocal struct {
@@ -62,14 +82,15 @@ type Toleracao struct {
 }
 
 type Container struct {
-	Name       string     `json:"name"`
-	Image      string     `json:"image"`
-	Command    []string   `json:"command,omitempty"`
-	Args       []string   `json:"args,omitempty"`
-	Env        []Var      `json:"env,omitempty"`
-	EnvFrom    []FonteEnv `json:"envFrom,omitempty"`
-	Resources  *Recursos  `json:"resources,omitempty"`
-	WorkingDir string     `json:"workingDir,omitempty"`
+	Name         string             `json:"name"`
+	Image        string             `json:"image"`
+	Command      []string           `json:"command,omitempty"`
+	Args         []string           `json:"args,omitempty"`
+	Env          []Var              `json:"env,omitempty"`
+	EnvFrom      []FonteEnv         `json:"envFrom,omitempty"`
+	Resources    *Recursos          `json:"resources,omitempty"`
+	WorkingDir   string             `json:"workingDir,omitempty"`
+	VolumeMounts []MontagemDeVolume `json:"volumeMounts,omitempty"`
 }
 
 type Var struct {
@@ -195,6 +216,18 @@ type Opcoes struct {
 	EnvFromSecrets    []string
 	EnvFromConfigMaps []string
 
+	// CredencialPVC e CredencialPath montam um volume onde o SDK guarda a
+	// credencial rotacionada entre execucoes.
+	//
+	// Com os dois definidos, TODO pod de passo ganha o volume e a env
+	// BREVIS_CREDENTIAL_DIR apontando para o mount. Sem eles nada muda -- e e
+	// assim que a feature continua sendo atalho, e nao requisito.
+	//
+	// A credencial no volume vai cifrada; a chave e um Secret comum, que entra
+	// por EnvFromSecrets. O motor nao a ve nem precisa dela.
+	CredencialPVC  string
+	CredencialPath string
+
 	// SecretsPermitidos sao os Secrets que um YAML pode citar em `secrets:`.
 	//
 	// Existe porque `secrets:` inverte quem escolhe. EnvFromSecrets vem do
@@ -224,6 +257,15 @@ type Opcoes struct {
 	ManterPodEmFalha bool
 }
 
+const (
+	nomeVolumeCredencial = "brevis-credentials"
+
+	// A mesma variavel que o SDK le. Esta escrita aqui e nao importada do
+	// modulo do SDK de proposito: o motor nao depende do SDK, e o acoplamento
+	// entre os dois e este nome -- que esta documentado nos dois lados.
+	envDiretorioCredencial = "BREVIS_CREDENTIAL_DIR"
+)
+
 // permiteSecret decide se um YAML pode citar este Secret.
 //
 // A recusa acontece na MONTAGEM do pod e nao no servidor: um secretKeyRef para
@@ -249,6 +291,11 @@ func (o Opcoes) comPadroes() Opcoes {
 	}
 	if o.Namespace == "" {
 		o.Namespace = "default"
+	}
+	// O PVC e que liga a feature; o path tem padrao porque a escolha dele nao
+	// e uma decisao de ninguem -- so precisa ser um lugar previsivel.
+	if o.CredencialPVC != "" && o.CredencialPath == "" {
+		o.CredencialPath = "/var/brevis/credentials"
 	}
 	if o.EsperaParaIniciar <= 0 {
 		// Dez minutos cobrem pull de imagem grande (a de dbt tem 620 MB) e um
@@ -315,6 +362,18 @@ func MontarPod(t execution.TaskExec, o Opcoes) (Pod, error) {
 		})
 	}
 
+	// O volume da credencial, quando a instalacao o configurou. A env aponta
+	// para o mount, e e a mesma que o SDK le rodando na maquina de alguem com
+	// BREVIS_CREDENTIAL_DIR=./.brevis -- o mesmo codigo nos dois.
+	if o.CredencialPVC != "" {
+		if _, jaTem := t.Env[envDiretorioCredencial]; !jaTem {
+			c.Env = append(c.Env, Var{Name: envDiretorioCredencial, Value: o.CredencialPath})
+		}
+		c.VolumeMounts = append(c.VolumeMounts, MontagemDeVolume{
+			Name: nomeVolumeCredencial, MountPath: o.CredencialPath,
+		})
+	}
+
 	for _, s := range o.EnvFromSecrets {
 		c.EnvFrom = append(c.EnvFrom, FonteEnv{SecretRef: &RefLocal{Name: s}})
 	}
@@ -334,6 +393,12 @@ func MontarPod(t execution.TaskExec, o Opcoes) (Pod, error) {
 		NodeSelector:       o.NodeSelector,
 		Tolerations:        o.Tolerations,
 		Containers:         []Container{c},
+	}
+	if o.CredencialPVC != "" {
+		spec.Volumes = append(spec.Volumes, Volume{
+			Name: nomeVolumeCredencial,
+			PVC:  &FontePVC{ClaimName: o.CredencialPVC},
+		})
 	}
 	for _, s := range o.PullSecrets {
 		spec.ImagePullSecrets = append(spec.ImagePullSecrets, RefLocal{Name: s})

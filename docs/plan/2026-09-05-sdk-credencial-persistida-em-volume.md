@@ -3,6 +3,15 @@
 **Escrito em** 2026-09-05 · **Base** `sdk/v0.27.2` · **Alvo** `sdk/v0.28.0` +
 motor `0.4.0`
 
+> **PASSOS 1, 5 e 6 EXECUTADOS** em 2026-09-05 — os três que a §"Como entregar
+> isto a um agente" atribui a um agente no `brevis`. O passo 1 saiu sozinho, na
+> `sdk/v0.27.3`, como a spec pede; o 6 na `sdk/v0.28.0`; o 5 está em `master`,
+> aguardando a release do motor.
+>
+> **Os passos 2, 3, 4 e 7 continuam abertos** e são de pessoa: console GCP,
+> `zarv-applications` e o fetcher. O §9 abaixo registra o que saiu diferente da
+> spec e por quê.
+
 Pedido de quem consome:
 
 > Precisamos ter o refresh funcionando, porque não vamos conseguir ficar
@@ -323,3 +332,63 @@ implementação só é um palpite sobre a segunda; quando o Redis existir, o for
 dele vai ensinar coisas que hoje seriam adivinhadas. O que se deve fazer agora é
 **não impedir**: manter a leitura e a escrita atrás de duas funções, e não
 espalhar `os.ReadFile` pelo caminho da renovação.
+
+---
+
+## 9. O que saiu diferente, e o que ficou para o passo 4
+
+### O §9 do `SDK_V9.md` não se resolvia com uma linha
+
+A spec dá duas opções: semear o jar com `Path=/`, ou aplicar a credencial no
+header da renovação. **Nenhuma das duas sozinha bastava**, e isso só apareceu ao
+escrever a asserção certa.
+
+`Path=/` conserta a ida: a renovação passa a receber a credencial. Mas o cookie
+que ela **reemite** volta a ficar preso, agora em `/api/auth`, e as páginas
+seguem com o valor velho. A renovação renova para ninguém — o mesmo defeito na
+direção oposta, e o `Store` gravaria um valor que nunca foi usado.
+
+A credencial deixou de ser cookie de jar e passou a ser **cabeçalho**, que vale
+para toda requisição independentemente de path. Um `credentialJar` desvia os
+nomes da credencial antes que o jar os guarde, o que mantém a invariante da
+`v0.26.0` (cada cookie num lugar só) e dá de brinde o que esta spec precisa: **o
+valor rotacionado fica na mão**, em vez de enterrado no jar.
+
+A rotação também é aplicada no laço de páginas, e não só após a renovação: uma
+API pode reemitir a sessão em qualquer resposta. Sem isso, uma regressão que o
+teste da `v0.26.0` pegou.
+
+### `FileStore` é o store, e não uma descrição dele
+
+A spec escreve `Store: from.FileStore{Name: "..."}` — por valor. Então
+`FileStore` implementa a interface diretamente, resolvendo diretório e chave a
+cada chamada, em vez de haver um `OpenFileStore` que devolve outra coisa. A
+recusa na montagem (critério 4) veio por uma interface opcional,
+`CredentialStoreChecker`, que o `Credential.Check` consulta.
+
+### O `Chmod` explícito saiu
+
+A primeira versão fazia `tmp.Chmod(0600)` depois de `os.CreateTemp`. É
+redundante — `CreateTemp` já cria a `0600` — e num gcsfuse um `chmod` é no-op ou
+erro, dependendo da montagem. Uma linha que não faz nada em disco normal e
+quebra no destino real.
+
+### O que isso exige do passo 4, e que a spec não previa
+
+O critério 5 manda **recusar diretório com permissão frouxa**, e um mount de
+gcsfuse vem `0755` por padrão. Então o PV **precisa** de `mountOptions`, ou o
+store recusa a ligar no lugar onde ele foi feito para rodar:
+
+```yaml
+mountOptions: [implicit-dirs, uid=0, gid=0, dir-mode=0700, file-mode=0600]
+```
+
+Está no `docs/KUBERNETES.md` com o PV inteiro. Sem essas duas linhas, o passo 7
+falha na montagem com uma mensagem que diz exatamente isso.
+
+### A prova do critério 13, no que dá para provar sem o cluster
+
+`TestSegundaExecucaoUsaOQueVeioDoVolume` roda a extração duas vezes contra um
+servidor local, com a semente **removida depois da primeira**, e afirma que a
+segunda autenticou com o valor que a primeira gravou. É a forma do critério 13
+sem o GKE; o critério 13 de verdade continua sendo o passo 7.

@@ -506,6 +506,8 @@ escolher a service account com que roda.
 | `BREVIS_POD_ENV_FROM_SECRETS` | — | lista por vírgula | em modo pod, é daqui que vem o ambiente da task |
 | `BREVIS_POD_ENV_FROM_CONFIGMAPS` | — | lista por vírgula | |
 | `BREVIS_POD_ALLOWED_SECRETS` | — | lista por vírgula | quais Secrets um `secrets:` de YAML pode citar. **Vazia nega todos** |
+| `BREVIS_POD_CREDENTIAL_PVC` | — | nome do PVC | monta o volume da credencial em todo pod de passo e injeta `BREVIS_CREDENTIAL_DIR`. Ausente, nada muda |
+| `BREVIS_POD_CREDENTIAL_PATH` | `/var/brevis/credentials` | caminho | onde montar |
 | `BREVIS_POD_NODE_SELECTOR` | — | `chave=valor,outra=valor` | |
 | `BREVIS_POD_TOLERATIONS` | — | `chave=valor:efeito,...` | só o operador `Equal` |
 | `BREVIS_POD_MANTER_EM_FALHA` | `false` | `true` mantém o pod para inspeção | |

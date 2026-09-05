@@ -105,6 +105,11 @@ type Result struct {
 	// silent death happens in the first place.
 	CredentialExpiry time.Time
 
+	// CredentialStoreError diz que a credencial rotacionada nao foi guardada.
+	// A carga aconteceu; o que se perdeu foi a rotacao, e a próxima execucao
+	// cai na semente. Vazio quando nao ha store ou quando gravou.
+	CredentialStoreError string
+
 	// Diagnostics the destination reported per row, when it refused any.
 	RowErrors []string
 
@@ -137,6 +142,9 @@ func (r *Result) Args() []any {
 		args = append(args,
 			"credential_expires", r.CredentialExpiry.Format(time.RFC3339),
 			"credential_left", core.RoundDuration(time.Until(r.CredentialExpiry)))
+	}
+	if r.CredentialStoreError != "" {
+		args = append(args, "credential_not_saved", r.CredentialStoreError)
 	}
 	return args
 }

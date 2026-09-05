@@ -47,14 +47,42 @@ func authenticate(ctx context.Context, source *core.Source) error {
 	return nil
 }
 
-// aplicarRotacao reescreve o cabecalho Cookie com os valores reemitidos.
+// guardar persiste a credencial rotacionada, e nao derruba a execucao se nao
+// conseguir.
+//
+// A carga vai acontecer de qualquer jeito -- o que se perde e a rotacao, e o
+// custo disso e alguem recolar a semente na proxima janela. Derrubar uma
+// extracao boa por causa de uma escrita e trocar um problema pequeno por um
+// grande.
+//
+// Mas grita: ERROR no log E em Stats, porque um aviso que so existe no log e a
+// morte silenciosa com passos a mais.
+func guardar(ctx context.Context, store core.CredentialStore, valor string, stats *core.Stats) {
+	if store == nil || valor == "" {
+		return
+	}
+	if err := store.Save(valor); err != nil {
+		slog.ErrorContext(ctx, "credential store: the rotated credential was not saved",
+			"store", store.Describe(),
+			"effect", "the next run falls back to Credential.Value, which expires",
+			"error", err)
+		if stats != nil {
+			stats.CredentialStoreError = err.Error()
+		}
+		return
+	}
+	slog.DebugContext(ctx, "credential store: rotated credential saved", "store", store.Describe())
+}
+
+// aplicarRotacao reescreve o cabecalho Cookie com os valores reemitidos, e diz
+// se reescreveu.
 //
 // Reescreve por NOME, preservando os cookies que a renovacao nao tocou: um
 // cabecalho com dois cookies, dos quais a API reemitiu um, tem de continuar
 // com os dois.
-func aplicarRotacao(source *core.Source, rotacoes map[string]string) {
+func aplicarRotacao(source *core.Source, rotacoes map[string]string) bool {
 	if len(rotacoes) == 0 {
-		return
+		return false
 	}
 
 	h := http.Header(source.Header).Clone()
@@ -66,7 +94,7 @@ func aplicarRotacao(source *core.Source, rotacoes map[string]string) {
 		// O cabecalho foi montado pelo Applier e ja passou por ParseCookie na
 		// montagem do cliente; chegar aqui invalido nao deveria acontecer, e
 		// perder a rotacao e melhor que perder a credencial inteira.
-		return
+		return false
 	}
 
 	var partes []string
@@ -78,6 +106,7 @@ func aplicarRotacao(source *core.Source, rotacoes map[string]string) {
 	}
 	h.Set("Cookie", strings.Join(partes, "; "))
 	source.Header = h
+	return true
 }
 
 // renewRequest makes the refresh call, with the same retries the pages get.
@@ -159,7 +188,9 @@ func renew(ctx context.Context, client *http.Client, source *core.Source, jar *c
 	// O que a renovacao reemitiu passa a valer para as paginas. Sem isto a
 	// renovacao renova para ninguem: o valor novo ficaria so no jar, preso ao
 	// diretorio da URL de renovacao, e as paginas seguiriam com o antigo.
-	aplicarRotacao(source, jar.Rotacoes())
+	if aplicarRotacao(source, jar.Rotacoes()) {
+		guardar(ctx, r.Store, http.Header(source.Header).Get("Cookie"), stats)
+	}
 
 	if r.ExpiresAt == nil {
 		return nil

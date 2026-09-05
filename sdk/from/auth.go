@@ -22,6 +22,30 @@ type Secret = core.Secret
 // AsCookieNamed and AsHeader.
 type Applier = core.Applier
 
+// FileStore keeps the rotated credential in an encrypted file, in a directory
+// somebody else provides. See Refresh.Store.
+//
+// The SDK does not learn Kubernetes, GCS or databases: it opens a file. Who
+// mounts the volume is the platform's problem -- which is what lets the same
+// code run against ./.brevis on a laptop.
+//
+//	Store: from.FileStore{Name: "gabriel-session"}
+//
+// The directory comes from Dir, then BREVIS_CREDENTIAL_DIR, then nowhere -- and
+// nowhere turns the store off, saying so once in the log. The key comes from
+// Key, then BREVIS_CREDENTIAL_KEY, and without one the store REFUSES rather
+// than writing a credential in the clear.
+type FileStore = core.FileStore
+
+// CredentialStore is what Refresh.Store takes. FileStore implements it.
+type CredentialStore = core.CredentialStore
+
+// Names of the two variables the platform injects.
+const (
+	EnvCredentialDir = core.EnvCredentialDir
+	EnvCredentialKey = core.EnvCredentialKey
+)
+
 // FromEnv reads the secret from an environment variable, and says which one
 // when it is unset -- rather than sending an empty credential and letting the
 // API answer 401.
