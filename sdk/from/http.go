@@ -70,6 +70,11 @@ type HTTP struct {
 	// NoHeader, for CSV: treat every row as data with field_N keys.
 	NoHeader bool
 
+	// PreserveNumbers entrega os números JSON como json.Number, com o literal
+	// intacto. Ligue quando a identidade depender da forma do número -- ver
+	// sdk.IngestionIDPython.
+	PreserveNumbers bool
+
 	// Pagination. Exactly one strategy may be set; two is an error, because
 	// the loser would be a field that was set and does nothing.
 	//
@@ -133,28 +138,29 @@ func (h HTTP) Describe() string { return extract.Redact(h.URL) }
 // struct the extract package takes.
 func (h HTTP) source(opt core.ReadOptions) core.Source {
 	return core.Source{
-		URL:           h.URL,
-		Method:        h.Method,
-		Body:          h.Body,
-		Header:        h.Header,
-		Timeout:       h.Timeout,
-		TotalTimeout:  h.TotalTimeout,
-		RetryConfig:   h.RetryConfig,
-		RateLimiter:   h.RateLimiter,
-		Format:        h.Format,
-		Auth:          h.Auth,
-		NoHeader:      h.NoHeader,
-		FollowLinks:   h.FollowLinks,
-		CursorKey:     h.CursorKey,
-		PageKey:       h.PageKey,
-		FirstPage:     h.FirstPage,
-		OffsetKey:     h.OffsetKey,
-		DataKey:       h.DataKey,
-		PageSize:      h.PageSize,
-		MaxPages:      h.MaxPages,
-		Stats:         opt.Stats,
-		Preview:       opt.Preview,
-		PreviewBytes:  opt.PreviewBytes,
-		PreviewWriter: opt.PreviewWriter,
+		URL:             h.URL,
+		Method:          h.Method,
+		Body:            h.Body,
+		Header:          h.Header,
+		Timeout:         h.Timeout,
+		TotalTimeout:    h.TotalTimeout,
+		RetryConfig:     h.RetryConfig,
+		RateLimiter:     h.RateLimiter,
+		Format:          h.Format,
+		Auth:            h.Auth,
+		NoHeader:        h.NoHeader,
+		PreserveNumbers: h.PreserveNumbers,
+		FollowLinks:     h.FollowLinks,
+		CursorKey:       h.CursorKey,
+		PageKey:         h.PageKey,
+		FirstPage:       h.FirstPage,
+		OffsetKey:       h.OffsetKey,
+		DataKey:         h.DataKey,
+		PageSize:        h.PageSize,
+		MaxPages:        h.MaxPages,
+		Stats:           opt.Stats,
+		Preview:         opt.Preview,
+		PreviewBytes:    opt.PreviewBytes,
+		PreviewWriter:   opt.PreviewWriter,
 	}
 }

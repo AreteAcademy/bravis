@@ -8,6 +8,67 @@ A tag de um módulo aninhado leva o prefixo do diretório: `sdk/v0.2.1`.
 
 ---
 
+## [0.36.0] — 2026-09-05
+
+Para quem está portando fetchers de Python mantendo a **mesma landing e o mesmo
+`ingestion_id`**.
+
+### O problema
+
+O `asText` do SDK não é o `str()` do Python, e a diferença cai na identidade:
+
+| valor | Go (`asText`) | Python (`str`) |
+|---|---|---|
+| `nil` | `""` | `"None"` |
+| `true` | `"true"` | `"True"` |
+| `19.0` | `"19"` | `"19.0"` |
+
+A mesma leitura recebe um `ingestion_id` diferente. E isso **não aparece como
+erro**: aparece como linha duplicada depois do merge do bronze, semanas depois.
+
+### Adicionado
+
+**`sdk.TextoPython(v) (string, error)`** — a renderização do `str()`, sozinha.
+
+**`sdk.IngestionIDPython(...)` e `sdk.KeyPython(...)`** — as duas funções que
+compõem identidade, rendendo com ela.
+
+**`Source.PreserveNumbers`** (em `from.HTTP` e `from.Files`) — entrega os
+números JSON como `json.Number`, com o literal intacto.
+
+### O padrão NÃO mudou, e isso é decisão
+
+Trocar a renderização reescreveria o `ingestion_id` de **toda linha que o Go já
+gravou**. Um fetcher em produção passaria a escrever ids novos para as mesmas
+leituras, e o resultado é a tabela inteira duplicada no próximo merge. A escolha
+é por fetcher, escrita no fetcher.
+
+A divergência está documentada como **teste** — `TestDivergenciaEntreAsTextEOPython`
+—, e não só em prosa.
+
+### Ela recusa em vez de divergir
+
+O `str()` do Python usa expoente fora de `[1e-4, 1e16)`, e o formato exato desse
+texto é detalhe do CPython. Imitar seria apostar dentro de uma **chave**, então
+esses valores devolvem erro nomeando o campo. Uma chave que falha alto custa uma
+linha; uma que diverge em silêncio custa uma duplicata que ninguém rastreia.
+
+### Uma coisa que `TextoPython` sozinha não resolve
+
+O `encoding/json` decodifica todo número como `float64`, então `{"id": 19}` e
+`{"id": 19.0}` chegam **idênticos** ao Go — e no Python o primeiro era `int`
+(`"19"`) e o segundo `float` (`"19.0"`). Sem o literal, a função acerta um caso
+e erra o outro.
+
+É por isso que `PreserveNumbers` existe, e por isso ele vem junto: com ele o
+literal decide, exatamente como o `json` do Python decide. O custo é que um
+transformer fazendo `r["x"].(float64)` deixa de funcionar.
+
+O teste diferencial roda contra um `python3` de verdade, e há uma tabela fixada
+para quando ele não existir.
+
+---
+
 ## [0.35.0] — 2026-09-05
 
 Os três invariantes que estavam abertos desde a spec do schema declarado, sob o

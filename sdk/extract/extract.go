@@ -816,14 +816,28 @@ func NewDecoder(r io.Reader, source core.Source) Decoder {
 	case "csv":
 		return &csvDecoder{r: csv.NewReader(r), noHeader: source.NoHeader}
 	case "ndjson":
-		return &ndjsonDecoder{dec: json.NewDecoder(r)}
+		return &ndjsonDecoder{dec: decodificadorJSON(r, source)}
 	case "json":
-		return &jsonDecoder{dec: json.NewDecoder(r)}
+		return &jsonDecoder{dec: decodificadorJSON(r, source)}
 	case "xml":
 		return &xmlDecoder{dec: xml.NewDecoder(r)}
 	default:
 		return nil
 	}
+}
+
+// decodificadorJSON monta o decoder, com ou sem preservacao do literal.
+//
+// Sem UseNumber, `{"id": 19}` e `{"id": 19.0}` chegam identicos como float64 --
+// e no Python o primeiro era int e o segundo float, com str() diferentes. Um
+// fetcher portado que compunha a chave com str() nao consegue reproduzir o id
+// sem o literal.
+func decodificadorJSON(r io.Reader, source core.Source) *json.Decoder {
+	dec := json.NewDecoder(r)
+	if source.PreserveNumbers {
+		dec.UseNumber()
+	}
+	return dec
 }
 
 // csvDecoder turns CSV rows into Envelopes.

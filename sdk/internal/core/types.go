@@ -365,6 +365,21 @@ type Source struct {
 	// alive across runs. Nil means the request goes as Header describes it.
 	Auth *Credential
 
+	// PreserveNumbers entrega os numeros JSON como json.Number, com o literal
+	// intacto, em vez de float64.
+	//
+	// O padrao e float64, que e o que o encoding/json faz e o que todo
+	// transformer escrito ate hoje espera. Ligue quando a IDENTIDADE depender
+	// da forma do numero: `{"id": 19}` e `{"id": 19.0}` sao float64(19) nos
+	// dois casos, e no Python o primeiro era int e o segundo float -- str()
+	// "19" contra "19.0". Um fetcher portado que compunha a chave com str()
+	// nao consegue reproduzir o id sem o literal.
+	//
+	// O custo: um transformer que faz `r["x"].(float64)` deixa de funcionar,
+	// porque o valor passa a ser json.Number. Use TextoPython, ou
+	// json.Number.Float64().
+	PreserveNumbers bool
+
 	// NoHeader, for CSV: treat every row as data with field_N keys. The
 	// default uses the first row as column names. Ignored for other formats.
 	NoHeader bool

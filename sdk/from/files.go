@@ -38,6 +38,11 @@ type Files struct {
 	// file of records usually is.
 	Format core.Format
 
+	// PreserveNumbers entrega os números JSON como json.Number, com o literal
+	// intacto, em vez de float64. Ligue quando a identidade depender da forma
+	// do número -- ver sdk.IngestionIDPython.
+	PreserveNumbers bool
+
 	// NoHeader, for CSV: treat every row as data with field_N keys. The
 	// default uses the first row as column names.
 	NoHeader bool
@@ -209,7 +214,9 @@ func (f Files) drain(ctx context.Context, loc core.Location, key string,
 		r = gz
 	}
 
-	decoder := extract.NewDecoder(r, core.Source{Format: format, NoHeader: f.NoHeader})
+	decoder := extract.NewDecoder(r, core.Source{
+		Format: format, NoHeader: f.NoHeader, PreserveNumbers: f.PreserveNumbers,
+	})
 	if decoder == nil {
 		return 0, fmt.Errorf("unsupported format %q", format)
 	}

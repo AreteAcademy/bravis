@@ -70,6 +70,56 @@ func Key(fields ...string) KeySelector {
 	}
 }
 
+// KeyPython e Key rendendo cada campo como o str() do Python renderiza.
+//
+// Existe para o porte: se o fetcher em Python compunha a chave com
+// `str(record["id"])`, esta e a unica forma de o Go produzir o MESMO
+// ingestion_id -- e "o mesmo" e o que decide se a linha portada casa com a que
+// ja esta na landing ou vira uma duplicata depois do merge.
+//
+// Um valor que TextoPython recusa -- a faixa exponencial, um mapa, uma lista --
+// vira erro nomeando o campo. Recusar e melhor que divergir numa chave: a
+// divergencia so aparece semanas depois, num relatorio, sem ninguem saber de
+// onde veio.
+//
+// Ligue Source.PreserveNumbers junto. Sem ele, `{"id": 19}` e `{"id": 19.0}`
+// chegam identicos ao Go, e esta funcao rende os dois como o float do Python
+// ("19.0") -- certo para o segundo, errado para o primeiro.
+func KeyPython(fields ...string) KeySelector {
+	return chaveCom(TextoPython, fields...)
+}
+
+// chaveCom e Key com a renderizacao injetada, para que as duas variantes nao
+// sejam duas copias que envelhecem separadas.
+func chaveCom(render func(any) (string, error), fields ...string) KeySelector {
+	return func(payload any) (string, error) {
+		if len(fields) == 0 {
+			return "", fmt.Errorf("Key precisa from ao menos um campo")
+		}
+
+		obj, err := asObject(payload)
+		if err != nil {
+			return "", err
+		}
+
+		parts := make([]string, 0, len(fields))
+		for _, campo := range fields {
+			v, ok := obj[campo]
+			if !ok {
+				return "", fmt.Errorf("field %q is not in the payload; available: %s",
+					campo, availableKeys(obj))
+			}
+			texto, err := render(v)
+			if err != nil {
+				return "", fmt.Errorf("field %q: %w", campo, err)
+			}
+			parts = append(parts, texto)
+		}
+
+		return strings.Join(parts, keySeparator), nil
+	}
+}
+
 // FixedKey uses a constant source_key. Only correct when the source yields a
 // single record per run -- otherwise every row collapses onto one id.
 func FixedKey(value string) KeySelector {
@@ -119,6 +169,24 @@ func asObject(payload any) (map[string]any, error) {
 // Floats are formatted with the shortest representation that round-trips, so
 // -23.55 stays "-23.55" rather than becoming "-23.550000". JSON numbers all
 // arrive as float64, so an integer id must not pick up a ".0" tail.
+//
+// # Ele NAO e o str() do Python, e a diferenca importa
+//
+//	valor    asText     str() do Python
+//	nil      ""         "None"
+//	true     "true"     "True"
+//	19.0     "19"       "19.0"
+//
+// Isto e o padrao e continua sendo, por um motivo que nao e preferencia:
+// trocar a renderizacao muda o ingestion_id de TODA linha que o Go ja gravou.
+// Um fetcher em producao passaria a escrever ids novos para as mesmas
+// leituras, e o resultado nao e um erro -- e a tabela inteira duplicada no
+// proximo merge.
+//
+// Quem esta portando um fetcher de Python e precisa casar com o que ja esta na
+// landing usa KeyPython e IngestionIDPython, que rendem com TextoPython. A
+// escolha e por fetcher, escrita no fetcher, e nao um padrao global que muda
+// o significado de quem nao pediu.
 func asText(v any) string {
 	switch t := v.(type) {
 	case string:
