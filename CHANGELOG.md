@@ -8,6 +8,46 @@ A tag de um módulo aninhado leva o prefixo do diretório: `sdk/v0.2.1`.
 
 ---
 
+## [0.29.1] — 2026-09-05
+
+### Corrigido
+
+**Uma renovação que não autenticou gravava no store** — §10 do `SDK_V9.md`,
+achado rodando a prova contra a API real com uma credencial vencida, que é a
+única forma de ele aparecer.
+
+O `guardar` acontecia **antes** da checagem de validade. E o NextAuth, para uma
+sessão não autenticada, responde `200` com corpo `null` e `Set-Cookie`
+**limpando os valores**:
+
+```
+semente colada por um humano   1174 caracteres
+o que foi parar no store        419 caracteres   <- mesmos nomes, valores vazios
+```
+
+Era a credencial de uma sessão **deslogada**, gravada por cima. E como a ordem de
+leitura é store-antes-da-semente — o que está certo —, a combinação envenena:
+da próxima vez o valor morto vence, **trocar a env por uma credencial boa deixa
+de resolver**, e a única saída é apagar o objeto à mão. O sintoma para quem opera
+é `401` sem explicação, num pipeline que ontem funcionava.
+
+Um erro de rede não causava isso: sem resposta não há rotação. O caso que
+envenenava era o mais provável de todos — a credencial venceu.
+
+A rotação continua sendo aplicada cedo: a credencial reemitida vale para as
+páginas desta execução mesmo que o `ExpiresAt` falhe depois. **O que mudou é só
+quando ela é persistida.**
+
+### Adicionado
+
+**`Store` sem `ExpiresAt` avisa na montagem.** Nessa configuração o SDK não tem
+sinal nenhum de que a renovação autenticou — o status é `200` nos dois casos —
+então o store continua envenenável. Não é recusa: há fontes cuja renovação não
+devolve validade, e para elas o store ainda vale. Mas quem escolhe isso tem de
+escolher sabendo.
+
+---
+
 ## [0.29.0] — 2026-09-05
 
 ### Adicionado

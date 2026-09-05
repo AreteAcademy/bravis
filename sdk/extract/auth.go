@@ -185,24 +185,47 @@ func renew(ctx context.Context, client *http.Client, source *core.Source, jar *c
 		return err
 	}
 
-	// O que a renovacao reemitiu passa a valer para as paginas. Sem isto a
-	// renovacao renova para ninguem: o valor novo ficaria so no jar, preso ao
-	// diretorio da URL de renovacao, e as paginas seguiriam com o antigo.
-	if aplicarRotacao(source, jar.Rotacoes()) {
-		guardar(ctx, r.Store, http.Header(source.Header).Get("Cookie"), stats)
+	// O que a renovacao reemitiu passa a valer para as paginas, e vale JA:
+	// sem isto a renovacao renova para ninguem, porque o valor novo ficaria
+	// so no jar, preso ao diretorio da URL de renovacao.
+	//
+	// Persistir e outra coisa, e vem depois. Ver persistir(), abaixo.
+	rotacionou := aplicarRotacao(source, jar.Rotacoes())
+
+	persistir := func() {
+		if rotacionou {
+			guardar(ctx, r.Store, http.Header(source.Header).Get("Cookie"), stats)
+		}
 	}
 
 	if r.ExpiresAt == nil {
+		// Sem sinal de validade nao ha o que conferir, e quem configurou
+		// abriu mao dele -- com o aviso que Credential.Check emite.
+		persistir()
 		return nil
 	}
 
 	expires, err := r.ExpiresAt(body)
 	if err != nil {
+		// NAO grava. O NextAuth responde 200 com corpo `null` e Set-Cookie
+		// esvaziando os valores quando a sessao nao autenticou -- entao o que
+		// chegaria ao store seria a credencial de uma sessao deslogada.
+		//
+		// E como a ordem de leitura e store-antes-da-semente, gravar isso
+		// envenena: da proxima vez o valor morto vence, trocar a env por uma
+		// credencial boa deixa de resolver, e a unica saida vira apagar o
+		// objeto a mao. O sintoma para quem opera e 401 sem explicacao, num
+		// pipeline que ontem funcionava.
+		//
+		// O vendor em Python que originou isto ja conhecia a armadilha: o
+		// seed_cookie conferia antes de gravar, "para que um valor morto nao
+		// pouse como a linha mais nova".
 		return fmt.Errorf("refresh %s: %w", redactURL(r.URL), err)
 	}
 	if stats != nil {
 		stats.CredentialExpiry = expires
 	}
+	persistir()
 
 	warnAfter := r.WarnAfter
 	if warnAfter == 0 {

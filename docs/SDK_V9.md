@@ -677,7 +677,7 @@ derrubam cada uma o seu.
 
 ---
 
-## 10. Uma renovação que falha grava mesmo assim, e envenena o store — **v0.29.0**
+## 10. Uma renovação que falha grava mesmo assim, e envenena o store — **RESOLVIDO na v0.29.1**
 
 Achado rodando a prova do critério 11 da spec da credencial persistida.
 
@@ -753,3 +753,20 @@ continuar vazio. Hoje ele tem o cookie.
 3. `msg=loaded` só sai depois de a carga ter acontecido.
 4. Chaves de log num único idioma.
 5. Decidido o §4, e escrito onde a decisão fica visível para quem consome.
+
+### O que foi feito, na `v0.29.1`
+
+O `guardar` passou para **depois** de a renovação ser dada por boa, e não roda em
+nenhum caminho de erro. O `aplicarRotacao` **não se moveu**: a credencial
+reemitida tem de valer para as páginas desta execução mesmo que o `ExpiresAt`
+falhe em seguida — o que mudou é só quando ela é persistida.
+
+Com `ExpiresAt == nil` o SDK não tem sinal nenhum de que a renovação autenticou,
+porque o status é `200` nos dois casos. Então grava, e `Credential.Check` avisa
+na montagem dizendo exatamente isso. Não recusa: há fontes cuja renovação não
+devolve validade, e para elas o store ainda vale.
+
+Quatro reversões, cada uma derrubando o seu: gravar antes da checagem (o defeito
+original, e o teste reproduz o `"session="` esvaziado), nunca gravar (que
+resolveria o defeito apagando a feature), tirar o aviso da montagem, e mover o
+`aplicarRotacao` para depois do `ExpiresAt`.

@@ -181,6 +181,17 @@ func (c *Credential) Check() error {
 			return err
 		}
 	}
+	if c.Refresh.Store != nil && c.Refresh.ExpiresAt == nil {
+		// Aviso e nao recusa: ha fontes cuja renovacao nao devolve validade
+		// nenhuma, e para elas o store ainda vale. Mas quem escolhe isso tem
+		// de escolher sabendo.
+		slog.Warn("credential store without ExpiresAt: a refresh that did not authenticate will be saved",
+			"store", c.Refresh.Store.Describe(),
+			"why", "the status is 200 either way, so the body is the only place the difference shows",
+			"risk", "a dead credential is read before Value on the next run, and swapping the "+
+				"environment variable stops fixing it",
+			"fix", "set Refresh.ExpiresAt, for example from.JSONField(\"expires\")")
+	}
 	if c.Refresh.WarnAfter != 0 && c.Refresh.ExpiresAt == nil {
 		return fmt.Errorf("Auth.Refresh.WarnAfter says when to warn and Auth.Refresh." +
 			"ExpiresAt says what to compare it against, and ExpiresAt is not set -- " +

@@ -518,6 +518,19 @@ value carries a version line, and a version this build does not read is treated
 as absent — the run falls back to the seed rather than failing, because during a
 rollout the same store holds both.
 
+**A refresh that did not authenticate is never saved.** The check is the one the
+caller configured: if `ExpiresAt` cannot read the body, the run fails and the
+store is left alone. That matters more than it looks — some APIs answer `200`
+with an empty body and a `Set-Cookie` that *clears* the session, so what would
+land in the store is the credential of a logged-out session. And since the store
+is read **before** the seed, saving it would mean swapping the environment
+variable no longer fixes anything: the dead value wins every time, and the only
+way out is deleting the object by hand.
+
+Without `ExpiresAt` the SDK has no signal at all — the status is `200` either
+way — so the value is saved and a warning at assembly says so. That combination
+is still poisonable, and the warning is there so the choice is made knowingly.
+
 Failing to save does **not** stop the run — the extract already happened; what
 was lost is the rotation. It goes out at `ERROR` and in
 `Result.CredentialStoreError`, because the effect is deferred (the next run falls
