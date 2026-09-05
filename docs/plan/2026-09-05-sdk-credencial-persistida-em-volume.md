@@ -190,6 +190,27 @@ Com os dois definidos, todo pod de passo ganha o volume e a env
 `BREVIS_CREDENTIAL_DIR` apontando para o mount. Sem eles, nada muda — e é assim
 que a feature continua sendo atalho, não requisito.
 
+**E uma anotação, que é fácil não descobrir.** O GCS Fuse no GKE injeta um
+sidecar, e ele só entra quando o pod traz:
+
+```yaml
+metadata:
+  annotations:
+    gke-gcsfuse/volumes: "true"
+```
+
+Sem ela o pod sobe, o volume **não** monta, e o erro aparece como
+"no such file or directory" no caminho da credencial — apontando para o SDK, que
+não tem culpa. O motor já escreve anotações próprias em
+`internal/execution/kubernetes/pod.go:372` (`brevis.dev/workflow`, `/node`,
+`/run`), então o lugar existe; o que falta é ela ser configurável, porque é
+específica do GKE e não pode ficar embutida num motor que também roda em outro
+lugar.
+
+Sugestão: `BREVIS_POD_ANNOTATIONS` no formato `chave=valor,chave=valor`, do mesmo
+jeito que `BREVIS_POD_ENV_FROM_SECRETS` já é uma lista. Assim a anotação do
+gcsfuse é config de instalação, não código.
+
 ### O cluster é GKE, não EKS
 
 O pedido fala em EKS. O cluster de dev é **GKE**:
