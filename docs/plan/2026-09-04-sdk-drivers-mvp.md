@@ -414,7 +414,7 @@ Redshift vai precisar.
 contra o bucket real; ordem determinística provada com um teste que falharia
 com listagem não ordenada.
 
-### Fase 2 — Postgres, os dois lados · `v0.20.0`
+### Fase 2 — Postgres, os dois lados · **entregue na `v0.30.0`**
 
 O `reconcile` sobe para `internal/core`. `CopyFrom` na carga, `ON CONFLICT` na
 dedup, a tabela de tipos com teste por linha.

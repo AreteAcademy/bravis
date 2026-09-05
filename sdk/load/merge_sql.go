@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"cloud.google.com/go/bigquery"
+
+	"github.com/AreteAcademy/brevis/sdk/internal/core"
 )
 
 // reconcile decides which columns the MERGE inserts, and refuses the cases
@@ -28,45 +30,38 @@ import (
 //
 // Returns the intersection, in destination order.
 func reconcile(dest, incoming bigquery.Schema) ([]string, error) {
+	// A regra de NOMES vive em core.Reconcile, porque os quatro destinos com
+	// esquema tem o mesmo problema e foi ele que custou a v0.12.0. O que fica
+	// aqui e a conferencia de TIPO, que e do BigQuery: nos destinos SQL quem
+	// recusa o tipo errado e o proprio servidor, no INSERT.
+	nomes := func(s bigquery.Schema) []string {
+		out := make([]string, len(s))
+		for i, f := range s {
+			out[i] = f.Name
+		}
+		return out
+	}
+
+	cols, err := core.Reconcile(nomes(dest), nomes(incoming), namesOf(dest))
+	if err != nil {
+		return nil, err
+	}
+
 	destTypes := make(map[string]bigquery.FieldType, len(dest))
 	for _, f := range dest {
 		destTypes[f.Name] = f.Type
 	}
-
-	var extra, mismatched []string
-	incomingTypes := make(map[string]bigquery.FieldType, len(incoming))
+	var mismatched []string
 	for _, f := range incoming {
-		incomingTypes[f.Name] = f.Type
 		destType, present := destTypes[f.Name]
-		if !present {
-			extra = append(extra, f.Name)
-			continue
-		}
-		if !compatible(destType, f.Type) {
+		if present && !compatible(destType, f.Type) {
 			mismatched = append(mismatched, fmt.Sprintf("%s (destination %s, incoming %s)",
 				f.Name, destType, f.Type))
 		}
 	}
-
-	if len(extra) > 0 {
-		sort.Strings(extra)
-		return nil, fmt.Errorf("the rows carry column(s) %s, which %s does not have. "+
-			"They would be silently dropped, so the load stops here: add the column to the "+
-			"table, or remove the field in Transform", strings.Join(extra, ", "), namesOf(dest))
-	}
 	if len(mismatched) > 0 {
 		sort.Strings(mismatched)
 		return nil, fmt.Errorf("type mismatch on %s", strings.Join(mismatched, "; "))
-	}
-
-	cols := make([]string, 0, len(dest))
-	for _, f := range dest {
-		if _, present := incomingTypes[f.Name]; present {
-			cols = append(cols, f.Name)
-		}
-	}
-	if len(cols) == 0 {
-		return nil, fmt.Errorf("no column in common between the rows and the destination")
 	}
 
 	return cols, nil

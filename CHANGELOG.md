@@ -8,6 +8,62 @@ A tag de um módulo aninhado leva o prefixo do diretório: `sdk/v0.2.1`.
 
 ---
 
+## [0.30.0] — 2026-09-05
+
+Fase 2 do plano dos drivers: **Postgres, os dois lados.**
+
+### Adicionado
+
+```go
+import (
+    frompg "github.com/AreteAcademy/brevis/sdk/from/postgres"
+    topg   "github.com/AreteAcademy/brevis/sdk/to/postgres"
+)
+
+From: frompg.Query{DSN: dsn, SQL: "SELECT … WHERE id > $1 ORDER BY id LIMIT $2", Args: args}
+To:   topg.Table{DSN: dsn, Name: "landing.pedidos"}
+```
+
+**Leitura em fluxo.** O driver nunca monta o lote inteiro antes de devolver, e há
+teste que falha se ele passar a montar: ele consome uma linha de 50 mil e mede.
+
+**Os tipos vêm da coluna, não do valor Go.** Na leitura, do OID declarado; na
+escrita, do `data_type`. A distinção não é acadêmica — o pgx devolve `DATE` e
+`TIMESTAMPTZ` como o mesmo `time.Time`, e sem o OID uma data virava
+`2026-09-05T00:00:00Z`: uma hora que ninguém escreveu, e que anda um dia na
+primeira conversão de fuso.
+
+`NUMERIC` vira **string**, e não `float64`: dinheiro perde centavos em valores
+grandes, e o prejuízo aparece meses depois num relatório que ninguém confere.
+
+**Escrita por `COPY FROM STDIN`.** A tabela precisa **existir**: este driver não
+a cria e não infere tipo — deduzir `NUMERIC(18,2)` de um número JSON é a única
+coisa que este SDK decidiu não fazer. O erro lista as colunas que o lote traz,
+para o DDL sair de uma leitura.
+
+**Dedup** vira `INSERT … ON CONFLICT (ingestion_id) DO NOTHING`, e exige índice
+único em `ingestion_id`. O SDK confere e recusa nomeando o comando; **não cria**,
+porque um loader que cria índice trava tabela de produção.
+
+### Mudado
+
+**`Reconcile` subiu para `internal/core`** e passa a servir os destinos com
+esquema. No Postgres ele compra outra coisa que no BigQuery, e vale dizer qual:
+o `CopyFrom` do pgx manda a lista de colunas junto, então valor e coluna não se
+desencontram como no `INSERT ROW`. O que ele compra aqui é **recusar antes de
+tocar o servidor** — que devolveria `column "x" does not exist` no meio de um
+COPY, depois do extract inteiro, sem dizer o que fazer.
+
+### Dois defeitos que só os testes de integração acharam
+
+1. O `COPY` binário recusa uma string RFC 3339 num `timestamptz` com "cannot find
+   encode plan" — e **é assim que todo registro do SDK carrega um instante**.
+2. `DATE` voltava com hora, pelo motivo acima.
+
+Nenhum dos dois aparece contra valores montados em memória.
+
+---
+
 ## [0.29.1] — 2026-09-05
 
 ### Corrigido

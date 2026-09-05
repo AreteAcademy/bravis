@@ -48,6 +48,19 @@ perdedora seria um campo escrito que não faz nada.
 **Todo 2xx** chega ao `Records`, `204` e `206` incluídos. Não-2xx é erro com
 status e corpo, com retry onde faz sentido.
 
+### `from/postgres` e `to/postgres`, ponto a ponto
+
+| | |
+|---|---|
+| `postgres.Query{DSN, SQL, Args}` | lê um SELECT, uma linha por registro, **em fluxo** |
+| `postgres.Table{DSN, Name}` | carrega por `COPY FROM STDIN` |
+| `Dedup: DedupMerge` | `INSERT … ON CONFLICT (ingestion_id) DO NOTHING` |
+| índice único | **exigido**, nunca criado — um loader que cria índice trava tabela de produção |
+| `CreateTable` | **não existe**: a tabela precisa existir, e o erro lista as colunas do lote |
+
+Os tipos vêm do **OID declarado** na leitura e do `data_type` na escrita — não do
+tipo Go, que não distingue `DATE` de `TIMESTAMPTZ`.
+
 ### `from.Files`, ponto a ponto
 
 | | |

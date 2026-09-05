@@ -2,8 +2,12 @@ package core
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"log/slog"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -287,4 +291,35 @@ func plural(n int, one, many string) string {
 		return one
 	}
 	return many
+}
+
+// WritePreview escreve o preview onde o chamador pediu, ou em stderr.
+//
+// Existe para que cada driver novo nao repita a escolha do destino e o
+// tratamento do writer nil -- foi assim que o preview nasceu dentro do extract
+// e teve de ser movido quando o segundo driver apareceu.
+func WritePreview(w io.Writer, amostra []any, orcamento int, st PreviewStats) {
+	if w == nil {
+		w = os.Stderr
+	}
+	_, _ = io.WriteString(w, RenderPreview(amostra, orcamento, st))
+}
+
+// LogExtract emite a linha de resumo que todo driver de leitura deve emitir,
+// com as mesmas chaves -- para que "quantas linhas e quanto tempo" se leia
+// igual, venha de HTTP, de arquivo ou de banco.
+func LogExtract(ctx context.Context, driver, fonte string, st PreviewStats) {
+	args := []any{
+		"driver", driver,
+		"source", fonte,
+		"rows", st.Rows,
+		"duration", RoundDuration(st.Duration),
+	}
+	if st.Pages > 1 {
+		args = append(args, "pages", st.Pages)
+	}
+	if st.Bytes > 0 {
+		args = append(args, "bytes", st.Bytes)
+	}
+	slog.InfoContext(ctx, "extract complete", args...)
 }

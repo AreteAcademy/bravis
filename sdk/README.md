@@ -383,6 +383,57 @@ lines, _ := extract.CSV(ctx, sdk.Source{URL: url, NoHeader: true})
 // -> {field_0: Bob,   field_1: 25}
 ```
 
+## Postgres
+
+```go
+import (
+    frompg "github.com/AreteAcademy/brevis/sdk/from/postgres"
+    topg   "github.com/AreteAcademy/brevis/sdk/to/postgres"
+)
+
+sdk.Run(sdk.Pipeline{
+    Source: sdk.Source{From: frompg.Query{
+        DSN:  os.Getenv("PG_DSN"),
+        SQL:  "SELECT * FROM pedidos WHERE atualizado_em > $1 ORDER BY atualizado_em, id LIMIT $2",
+        Args: []any{run.LogicalDate, 50_000},
+    }},
+    Target: sdk.Target{
+        To:      topg.Table{DSN: os.Getenv("PG_DSN"), Name: "landing.pedidos"},
+        Columns: []string{"ingestion_id", "ingestion_loaded_at", "provider", "valor"},
+        Dedup:   sdk.DedupMerge,
+    },
+})
+```
+
+Rows stream: the driver never builds the whole batch before returning. Paginate
+by **key**, not `OFFSET` — `OFFSET` is O(n²) on a large table because the server
+counts the rows it discards, which is why there is no `Offset` field to reach for.
+
+**Types come from the column, not from the Go value.** Reading, they come from
+the declared OID; writing, from `information_schema.data_type`. That distinction
+is not academic: pgx hands back `DATE` and `TIMESTAMPTZ` as the same `time.Time`,
+so without the OID a date becomes `2026-09-05T00:00:00Z` — an hour nobody wrote,
+which shifts a day on the first timezone conversion.
+
+| SQL | JSON | why |
+|---|---|---|
+| `NUMERIC` | string | `float64` loses cents on large amounts, and the loss surfaces months later |
+| `DATE` | `2026-09-05` | no invented hour |
+| `TIMESTAMPTZ` | RFC 3339, UTC | |
+| `JSON`/`JSONB` | nested | re-serializing would mean decoding twice |
+| `BYTEA` | base64 | |
+| `UUID` | string | raw would be an array of 16 numbers |
+
+Writing goes through `COPY FROM STDIN`. **The table must exist**: this driver
+does not create it and does not infer types — guessing `NUMERIC(18,2)` from a
+JSON number is the one thing this SDK will not do, so the error lists the columns
+the batch carries instead, and the DDL comes out of a reading.
+
+`Dedup: DedupMerge` becomes `INSERT … ON CONFLICT (ingestion_id) DO NOTHING`,
+which needs a **unique index on `ingestion_id`**. The SDK checks that it exists
+and refuses by name if it does not. It never creates one: a loader that can
+create an index can lock a production table.
+
 ## Pagination
 
 Four strategies, picked by which field you set. Setting two is an error, not a
