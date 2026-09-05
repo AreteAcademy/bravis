@@ -8,6 +8,53 @@ A tag de um módulo aninhado leva o prefixo do diretório: `sdk/v0.2.1`.
 
 ---
 
+## [0.41.0] — 2026-09-05
+
+Item 10 da segunda rodada.
+
+### `pycompat.JSONCanonico`
+
+```go
+b, err := pycompat.JSONCanonico(registro)   // a chave, quando a origem não tem id
+```
+
+É o `json.dumps(v, sort_keys=True, separators=(",",":"), ensure_ascii=False)`,
+que é como boa parte dos fetchers em Python deriva a chave quando a fonte não
+tem id estável. Reproduzi-lo à mão custou ~90 linhas no consumidor, e as **três
+armadilhas** mudam a chave **sem erro**:
+
+1. o `encoding/json` escapa `<`, `>` e `&`, e o Python não escapa nenhum dos
+   três;
+2. sem `PreserveNumbers`, `1` e `1.0` colapsam no mesmo `float64` — e aqui isso
+   é **erro**, não palpite;
+3. inteiro de precisão arbitrária perde precisão ao passar por `float64`.
+
+O teste é diferencial contra o `json.dumps` de um `python3`, em treze formas.
+
+### O conhecimento da armadilha 1 estava num lugar só, e não era compartilhado
+
+O SDK já sabia escapar como o Python — `to/redshift` chama `SetEscapeHTML(false)`
+desde a `v0.32.0` — mas o conhecimento vivia no driver. A segunda vez que ele foi
+necessário custaria noventa linhas escritas de novo, e é essa a observação que o
+item faz.
+
+A regra foi para `internal/core.AppendJSONString`, e o driver do Redshift passou
+a usá-la. O teste compara byte a byte com o `encoding/json` sem escape de HTML.
+
+### O canônico independente de linguagem fica para depois, e por quê
+
+A proposta sugere considerar **também** o RFC 8785 (JCS), para quem começa um ETL
+novo e só quer uma chave estável — e diz, com razão, que **não devem ser a mesma
+função**.
+
+Não entrou agora porque o JCS canonicaliza número pela regra do
+`Number::toString` do ECMAScript, que não é a do Python nem a do Go. Implementá-lo
+pela metade seria pior que não ter: uma chave que quase segue um padrão não segue
+padrão nenhum, e quem a escolher acreditando no contrário só descobre ao trocar
+de implementação.
+
+---
+
 ## [0.40.0] — 2026-09-05
 
 Itens 11 e 12 da segunda rodada da contribuição de consumidor.

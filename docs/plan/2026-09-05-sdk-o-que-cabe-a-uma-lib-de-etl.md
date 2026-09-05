@@ -497,9 +497,16 @@ página vazia, que continua sendo a rede de segurança.
 | # | decisão | onde |
 |---|---|---|
 | 9 | **aceito** | `v0.42.0` |
-| 10 | **aceito**, com a separação que o próprio pedido propõe | `v0.41.0` |
+| 10 | **aceito**; o JCS fica para depois, com motivo | `v0.41.0` |
 | 11 | **aceito**, e a incoerência era minha | `v0.40.0` |
 | 12 | **aceito** | `v0.40.0` |
+
+**O JCS não entrou junto.** Ele canonicaliza número pela regra do
+`Number::toString` do ECMAScript, que não é a do Python nem a do Go.
+Implementá-lo pela metade seria pior que não ter: uma chave que quase segue um
+padrão não segue padrão nenhum, e quem a escolhesse acreditando no contrário só
+descobriria ao trocar de implementação. A separação que o pedido propõe está
+certa e continua valendo quando ele for feito.
 
 O item 11 estava certo e é o que vale registrar: eu **documentei** a divergência
 na `v0.36.0` e achei que bastava. O `default` recusava adivinhar e o `case

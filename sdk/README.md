@@ -670,6 +670,18 @@ Key:       sdk.KeyWith(pycompat.Texto, "provider", "id"),
 Transform: []sdk.Transformer{sdk.IngestionIDWith(pycompat.Texto)},
 ```
 
+`pycompat.JSONCanonico` is
+`json.dumps(v, sort_keys=True, separators=(",",":"), ensure_ascii=False)` — the
+shape a Python fetcher uses to derive a key when the source has no stable id.
+Reproducing it by hand costs about ninety lines and has three traps, each of
+which changes the key **without an error**: `encoding/json` escapes `<`, `>` and
+`&` and Python escapes none of them; without `PreserveNumbers`, `1` and `1.0`
+collapse; and an arbitrary-precision integer loses precision through a `float64`.
+
+It matches **Python**, not a standard. A team starting a new ETL that just wants
+a stable key wants RFC 8785 (JCS) instead, and the two must not be the same
+function — see the CHANGELOG for why that one is not here yet.
+
 `pycompat.TextoOuVazio` is `str(x or "")`, the idiom most ports use. Note that
 `0` and `0.0` become `""` and not `"0"` — that is Python's truthiness, and it is
 the case a hand-written version gets wrong.

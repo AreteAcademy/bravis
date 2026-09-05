@@ -3,7 +3,8 @@ package redshift
 import (
 	"bytes"
 	"strconv"
-	"unicode/utf8"
+
+	"github.com/AreteAcademy/brevis/sdk/internal/core"
 )
 
 // escreverEscalar escreve os tipos que um registro JSON quase sempre carrega,
@@ -52,76 +53,9 @@ func escreverEscalar(buf *bytes.Buffer, v any) bool {
 	return true
 }
 
-// escreverTexto escreve uma string JSON.
-//
-// O caminho rapido cobre o texto comum -- sem aspas, contrabarra nem controle
-// -- e cai para o lento no resto. O lento segue o RFC 8259 e a mesma escolha
-// do encoding/json para os casos de borda, incluindo substituir byte invalido
-// por U+FFFD, que e o que o Marshal faz.
+// escreverTexto delega ao core: a mesma regra e precisa aqui e no canonico do
+// pycompat, e ter duas copias dela e ter duas chances de divergir do Python
+// sem ninguem notar.
 func escreverTexto(buf *bytes.Buffer, s string) {
-	if simples(s) {
-		buf.WriteByte('"')
-		buf.WriteString(s)
-		buf.WriteByte('"')
-		return
-	}
-
-	buf.WriteByte('"')
-	inicio := 0
-	for i := 0; i < len(s); {
-		if b := s[i]; b < utf8.RuneSelf {
-			if b >= 0x20 && b != '"' && b != '\\' {
-				i++
-				continue
-			}
-			buf.WriteString(s[inicio:i])
-			switch b {
-			case '"':
-				buf.WriteString(`\"`)
-			case '\\':
-				buf.WriteString(`\\`)
-			case '\n':
-				buf.WriteString(`\n`)
-			case '\r':
-				buf.WriteString(`\r`)
-			case '\t':
-				buf.WriteString(`\t`)
-			default:
-				buf.WriteString(`\u00`)
-				const hex = "0123456789abcdef"
-				buf.WriteByte(hex[b>>4])
-				buf.WriteByte(hex[b&0xF])
-			}
-			i++
-			inicio = i
-			continue
-		}
-
-		r, tamanho := utf8.DecodeRuneInString(s[i:])
-		if r == utf8.RuneError && tamanho == 1 {
-			// Byte invalido: o encoding/json escreve a SEQUENCIA ESCAPADA
-			// \ufffd, e nao os bytes de U+FFFD. Sair diferente dele
-			// produziria um arquivo que o COPY le de outro jeito -- e foi o
-			// teste byte a byte que pegou.
-			buf.WriteString(s[inicio:i])
-			buf.WriteString(`\ufffd`)
-			i += tamanho
-			inicio = i
-			continue
-		}
-		i += tamanho
-	}
-	buf.WriteString(s[inicio:])
-	buf.WriteByte('"')
-}
-
-// simples diz se a string pode ir entre aspas sem nenhum escape.
-func simples(s string) bool {
-	for i := 0; i < len(s); i++ {
-		b := s[i]
-		if b < 0x20 || b == '"' || b == '\\' || b >= utf8.RuneSelf {
-			return false
-		}
-	}
-	return true
+	buf.Write(core.AppendJSONString(buf.AvailableBuffer(), s))
 }
