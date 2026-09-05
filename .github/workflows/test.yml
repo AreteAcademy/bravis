@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go-version: ['1.25']
+        go-version: ['1.27']
 
     steps:
       - uses: actions/checkout@v4
@@ -59,7 +59,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version: '1.27'
           cache: true
 
       # docker run, e não um service container: a imagem oficial do MinIO
@@ -124,7 +124,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version: '1.27'
           cache: true
 
       - name: Run go fmt
@@ -170,7 +170,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version: '1.27'
 
       - name: Run Gosec Security Scanner
         uses: securego/gosec@master
@@ -194,7 +194,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version: '1.27'
           cache: true
 
       - name: Build SDK
