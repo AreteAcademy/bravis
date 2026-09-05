@@ -383,3 +383,26 @@ func TestIngestionIDLeODepoisDoRename(t *testing.T) {
 		t.Errorf("com o nome novo deveria funcionar: %v", err)
 	}
 }
+
+// TestRenameNaoEncadeia guarda uma armadilha que a mudança para escrita no
+// lugar criou, e que o comportamento anterior não tinha.
+//
+// Antes, Rename montava um mapa novo percorrendo o registro uma vez, então
+// {a: b, b: c} sobre um registro que só tem `a` produzia {b: …} sempre.
+// Aplicando as trocas uma a uma no lugar, o valor pode acabar em `b` ou em
+// `c` -- dependendo da ordem em que o mapa foi percorrido, que Go embaralha de
+// propósito.
+//
+// Duzentas repetições porque uma só passaria por sorte metade das vezes.
+func TestRenameNaoEncadeia(t *testing.T) {
+	for i := 0; i < 200; i++ {
+		out, err := Rename(map[string]string{"a": "b", "b": "c"})(map[string]any{"a": 1})
+		if err != nil {
+			t.Fatal(err)
+		}
+		m := out.(map[string]any)
+		if _, tem := m["b"]; !tem {
+			t.Fatalf("o valor foi parar em %v; renomear a->b não pode encadear em b->c", m)
+		}
+	}
+}

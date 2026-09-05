@@ -14,6 +14,17 @@ import (
 // case -- and returns what should be loaded in its place. Returning
 // SkipRecord drops the record.
 //
+// # The map you receive belongs to the chain
+//
+// Transform hands you a copy it made for this record, and nothing outside the
+// chain holds it. You may modify it in place and return it -- that is what the
+// built-in Transformers do, and it is why a chain of six costs one map instead
+// of six.
+//
+// What you must not do is RETAIN it: the transformers after yours will write
+// into the same map, and the loader reads it after the chain finishes. If you
+// need the record to outlive your function, copy it.
+//
 // This is a seam, not a transformation engine. The SDK does not know your
 // business rules and does not try to: heavy reshaping belongs downstream, in
 // dbt. What belongs here is the shaping a row needs before it is worth
@@ -96,7 +107,29 @@ func Transform(data *Data, fns ...Transformer) *Data {
 }
 
 // applyAll runs the chain, reporting whether the record was skipped.
+//
+// Ele faz UMA copia do registro antes da cadeia, e a partir dai os
+// transformers escrevem no lugar.
+//
+// Antes, cada transformer devolvia um mapa novo, "porque o chamador ainda pode
+// estar segurando o mapa". Isso e verdade exatamente uma vez -- para o mapa que
+// o decodificador acabou de entregar, e que o preview do extract guarda para
+// mostrar o que a FONTE mandou. Depois da primeira copia, o unico que segura o
+// registro e a propria cadeia, e as outras seis copias eram trabalho identico
+// repetido por registro: seis mapas por linha, numa carga de milhoes.
+//
+// A copia fica AQUI, num lugar so, e nao dentro de cada transformer -- que e o
+// que torna a economia estrutural em vez de uma otimizacao a ser lembrada em
+// cada driver novo.
 func applyAll(fns []Transformer, payload any) (any, bool, error) {
+	if obj, ehObjeto := payload.(map[string]any); ehObjeto && len(fns) > 0 {
+		copia := make(map[string]any, len(obj))
+		for k, v := range obj {
+			copia[k] = v
+		}
+		payload = copia
+	}
+
 	for n, fn := range fns {
 		if fn == nil {
 			continue
@@ -147,23 +180,26 @@ func Accept(fields ...string) Transformer {
 			return payload, nil
 		}
 
+		// Os ausentes sao conferidos ANTES de apagar qualquer coisa: recusar
+		// depois de ter mexido no registro deixaria o erro descrevendo um
+		// registro que ja nao existe.
 		var missing []string
-		out := make(map[string]any, len(fields))
 		for _, f := range fields {
-			v, present := obj[f]
-			if !present {
+			if _, present := obj[f]; !present {
 				missing = append(missing, f)
-				continue
 			}
-			out[f] = v
 		}
-
 		if len(missing) > 0 {
 			return nil, fmt.Errorf("Accept names %s, which this record does not have. "+
 				"It has: %s", strings.Join(missing, ", "), availableKeys(obj))
 		}
 
-		return out, nil
+		for k := range obj {
+			if !keep[k] {
+				delete(obj, k)
+			}
+		}
+		return obj, nil
 	}
 }
 
@@ -183,13 +219,10 @@ func Without(fields ...string) Transformer {
 		if !ok {
 			return payload, nil
 		}
-		out := make(map[string]any, len(obj))
-		for k, v := range obj {
-			if !drop[k] {
-				out[k] = v
-			}
+		for f := range drop {
+			delete(obj, f)
 		}
-		return out, nil
+		return obj, nil
 	}
 }
 
@@ -221,15 +254,26 @@ func Rename(names map[string]string) Transformer {
 				strings.Join(clashes, ", "))
 		}
 
-		out := make(map[string]any, len(obj))
-		for k, v := range obj {
-			if to, renamed := names[k]; renamed {
-				out[to] = v
-				continue
-			}
-			out[k] = v
+		// Dois passos, e nao um: aplicar as trocas uma a uma no lugar faria
+		// {a: b, b: c} sobre um registro que so tem `a` mover o valor para
+		// `c` ou parar em `b`, dependendo da ordem em que o mapa foi
+		// percorrido. Lendo tudo antes de escrever, o resultado e o mesmo que
+		// montar um mapa novo -- que era o comportamento anterior.
+		type troca struct {
+			para  string
+			valor any
 		}
-		return out, nil
+		var trocas []troca
+		for de, para := range names {
+			if v, present := obj[de]; present {
+				trocas = append(trocas, troca{para, v})
+				delete(obj, de)
+			}
+		}
+		for _, t := range trocas {
+			obj[t.para] = t.valor
+		}
+		return obj, nil
 	}
 }
 

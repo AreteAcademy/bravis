@@ -2,8 +2,11 @@ package core
 
 import (
 	"context"
+	"crypto/sha1" //nolint:gosec // UUID v5 e definido sobre SHA-1; nao e uso criptografico
 	"fmt"
+	"hash"
 	"io"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -47,14 +50,90 @@ func (e *Envelope) IngestionID() (string, error) {
 // computes this. A fmt.Sprintf in a fetcher would look identical and produce a
 // different id on the first float formatted differently.
 func ComputeIngestionID(provider, entity, sourceKey, recordTS string) (string, error) {
-	const ingestNS = "e3a4f8c0-1b9d-4ea0-9c2e-77f6a6c4a4d7"
-	ns, err := uuid.Parse(ingestNS)
-	if err != nil {
-		return "", err
-	}
+	// A chave e montada num buffer de pilha em vez de fmt.Sprintf: o Sprintf
+	// alocava a fatia de varargs e a string, e o []byte(key) alocava de novo,
+	// uma vez por registro. O RESULTADO e byte a byte o mesmo -- a formula e
+	// congelada, e ha teste com o valor exato conferido contra o uuid.uuid5
+	// do Python.
+	tamanho := len(provider) + len(entity) + len(sourceKey) + len(recordTS) + 3
 
-	key := fmt.Sprintf("%s|%s|%s|%s", provider, entity, sourceKey, recordTS)
-	return uuid.NewSHA1(ns, []byte(key)).String(), nil
+	var pilha [192]byte
+	var chave []byte
+	if tamanho <= len(pilha) {
+		chave = pilha[:0]
+	} else {
+		chave = make([]byte, 0, tamanho)
+	}
+	chave = append(chave, provider...)
+	chave = append(chave, '|')
+	chave = append(chave, entity...)
+	chave = append(chave, '|')
+	chave = append(chave, sourceKey...)
+	chave = append(chave, '|')
+	chave = append(chave, recordTS...)
+
+	return formatarUUID(uuidV5(namespaceDeIngestao, chave)), nil
+}
+
+// digestos guarda os sha1 entre chamadas.
+//
+// O uuid.NewSHA1 chama sha1.New() por invocacao, e o Sum(nil) aloca de novo:
+// tres alocacoes por registro para calcular um hash de 20 bytes. Numa carga de
+// milhoes, sao milhoes de digests criados e jogados fora.
+var digestos = sync.Pool{New: func() any { return sha1.New() }}
+
+// uuidV5 e a mesma coisa que uuid.NewSHA1, sem as alocacoes.
+//
+// Reimplementar isto e mexer na FORMULA CONGELADA, entao ha duas redes: o teste
+// contra o valor do uuid.uuid5 do Python, que ja existia, e um teste
+// diferencial que compara esta funcao com a do proprio pacote uuid sobre
+// milhares de entradas aleatorias. Uma divergencia de um bit aqui mudaria todo
+// ingestion_id ja gravado.
+func uuidV5(espaco uuid.UUID, dados []byte) uuid.UUID {
+	h := digestos.Get().(hash.Hash)
+	defer digestos.Put(h)
+
+	h.Reset()
+	_, _ = h.Write(espaco[:])
+	_, _ = h.Write(dados)
+
+	var soma [sha1.Size]byte
+	resumo := h.Sum(soma[:0])
+
+	var u uuid.UUID
+	copy(u[:], resumo)
+	u[6] = (u[6] & 0x0f) | 0x50 // versao 5
+	u[8] = (u[8] & 0x3f) | 0x80 // variante RFC 4122
+	return u
+}
+
+// namespaceDeIngestao e o namespace UUID v5, resolvido UMA vez.
+//
+// Ele era parseado a cada registro -- a string e constante, e o parse dela e
+// trabalho identico repetido milhoes de vezes numa carga.
+//
+// O valor e CONGELADO: mudar qualquer coisa aqui muda todo ingestion_id que
+// ja existe, e uma carga anterior deixaria de casar com uma nova.
+var namespaceDeIngestao = uuid.MustParse("e3a4f8c0-1b9d-4ea0-9c2e-77f6a6c4a4d7")
+
+// formatarUUID escreve o formato canonico direto num array de pilha.
+//
+// O uuid.String() monta uma fatia no heap e converte; aqui a unica alocacao e
+// a da string final, que precisa existir porque ela vai para o registro.
+func formatarUUID(u uuid.UUID) string {
+	const hex = "0123456789abcdef"
+	var b [36]byte
+	j := 0
+	for i, c := range u {
+		if i == 4 || i == 6 || i == 8 || i == 10 {
+			b[j] = '-'
+			j++
+		}
+		b[j] = hex[c>>4]
+		b[j+1] = hex[c&0x0f]
+		j += 2
+	}
+	return string(b[:])
 }
 
 // Dedup names how a load avoids writing a record twice.

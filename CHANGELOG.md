@@ -8,6 +8,79 @@ A tag de um módulo aninhado leva o prefixo do diretório: `sdk/v0.2.1`.
 
 ---
 
+## [0.34.0] — 2026-09-05
+
+**Mudança de contrato no `Transformer`**, e é ela que paga tudo o que vem
+depois.
+
+### O registro pertence à cadeia
+
+`Transform` entrega a cada `Transformer` uma cópia feita para aquele registro, e
+nada fora da cadeia a segura. **Você pode escrever nela e devolvê-la** — é o que
+os transformers embutidos passaram a fazer.
+
+O que não se pode fazer é **guardá-la**: os transformers seguintes escrevem no
+mesmo mapa, e o loader o lê quando a cadeia termina. Se o registro precisa
+sobreviver à sua função, copie.
+
+Devolver um mapa diferente continua funcionando, e é o que a maioria dos
+transformers escritos à mão faz.
+
+**Quem precisa mudar alguma coisa:** só quem guarda o mapa recebido para usar
+depois. Ler campos, escrever campos e devolver outro mapa seguem idênticos.
+
+### Por quê
+
+Cada transformer devolvia um mapa novo, "porque o chamador ainda pode estar
+segurando o mapa". Isso é verdade **exatamente uma vez** — para o mapa que o
+decodificador acabou de produzir, e que o preview do extract guarda para mostrar
+o que a **fonte** mandou. As outras cinco cópias eram trabalho idêntico
+repetido, uma vez por registro.
+
+A cópia agora acontece uma vez, num lugar só. E há teste novo para a garantia
+que passou a importar e que antes não existia: **a cadeia não escreve no
+registro que o extract entregou** — senão o preview mostraria o resultado do
+Transform dizendo que é a resposta da fonte.
+
+### O `ingestion_id` ficou mais barato, e é byte a byte o mesmo
+
+Três consertos no caminho mais quente do SDK, todos preservando a fórmula
+congelada:
+
+- **o namespace era parseado a cada registro.** A string é constante.
+- **a chave era montada com `fmt.Sprintf` e convertida com `[]byte(...)`** —
+  três alocações para concatenar quatro strings. Agora vai num buffer de pilha.
+- **`uuid.NewSHA1` cria um digest SHA-1 por chamada e aloca de novo no `Sum`.**
+  Um pool e um buffer de pilha resolvem.
+
+Reimplementar a fórmula congelada tem duas redes: o teste contra o valor do
+`uuid.uuid5` do Python, que já existia, e um **teste diferencial** que compara a
+nova implementação com a do pacote `uuid` sobre 5 mil entradas aleatórias. Uma
+divergência de um bit mudaria todo `ingestion_id` já gravado.
+
+### Os números
+
+Cadeia típica de seis transformers, por registro:
+
+| | antes | depois |
+|---|---|---|
+| alocações | 30 | **18** |
+| memória | 2 866 B | **1 778 B** |
+| tempo | 2 109 ns | **1 615 ns** |
+
+Ponta a ponta, com extract e decodificação de 5 mil registros (Go 1.27):
+
+| | antes | depois |
+|---|---|---|
+| alocações | 205 259 | **145 241** |
+| memória | 17,99 MB | **12,55 MB** |
+| tempo | ~16,4 ms | **~13,1 ms** |
+
+De **41 para 29 alocações por linha**. O que resta é dominado pelo
+`encoding/json` construindo o `map[string]any`, que é inerente ao formato.
+
+---
+
 ## [0.33.1] — 2026-09-05
 
 Sem mudança de API. A `v0.33.0` foi marcada com um teste que falha sob o Go

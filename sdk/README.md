@@ -508,6 +508,37 @@ it, then `MERGE … WHEN NOT MATCHED THEN INSERT` with the column list **named**
 Named always: the BigQuery `INSERT ROW` matches by position, and v0.12.0 shipped
 with the columns swapped because nobody had seen the generated SQL.
 
+## The record belongs to the chain
+
+`Transform` hands each `Transformer` a copy it made for that record, and
+nothing outside the chain holds it. **You may modify it in place and return
+it** — that is what the built-in transformers do, and it is why a chain of six
+costs one map instead of six.
+
+What you must not do is *retain* it: the transformers after yours write into the
+same map, and the loader reads it once the chain finishes. If the record has to
+outlive your function, copy it.
+
+```go
+// fine, and the cheap way
+func(payload any) (any, error) {
+    r := payload.(map[string]any)
+    r["total"] = r["preco"].(float64) * r["qtd"].(float64)
+    return r, nil
+}
+
+// also fine -- returning a different map is still supported
+func(payload any) (any, error) {
+    return map[string]any{"resumo": payload}, nil
+}
+```
+
+This changed in v0.34.0. Before it, every transformer returned a fresh map
+"because the caller may still hold it" — true exactly once, for the map the
+decoder just produced, which the extract preview keeps so it can show what the
+**source** sent. The copy now happens once, in one place, and the other five
+were identical work repeated per record.
+
 ## What each destination supports
 
 Nine drivers times four options is 36 combinations, and promising 36 without

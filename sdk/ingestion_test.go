@@ -1,6 +1,7 @@
 package sdk
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -150,14 +151,76 @@ func TestIngestionLoadedAtRecusaSobrescrever(t *testing.T) {
 	}
 }
 
-// Os transformers não mutam a linha do chamador -- a cadeia inteira depende
-// disso, e o defeito já apareceu uma vez no load.
-func TestTransformersDeIngestaoNaoMutamAEntrada(t *testing.T) {
+// TestTransformersEscrevemNoLugar fixa o contrato NOVO, e ele é o oposto do
+// que este teste afirmava antes.
+//
+// Cada transformer devolvia um mapa novo, "porque o chamador ainda pode estar
+// segurando o mapa". Isso é verdade uma vez -- para o mapa que o decodificador
+// entregou --, e as outras seis cópias por registro eram trabalho idêntico
+// repetido. A cópia passou a ser feita uma vez, no `applyAll`.
+//
+// Quem chama um transformer SOZINHO, fora da cadeia, passa a ver a própria
+// linha alterada. Está documentado no tipo Transformer, e é o preço da conta
+// que o teste seguinte mede.
+func TestTransformersEscrevemNoLugar(t *testing.T) {
+	linha := map[string]any{"provider": "p", "entity": "e", "source_key": "k", "record_ts": "t"}
+	saida := aplica(t, IngestionID(), linha)
+
+	if _, ok := linha[ColumnIngestionID]; !ok {
+		t.Error("o transformer devolveu um mapa novo; a economia da cadeia depende de ele escrever no lugar")
+	}
+	if fmt.Sprint(saida) != fmt.Sprint(linha) {
+		t.Error("o que voltou não é o mesmo mapa que entrou")
+	}
+}
+
+// TestTransformNaoMutaOQueOExtractEntregou é a garantia que passou a importar,
+// e que antes não existia como teste.
+//
+// O preview do extract guarda o registro que a FONTE mandou, para mostrar
+// exatamente isso. Se a cadeia escrevesse por cima dele, o preview passaria a
+// mostrar o resultado do Transform dizendo que é a resposta da fonte -- uma
+// mentira que ninguém teria como notar.
+func TestTransformNaoMutaOQueOExtractEntregou(t *testing.T) {
 	original := map[string]any{"provider": "p", "entity": "e", "source_key": "k", "record_ts": "t"}
-	_ = aplica(t, IngestionID(), original)
-	_ = aplica(t, IngestionLoadedAt(), original)
+
+	saida, pulou, err := applyAll([]Transformer{IngestionID(), IngestionLoadedAt()}, original)
+	if err != nil || pulou {
+		t.Fatalf("applyAll: %v, pulou=%v", err, pulou)
+	}
 
 	if len(original) != 4 {
-		t.Errorf("a linha do chamador foi alterada: %v", original)
+		t.Errorf("a cadeia escreveu no registro do extract: %v", original)
 	}
+	obj := saida.(map[string]any)
+	if len(obj) != 6 {
+		t.Errorf("a saída não tem as duas colunas novas: %v", obj)
+	}
+}
+
+// TestCadeiaFazUmaCopiaSo é a conta que justifica a mudança.
+func TestCadeiaFazUmaCopiaSo(t *testing.T) {
+	fns := []Transformer{
+		Accept("provider", "entity", "source_key", "record_ts"),
+		Rename(map[string]string{"record_ts": "ts"}),
+		Compute("extra", func(map[string]any) (any, error) { return 1, nil }),
+		Without("extra"),
+	}
+
+	alocacoes := testing.AllocsPerRun(200, func() {
+		linha := map[string]any{"provider": "p", "entity": "e", "source_key": "k", "record_ts": "t", "lixo": 1}
+		if _, _, err := applyAll(fns, linha); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	// A linha de entrada custa um mapa, a cópia da cadeia custa outro. Quatro
+	// transformers que copiassem custariam quatro a mais -- e é essa diferença
+	// que o teto pega, não um número absoluto de alocações.
+	const teto float64 = 12
+	if alocacoes > teto {
+		t.Errorf("%.0f alocações para uma linha e quatro transformers (teto %.0f); "+
+			"algum transformer voltou a copiar o mapa", alocacoes, teto)
+	}
+	t.Logf("%.0f alocações", alocacoes)
 }

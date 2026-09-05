@@ -66,7 +66,9 @@ func IngestionID(fields ...string) Transformer {
 				ColumnIngestionID)
 		}
 
-		parts := make([]string, len(names))
+		// Array de pilha: sao sempre quatro, e um slice no heap por registro
+		// numa carga de milhoes e trabalho identico repetido.
+		var parts [4]string
 		var missing []string
 		for i, name := range names {
 			v, present := obj[name]
@@ -92,7 +94,8 @@ func IngestionID(fields ...string) Transformer {
 			return nil, err
 		}
 
-		return with(obj, ColumnIngestionID, id), nil
+		obj[ColumnIngestionID] = id
+		return obj, nil
 	}
 }
 
@@ -113,17 +116,7 @@ func IngestionLoadedAt() Transformer {
 			return nil, fmt.Errorf("the record already has %q; IngestionLoadedAt would overwrite it",
 				ColumnIngestionLoadedAt)
 		}
-		return with(obj, ColumnIngestionLoadedAt, time.Now().UTC().Format(time.RFC3339)), nil
+		obj[ColumnIngestionLoadedAt] = time.Now().UTC().Format(time.RFC3339)
+		return obj, nil
 	}
-}
-
-// with returns a copy carrying one more field. A copy because the caller may
-// still hold the map.
-func with(obj map[string]any, name string, value any) map[string]any {
-	out := make(map[string]any, len(obj)+1)
-	for k, v := range obj {
-		out[k] = v
-	}
-	out[name] = value
-	return out
 }
