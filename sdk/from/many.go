@@ -50,8 +50,23 @@ import (
 // do registro e não da posição; afeta o preview, e afeta qualquer coisa que
 // dependa de ordem. Concorrência é opt-in por isso.
 type Many struct {
-	// Sources são as origens. Obrigatório, e ao menos uma.
+	// Sources são as origens. Obrigatório, ou Discover.
 	Sources []core.Reader
+
+	// Discover monta as origens em runtime, dentro do pipeline.
+	//
+	//	Discover: func(ctx context.Context) ([]sdk.Reader, error) {
+	//	    // um GET que lista as partições, e uma origem por partição
+	//	}
+	//
+	// A lista às vezes só se conhece na execução -- uma origem por partição,
+	// por conta, por dia. Montada ANTES do sdk.Run, ela fica fora do pipeline:
+	// sem retry, sem timeout, sem log, e sem aparecer no Result quando falha.
+	// Aqui ela roda dentro, e o erro dela é o erro do extract.
+	//
+	// Declarar Discover e Sources é erro: duas listas de origens, e a que
+	// perde perde em silêncio.
+	Discover func(ctx context.Context) ([]core.Reader, error)
 
 	// Workers é quantas origens são lidas ao mesmo tempo. Zero ou 1 lê em
 	// ordem, uma de cada vez.
@@ -84,14 +99,38 @@ func (m Many) Describe() string {
 
 // Read satisfaz core.Reader.
 func (m Many) Read(ctx context.Context, opt core.ReadOptions) (iter.Seq2[core.Envelope, error], error) {
-	if len(m.Sources) == 0 {
-		return nil, fmt.Errorf("from.Many precisa de ao menos uma origem em Sources")
+	if len(m.Sources) > 0 && m.Discover != nil {
+		return nil, fmt.Errorf("from.Many declara Sources e Discover, e as duas montam a " +
+			"lista de origens -- a que perde perderia em silêncio")
 	}
-	for i, s := range m.Sources {
+
+	origens := m.Sources
+	if m.Discover != nil {
+		// A descoberta acontece AQUI, dentro do Read, e não na montagem do
+		// pipeline: um erro dela é um erro do extract, com o mesmo tratamento
+		// que qualquer outro -- e não um panic num main antes de tudo começar.
+		descobertas, err := m.Discover(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("from.Many: descobrindo as origens: %w", err)
+		}
+		origens = descobertas
+	}
+
+	if len(origens) == 0 {
+		if m.Discover != nil {
+			return nil, fmt.Errorf("from.Many: o Discover não devolveu origem nenhuma. Zero " +
+				"origens não é o mesmo que zero registros: uma execução que não leu nada " +
+				"porque não havia o que ler é diferente de uma que não sabia onde ler")
+		}
+		return nil, fmt.Errorf("from.Many precisa de ao menos uma origem em Sources, " +
+			"ou de um Discover")
+	}
+	for i, s := range origens {
 		if s == nil {
 			return nil, fmt.Errorf("from.Many: a origem %d é nil", i)
 		}
 	}
+	m.Sources = origens
 
 	trabalhadores := m.Workers
 	if trabalhadores < 1 {

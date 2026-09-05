@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/AreteAcademy/brevis/sdk/internal/core"
+	"github.com/AreteAcademy/brevis/sdk/internal/jsontext"
 )
 
 // JSONCanonico serializa o registro como o Python serializa em
@@ -27,7 +27,7 @@ import (
 // ERRO:
 //
 //  1. o encoding/json escapa `<`, `>` e `&`; o Python nao escapa nenhum dos
-//     tres. A regra vive em core.AppendJSONString, num lugar so;
+//     tres. A regra vive em jsontext.AppendJSONString, num lugar so;
 //  2. sem Source.PreserveNumbers, `1` e `1.0` chegam como o mesmo float64 --
 //     e aqui isso e ERRO, nao um palpite. Ver Texto;
 //  3. inteiro de precisao arbitraria perde precisao ao passar por float64, e o
@@ -57,7 +57,7 @@ func escrever(dst []byte, v any) ([]byte, error) {
 		return append(dst, "false"...), nil
 
 	case string:
-		return core.AppendJSONString(dst, t), nil
+		return jsontext.AppendJSONString(dst, t), nil
 
 	case map[string]any:
 		// sort_keys=True. A ordem de um mapa em Go e embaralhada de proposito,
@@ -74,7 +74,7 @@ func escrever(dst []byte, v any) ([]byte, error) {
 			if i > 0 {
 				dst = append(dst, ',') // separators=(",", ":"): sem espacos
 			}
-			dst = core.AppendJSONString(dst, k)
+			dst = jsontext.AppendJSONString(dst, k)
 			dst = append(dst, ':')
 			var err error
 			if dst, err = escrever(dst, t[k]); err != nil {
@@ -105,7 +105,7 @@ func escrever(dst []byte, v any) ([]byte, error) {
 			return nil, err
 		}
 		if _, ehTexto := v.(string); ehTexto {
-			return core.AppendJSONString(dst, texto), nil
+			return jsontext.AppendJSONString(dst, texto), nil
 		}
 		if !ehNumero(texto) {
 			return nil, fmt.Errorf("JSONCanonico não sabe serializar %T. Ela cobre o que um "+

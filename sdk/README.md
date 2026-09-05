@@ -866,6 +866,52 @@ not invalidate the previous one, so the cost is that somebody re-pastes the
 credential once per window; `ExpiresAt` and `WarnAfter` are what make sure they
 know before it lapses, on the log line *and* in `Stats.CredentialExpiry`.
 
+### Trading secrets for a token
+
+```go
+Auth: &from.Credential{
+    Login: &from.Login{
+        URL:   "https://api.example.com/oauth/token",
+        Body:  from.JSONBody(map[string]any{"client_id": id, "client_secret": segredo}),
+        Token: from.CampoJSON("data.accessToken"),
+    },
+    Apply: from.AsBearer,
+    TTL:   50 * time.Minute,
+}
+```
+
+`Value` can already do this — it is a `func(ctx) (string, error)`, so a login
+fits inside it. What that costs is not obvious: the login request becomes the
+**only** request in the fetcher without retry, without rate limiting, without a
+per-attempt timeout and without secret redaction in the log. Written by hand it
+usually goes out on `http.DefaultClient`, which has no timeout at all.
+
+`Login` makes it with the walk's own client, so it inherits all of that. Pair it
+with `TTL`: some APIs rate-limit the *frequency of authentication* rather than of
+requests.
+
+The source's `Header` is **not** sent to the login endpoint — it may be another
+host, and that header may carry a secret. `Value` and `Login` together are an
+error: two sources for the same secret, and the loser loses silently.
+
+### Discovering the sources at run time
+
+```go
+From: from.Many{
+    Discover: func(ctx context.Context) ([]sdk.Reader, error) {
+        // a GET that lists the partitions, and one source per partition
+    },
+},
+```
+
+Built before `sdk.Run`, that list sits outside the pipeline: no retry, no
+timeout, no log, and nothing in the `Result` when it fails. Here it runs inside,
+and its failure is an extract failure like any other.
+
+A `Discover` that returns **nothing** is an error, not zero rows: a run that read
+nothing because there was nothing to read is different from one that did not know
+where to read.
+
 ### Keeping the rotated credential between runs
 
 Without a store, the renewed value lives for this run only — and somebody

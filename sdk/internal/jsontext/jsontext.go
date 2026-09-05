@@ -1,4 +1,10 @@
-package core
+// Package jsontext escreve texto JSON como o Python escreve.
+//
+// Ele e um pacote FOLHA -- so a stdlib, e nem isso alem do utf8 -- de
+// proposito: o pycompat precisa dele e nao deve arrastar o net/http junto, que
+// e o que aconteceu quando esta funcao morava no core. A verificacao de poda
+// pegou.
+package jsontext
 
 import (
 	"unicode/utf8"

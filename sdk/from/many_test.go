@@ -295,3 +295,67 @@ func timeout() <-chan struct{} {
 	go func() { time.Sleep(10 * time.Second); close(c) }()
 	return c
 }
+
+// TestDiscoverMontaAsOrigensDentroDoPipeline é a segunda metade do item 9.
+//
+// A lista às vezes só se conhece na execução. Montada antes do sdk.Run, ela
+// fica fora do pipeline: sem retry, sem timeout, sem log, e sem aparecer no
+// Result quando falha.
+func TestDiscoverMontaAsOrigensDentroDoPipeline(t *testing.T) {
+	linhas, err := drenar(t, from.Many{
+		Discover: func(context.Context) ([]sdk.Reader, error) {
+			return []sdk.Reader{
+				fonteFalsa{nome: "descoberta-a", linhas: 2},
+				fonteFalsa{nome: "descoberta-b", linhas: 3},
+			}, nil
+		},
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(linhas) != 5 {
+		t.Errorf("%d linhas, esperado 5", len(linhas))
+	}
+}
+
+// TestDiscoverQueFalhaEErroDoExtract: o erro dela é tratado como qualquer
+// outro do extract, e não como um panic num main antes de tudo começar.
+func TestDiscoverQueFalhaEErroDoExtract(t *testing.T) {
+	_, err := drenar(t, from.Many{
+		Discover: func(context.Context) ([]sdk.Reader, error) {
+			return nil, fmt.Errorf("o endpoint que lista as partições devolveu 503")
+		},
+	}, nil)
+	if err == nil {
+		t.Fatal("a descoberta falhou e a execução seguiu")
+	}
+	if !strings.Contains(err.Error(), "descobrindo as origens") {
+		t.Errorf("o erro não diz o que falhou: %v", err)
+	}
+}
+
+// TestDiscoverVazioNaoEZeroRegistros: uma execução que não leu nada porque não
+// havia o que ler é diferente de uma que não sabia onde ler.
+func TestDiscoverVazioNaoEZeroRegistros(t *testing.T) {
+	_, err := drenar(t, from.Many{
+		Discover: func(context.Context) ([]sdk.Reader, error) { return nil, nil },
+	}, nil)
+	if err == nil {
+		t.Fatal("zero origens passou como zero registros")
+	}
+	if !strings.Contains(err.Error(), "não devolveu origem nenhuma") {
+		t.Errorf("erro = %v", err)
+	}
+}
+
+// TestDiscoverESourcesJuntosERecusado: duas listas de origens, e a que perde
+// perderia em silêncio.
+func TestDiscoverESourcesJuntosERecusado(t *testing.T) {
+	_, err := drenar(t, from.Many{
+		Sources:  []sdk.Reader{fonteFalsa{nome: "a", linhas: 1}},
+		Discover: func(context.Context) ([]sdk.Reader, error) { return nil, nil },
+	}, nil)
+	if err == nil {
+		t.Fatal("declarar os dois passou")
+	}
+}

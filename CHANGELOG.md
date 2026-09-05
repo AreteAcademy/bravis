@@ -8,6 +8,66 @@ A tag de um módulo aninhado leva o prefixo do diretório: `sdk/v0.2.1`.
 
 ---
 
+## [0.42.0] — 2026-09-05
+
+Item 9 da segunda rodada, e o último dela. **A requisição mais sensível do
+fetcher deixa de ser a única sem as garantias das outras.**
+
+### `Credential.Login`
+
+```go
+Auth: &from.Credential{
+    Login: &from.Login{
+        URL:   "https://api.example.com/oauth/token",
+        Body:  from.JSONBody(map[string]any{"client_id": id, "client_secret": segredo}),
+        Token: from.CampoJSON("data.accessToken"),
+    },
+    Apply: from.AsBearer,
+    TTL:   50 * time.Minute,
+}
+```
+
+O `Refresh` só renovava sessão por cookie. Não havia como expressar *"POST com
+corpo, e o token sai de um campo do JSON"*, que é a forma que a maioria das APIs
+usa.
+
+Dava para contornar — `Value` é uma func, então o login cabe nela. **O custo não
+era óbvio:** a requisição de login virava a única do fetcher sem retry, sem rate
+limit, sem timeout por tentativa e sem redação de segredo no log. Escrita à mão
+ela costuma sair com `http.DefaultClient`, que não tem timeout nenhum.
+
+Agora ela usa o cliente da caminhada, e há teste medindo: um 503 no login custa
+um retry em vez de derrubar a execução.
+
+O `Header` da fonte **não** vai para o endpoint de login — ele pode ser de outro
+host, e aquele cabeçalho pode carregar segredo. `Value` e `Login` juntos é erro.
+
+`from.CampoJSON`, `from.JSONBody` e `from.FormBody` completam a peça. Um campo
+ausente é **erro nomeando o caminho**: um token vazio viraria um cabeçalho de
+autorização vazio e um 401 adiante, culpando a API.
+
+### A regra de escape virou pacote folha
+
+O `AppendJSONString` da `v0.41.0` morava em `internal/core`, e o `pycompat`
+passou a arrastar o `net/http` junto — de 66 para 8 pacotes de rede num pacote
+que só formata texto. **A verificação de poda pegou**, e a regra foi para
+`internal/jsontext`, que não importa nada além do `unicode/utf8`.
+
+### `Many.Discover`
+
+```go
+From: from.Many{Discover: func(ctx) ([]sdk.Reader, error) { ... }}
+```
+
+A lista de origens às vezes só se conhece na execução. Montada antes do
+`sdk.Run`, ela ficava fora do pipeline: sem retry, sem timeout, sem log, e sem
+aparecer no `Result` quando falhava.
+
+Um `Discover` que devolve **nada** é erro, e não zero linhas: uma execução que não
+leu porque não havia o que ler é diferente de uma que não sabia onde ler.
+
+---
+
 ## [0.41.0] — 2026-09-05
 
 Item 10 da segunda rodada.

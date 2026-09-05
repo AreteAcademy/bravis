@@ -496,7 +496,7 @@ página vazia, que continua sendo a rede de segurança.
 
 | # | decisão | onde |
 |---|---|---|
-| 9 | **aceito** | `v0.42.0` |
+| 9 | **aceito**, os dois lados | `v0.42.0` |
 | 10 | **aceito**; o JCS fica para depois, com motivo | `v0.41.0` |
 | 11 | **aceito**, e a incoerência era minha | `v0.40.0` |
 | 12 | **aceito** | `v0.40.0` |

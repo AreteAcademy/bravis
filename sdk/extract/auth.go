@@ -1,6 +1,7 @@
 package extract
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -115,8 +116,23 @@ func aplicarRotacao(source *core.Source, rotacoes map[string]string) bool {
 // retry and a blip on the renewal costs the whole run. Same RetryConfig, same
 // backoff, same reading of Retry-After.
 func renewRequest(ctx context.Context, client *http.Client, source core.Source, method, rawURL string) ([]byte, error) {
+	return requisitar(ctx, client, source, method, rawURL, nil)
+}
+
+// requisitar faz UMA requisicao com as garantias da caminhada: retry, backoff,
+// Retry-After e redacao de segredo na mensagem.
+//
+// Ela serve a renovacao e o login. As duas sao "uma requisicao fora do fluxo de
+// paginas", e escrever a segunda de novo teria dado a ela metade das garantias
+// -- que e exatamente o que o item 9 aponta acontecer quando o consumidor a
+// escreve a mao.
+func requisitar(ctx context.Context, client *http.Client, source core.Source, method, rawURL string, corpo []byte) ([]byte, error) {
+	rotulo := "refresh"
+	if corpo != nil || method == "POST" {
+		rotulo = "login"
+	}
 	fail := func(format string, a ...any) ([]byte, error) {
-		return nil, fmt.Errorf("refresh "+redactURL(rawURL)+": "+format, a...)
+		return nil, fmt.Errorf(rotulo+" "+redactURL(rawURL)+": "+format, a...)
 	}
 
 	attempts := 1
@@ -125,7 +141,14 @@ func renewRequest(ctx context.Context, client *http.Client, source core.Source, 
 	}
 
 	for attempt := 0; attempt < attempts; attempt++ {
-		req, err := http.NewRequestWithContext(ctx, method, rawURL, nil)
+		var leitor io.Reader
+		if corpo != nil {
+			// Um leitor NOVO por tentativa: o anterior foi consumido, e um
+			// retry com o corpo esgotado manda uma requisicao vazia -- que a
+			// API recusa com uma mensagem sobre o corpo, e nao sobre o retry.
+			leitor = bytes.NewReader(corpo)
+		}
+		req, err := http.NewRequestWithContext(ctx, method, rawURL, leitor)
 		if err != nil {
 			return fail("%w", err)
 		}
@@ -250,4 +273,70 @@ func renew(ctx context.Context, client *http.Client, source *core.Source, jar *c
 	}
 
 	return nil
+}
+
+// prepararLogin monta a Secret que faz o login com o cliente da caminhada.
+//
+// Ela roda ANTES do Credential.Get, e o resultado passa a valer para o TTL e
+// para a trava que o Get ja tem: um login cacheado por uma hora e um login por
+// execucao sao coisas diferentes, e algumas APIs limitam a FREQUENCIA de
+// autenticacao em vez da de requisicoes.
+//
+// O cliente e o mesmo das paginas, e e esse o ponto do item: retry, backoff,
+// Retry-After e redacao de segredo no log passam a valer para a requisicao que
+// carrega as credenciais -- que, escrita a mao, costuma sair com
+// http.DefaultClient e sem timeout nenhum.
+func prepararLogin(client *http.Client, source core.Source) {
+	l := source.Auth.Login
+	if l == nil {
+		return
+	}
+
+	source.Auth.PrepararLogin(func(ctx context.Context) (string, error) {
+		metodo := l.Method
+		if metodo == "" {
+			// Um login e um POST. GET poria o segredo na query string, e a
+			// query string vai para log de servidor e de proxy.
+			metodo = "POST"
+		}
+
+		var tipo string
+		var corpo []byte
+		if l.Body != nil {
+			var err error
+			tipo, corpo, err = l.Body(ctx)
+			if err != nil {
+				return "", fmt.Errorf("login %s: montando o corpo: %w", redactURL(l.URL), err)
+			}
+		}
+
+		fonte := source
+		cabecalho := http.Header(l.Header).Clone()
+		// A credencial ainda nao existe: e ela que esta sendo obtida. Mandar o
+		// cabecalho da fonte aqui vazaria o que houver nele para o endpoint de
+		// login, que pode ser de outro host.
+		if cabecalho == nil {
+			cabecalho = http.Header{}
+		}
+		if tipo != "" {
+			cabecalho.Set("Content-Type", tipo)
+		}
+		fonte.Header = cabecalho
+
+		resposta, err := requisitar(ctx, client, fonte, metodo, l.URL, corpo)
+		if err != nil {
+			return "", err
+		}
+
+		token, err := l.Token(resposta)
+		if err != nil {
+			return "", fmt.Errorf("login %s: %w", redactURL(l.URL), err)
+		}
+		if token == "" {
+			return "", fmt.Errorf("login %s: o token veio vazio. Um token vazio vira um "+
+				"cabeçalho de autorização vazio e um 401 mais adiante, culpando a API",
+				redactURL(l.URL))
+		}
+		return token, nil
+	})
 }

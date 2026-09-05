@@ -1,6 +1,7 @@
 package from
 
 import (
+	"context"
 	"time"
 
 	"github.com/AreteAcademy/brevis/sdk/internal/core"
@@ -9,6 +10,23 @@ import (
 // Credential is how an HTTP source authenticates, and what the SDK does to
 // keep the credential alive. See HTTP.Auth.
 type Credential = core.Credential
+
+// Login troca segredos por um token vindo do corpo da resposta, com o cliente
+// do SDK. Ver Credential.Login.
+type Login = core.Login
+
+// CampoJSON lê o token de um campo do corpo, por caminho separado por pontos:
+// CampoJSON("data.accessToken").
+func CampoJSON(caminho string) func([]byte) (string, error) { return core.CampoJSON(caminho) }
+
+// JSONBody monta um corpo JSON para o Login.
+func JSONBody(v any) func(context.Context) (string, []byte, error) { return core.JSONBody(v) }
+
+// FormBody monta um corpo application/x-www-form-urlencoded, que é o formato
+// que o OAuth2 usa.
+func FormBody(campos map[string]string) func(context.Context) (string, []byte, error) {
+	return core.FormBody(campos)
+}
 
 // Refresh renews a credential that expires, by calling the endpoint that
 // reissues it before the first page. See Credential.Refresh.

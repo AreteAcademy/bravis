@@ -106,6 +106,21 @@ func fetch(ctx context.Context, source core.Source, records core.Reading) (iter.
 		source.MaxPages = defaultMaxPages
 	}
 
+	// O login roda com um cliente PROVISORIO, e nao com o da caminhada: a
+	// credencial ainda nao existe quando ele acontece, entao o jar do cliente
+	// definitivo nao teria o que semear.
+	//
+	// Provisorio no jar, e nao no resto: mesmo Timeout, mesmo RetryConfig,
+	// mesmo transporte -- que e o ponto. O que o item 9 aponta e que a
+	// requisicao de login, escrita a mao, sai sem nada disso.
+	if source.Auth != nil && source.Auth.Login != nil {
+		provisorio, _, err := newClient(source)
+		if err != nil {
+			return nil, err
+		}
+		prepararLogin(provisorio, source)
+	}
+
 	// Before the client, so a secret applied as a cookie is seeded into the
 	// jar with the rest.
 	if err := authenticate(ctx, &source); err != nil {

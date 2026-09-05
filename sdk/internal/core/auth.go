@@ -6,7 +6,10 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -47,6 +50,20 @@ type Credential struct {
 	// case this exists for.
 	TTL time.Duration
 
+	// Login troca segredos por um token vindo do CORPO da resposta, que e a
+	// forma que a maioria das APIs usa. Nil pula.
+	//
+	// Ele existe porque o contorno -- por o login dentro de Value, que e uma
+	// func -- funciona e tem um custo escondido: a requisicao de login passa a
+	// ser a UNICA do fetcher sem retry, sem rate limit, sem timeout por
+	// tentativa e sem redacao de segredo no log. E ela e a que carrega as
+	// credenciais.
+	//
+	// Value continua existindo e continua valendo para o que nao cabe aqui --
+	// um secret manager, um arquivo, uma env. Login e Value juntos e erro:
+	// duas fontes para o mesmo segredo, e a que perde perde em silencio.
+	Login *Login
+
 	// Refresh optionally calls an endpoint before the first page to renew a
 	// session. Nil skips it.
 	Refresh *Refresh
@@ -54,6 +71,58 @@ type Credential struct {
 	mu       sync.Mutex
 	cached   string
 	cachedAt time.Time
+
+	// login e a Secret que o extract monta a partir de Login, com o cliente
+	// dele. Ela vive aqui, e nao em Login, porque e o Get que a chama -- e o
+	// Get e quem tem a trava e o TTL.
+	login Secret
+}
+
+// PrepararLogin instala a Secret que faz o login. Chamada pelo extract, que e
+// quem tem o cliente HTTP.
+func (c *Credential) PrepararLogin(s Secret) { c.login = s }
+
+// Login troca segredos por um token, com o cliente do SDK.
+//
+//	Auth: &from.Credential{
+//	    Login: &from.Login{
+//	        URL:    "https://api.example.com/oauth/token",
+//	        Method: "POST",
+//	        Body:   from.JSONBody(map[string]any{"client_id": id, "client_secret": segredo}),
+//	        Token:  from.CampoJSON("data.accessToken"),
+//	    },
+//	    Apply: from.AsBearer,
+//	    TTL:   50 * time.Minute,
+//	}
+//
+// O que ele compra nao e conveniencia: e a requisicao mais sensivel do fetcher
+// deixar de ser a unica sem retry, sem rate limit, sem timeout e sem redacao no
+// log. Escrita a mao, ela costuma sair com http.DefaultClient -- que nao tem
+// timeout nenhum.
+//
+// Combine com TTL: sem ele o login acontece uma vez por execucao, e algumas
+// APIs limitam a FREQUENCIA de autenticacao em vez da de requisicoes.
+type Login struct {
+	// URL do endpoint de login. Obrigatoria.
+	URL string
+
+	// Method e o verbo. Vazio usa POST -- que e o que um login e.
+	Method string
+
+	// Body monta o corpo. Nil manda sem corpo.
+	//
+	// E uma func e nao bytes porque o corpo carrega segredo: ele e montado na
+	// hora da requisicao e nao fica vivo num campo de struct que qualquer
+	// dump de configuracao imprimiria.
+	Body func(ctx context.Context) (contentType string, corpo []byte, err error)
+
+	// Header sao cabecalhos proprios do login -- uma chave de API que
+	// autoriza a troca, por exemplo.
+	Header map[string][]string
+
+	// Token le o token do CORPO da resposta. Obrigatorio: se o token viesse
+	// num cookie, o caminho seria Refresh.
+	Token func(corpo []byte) (string, error)
 }
 
 // Refresh renews a credential that expires, by asking the API to reissue it.
@@ -113,8 +182,8 @@ type Refresh struct {
 // The lock serializes concurrent callers so an API that rate-limits logins
 // sees one attempt, not one per goroutine.
 func (c *Credential) Get(ctx context.Context) (string, error) {
-	if c.Value == nil {
-		return "", fmt.Errorf("Credential.Value is nil: it is what produces the secret")
+	if c.Value == nil && c.Login == nil {
+		return "", fmt.Errorf("Credential precisa de Value ou de Login")
 	}
 
 	c.mu.Lock()
@@ -142,7 +211,19 @@ func (c *Credential) Get(ctx context.Context) (string, error) {
 		}
 	}
 
-	v, err := c.Value(ctx)
+	produzir := c.Value
+	if produzir == nil {
+		// O Login e feito por quem tem o cliente HTTP -- o extract --, e
+		// chega aqui como uma Secret ja fechada sobre ele. Ver
+		// extract.PrepararLogin.
+		produzir = c.login
+	}
+	if produzir == nil {
+		return "", fmt.Errorf("credential: Login declarado mas não preparado; isto é um " +
+			"defeito do SDK, não da sua configuração")
+	}
+
+	v, err := produzir(ctx)
 	if err != nil {
 		return "", fmt.Errorf("credential: %w", err)
 	}
@@ -159,9 +240,25 @@ func (c *Credential) Check() error {
 	if c == nil {
 		return nil
 	}
-	if c.Value == nil {
-		return fmt.Errorf("Auth.Value is nil: it is what produces the secret. " +
-			"For an environment variable use from.FromEnv(\"NAME\")")
+	if c.Value == nil && c.Login == nil {
+		return fmt.Errorf("Auth.Value e Auth.Login estão os dois nil, e um dos dois precisa " +
+			"existir: Value produz o segredo, Login o troca por um token. Para uma variável " +
+			"de ambiente, from.FromEnv(\"NOME\")")
+	}
+	if c.Value != nil && c.Login != nil {
+		return fmt.Errorf("Auth.Value e Auth.Login estão os dois preenchidos, e os dois " +
+			"produzem o mesmo segredo -- a que perdesse perderia em silêncio. Login faz a " +
+			"requisição com o cliente do SDK; Value é para o que não é uma requisição HTTP")
+	}
+	if c.Login != nil {
+		if c.Login.URL == "" {
+			return fmt.Errorf("Auth.Login.URL está vazia: é o endpoint que troca os segredos " +
+				"pelo token")
+		}
+		if c.Login.Token == nil {
+			return fmt.Errorf("Auth.Login.Token é nil: é o que diz ONDE o token está no corpo " +
+				"da resposta. Use from.CampoJSON(\"data.accessToken\")")
+		}
 	}
 	if c.Apply == nil {
 		return fmt.Errorf("Auth.Apply is nil: it is what puts the secret on the " +
@@ -264,5 +361,80 @@ func JSONField(name string) func([]byte) (time.Time, error) {
 			return time.Time{}, fmt.Errorf("field %q = %q is not RFC 3339: %w", name, s, err)
 		}
 		return t, nil
+	}
+}
+
+// CampoJSON le um campo do corpo da resposta, por caminho separado por pontos.
+//
+//	Token: from.CampoJSON("data.accessToken")
+//
+// O caminho aceita pontos porque a convencao larga poe o token dentro de um
+// envelope, e nao na raiz.
+//
+// Um campo ausente e ERRO nomeando o caminho -- e nao string vazia. Um token
+// vazio vira um cabecalho de autorizacao vazio e um 401 mais adiante, culpando
+// a API por um caminho que este lado escreveu errado.
+func CampoJSON(caminho string) func([]byte) (string, error) {
+	return func(corpo []byte) (string, error) {
+		var atual any
+		if err := json.Unmarshal(corpo, &atual); err != nil {
+			return "", fmt.Errorf("a resposta do login não é JSON: %w", err)
+		}
+
+		partes := strings.Split(caminho, ".")
+		for i, parte := range partes {
+			obj, ok := atual.(map[string]any)
+			if !ok {
+				return "", fmt.Errorf("%q: %q não é um objeto",
+					caminho, strings.Join(partes[:i], "."))
+			}
+			v, existe := obj[parte]
+			if !existe {
+				return "", fmt.Errorf("%q: a resposta não tem %q. Confira o caminho -- um "+
+					"token ausente viraria um cabeçalho vazio e um 401 mais adiante, "+
+					"culpando a API", caminho, parte)
+			}
+			atual = v
+		}
+
+		switch t := atual.(type) {
+		case string:
+			return t, nil
+		case json.Number:
+			return t.String(), nil
+		case float64:
+			return strconv.FormatFloat(t, 'f', -1, 64), nil
+		default:
+			return "", fmt.Errorf("%q levou a um %T, e um token precisa ser texto", caminho, atual)
+		}
+	}
+}
+
+// JSONBody monta um corpo JSON para o Login.
+//
+//	Body: from.JSONBody(map[string]any{"client_id": id, "client_secret": segredo})
+//
+// A serializacao acontece na hora da requisicao, e nao aqui: o corpo carrega
+// segredo, e um []byte guardado num campo de struct aparece em qualquer dump
+// de configuracao.
+func JSONBody(v any) func(context.Context) (string, []byte, error) {
+	return func(context.Context) (string, []byte, error) {
+		b, err := json.Marshal(v)
+		if err != nil {
+			return "", nil, fmt.Errorf("montando o corpo do login: %w", err)
+		}
+		return "application/json", b, nil
+	}
+}
+
+// FormBody monta um corpo application/x-www-form-urlencoded, que e o formato
+// que o OAuth2 usa.
+func FormBody(campos map[string]string) func(context.Context) (string, []byte, error) {
+	return func(context.Context) (string, []byte, error) {
+		v := url.Values{}
+		for k, valor := range campos {
+			v.Set(k, valor)
+		}
+		return "application/x-www-form-urlencoded", []byte(v.Encode()), nil
 	}
 }

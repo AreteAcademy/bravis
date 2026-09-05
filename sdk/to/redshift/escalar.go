@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"strconv"
 
-	"github.com/AreteAcademy/brevis/sdk/internal/core"
+	"github.com/AreteAcademy/brevis/sdk/internal/jsontext"
 )
 
 // escreverEscalar escreve os tipos que um registro JSON quase sempre carrega,
@@ -57,5 +57,5 @@ func escreverEscalar(buf *bytes.Buffer, v any) bool {
 // pycompat, e ter duas copias dela e ter duas chances de divergir do Python
 // sem ninguem notar.
 func escreverTexto(buf *bytes.Buffer, s string) {
-	buf.Write(core.AppendJSONString(buf.AvailableBuffer(), s))
+	buf.Write(jsontext.AppendJSONString(buf.AvailableBuffer(), s))
 }
