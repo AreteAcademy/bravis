@@ -252,12 +252,15 @@ func EncodeNDJSON(envelopes []core.Envelope, colunas []string) ([]byte, error) {
 			}
 			primeiro = false
 			buf.Write(chaves[j])
-			if err := enc.Encode(v); err != nil {
-				return nil, fmt.Errorf("redshift: row %d, column %q: %w", i+1, c, err)
+			if !escreverEscalar(&buf, v) {
+				// Composto: o encoder resolve, e paga uma alocacao.
+				if err := enc.Encode(v); err != nil {
+					return nil, fmt.Errorf("redshift: row %d, column %q: %w", i+1, c, err)
+				}
+				// O Encode termina em \n, que aqui e separador de LINHA e nao
+				// pode aparecer no meio do objeto.
+				buf.Truncate(buf.Len() - 1)
 			}
-			// O Encode termina em \n, que aqui e separador de LINHA e nao
-			// pode aparecer no meio do objeto.
-			buf.Truncate(buf.Len() - 1)
 		}
 		buf.WriteString("}\n")
 	}

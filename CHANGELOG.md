@@ -8,6 +8,43 @@ A tag de um módulo aninhado leva o prefixo do diretório: `sdk/v0.2.1`.
 
 ---
 
+## [0.33.1] — 2026-09-05
+
+Sem mudança de API. A `v0.33.0` foi marcada com um teste que falha sob o Go
+1.27 — o gate de publicação a barrou, então ela existe no proxy mas sem release
+no GitHub.
+
+### O que estava errado, e é a lição
+
+O teste de orçamento de alocações do `EncodeNDJSON` fixava um **número
+absoluto**, medido com o toolchain local. A CI roda outro, e a análise de escape
+mudou entre eles: **0,005 alocações por linha no Go 1.25 viraram 2,00 no 1.27**,
+sem uma linha de código mudar.
+
+Um número de alocações não é propriedade do código; é propriedade do código
+**mais o compilador**. O que é do código é a diferença entre duas estratégias —
+e o teste agora mede as duas sob o mesmo compilador, o que se sustenta em
+qualquer um.
+
+Este mesmo teste já estava errado antes, por outro motivo: comparava 2000 linhas
+com 200 e exigia razão abaixo de 10, o que com qualquer custo linear dá
+exatamente 10.
+
+### E o que a investigação encontrou
+
+A mesma mudança de escape analysis fazia o `EncodeNDJSON` custar **40.017
+alocações no Go 1.27** contra 13 no 1.25, para 10 mil linhas — o `json.Encoder`
+passou a reter cada `any` que recebe.
+
+Escalares agora vão direto para o buffer: **17 alocações no 1.27, e o dobro da
+velocidade nos dois toolchains** (2,58 ms → 1,25 ms). A saída é comparada byte a
+byte com o `encoding/json` configurado como o resto do arquivo o configura — e
+esse teste pegou duas divergências reais antes de qualquer commit: o `\ufffd` de
+byte inválido, e o escape de `<`, `>` e `&`, que o `json.Marshal` faz e o
+caminho dos compostos deste arquivo não.
+
+---
+
 ## [0.33.0] — 2026-09-05
 
 Fase 5 do plano dos drivers: **o que um lançamento exige.** Não é feature.
@@ -88,10 +125,9 @@ que esse servidor não pode ser levantado.
 
 ### Performance
 
-`EncodeNDJSON` passou de ~5 alocações por linha para **13 no total** em 10 mil
-linhas: as chaves são serializadas uma vez, e o objeto é escrito direto no
-buffer em vez de passar por um `map[string]any` no `json.Encoder` a cada
-registro. O benchmark fica no repositório, e o teste tem teto por linha.
+`EncodeNDJSON` passou de ~5 alocações por linha para **17 no total** em 10 mil
+linhas (Go 1.27): as chaves são serializadas uma vez, e os escalares vão direto
+para o buffer em vez de passar pelo `json.Encoder`.
 
 ---
 

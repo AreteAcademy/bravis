@@ -1,8 +1,10 @@
 package redshift
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"strings"
 	"testing"
@@ -113,16 +115,23 @@ func TestEncodeNDJSONUmaLinhaPorRegistro(t *testing.T) {
 	}
 }
 
-// TestEncodeNDJSONTemOrcamentoPorLinha fixa um teto de alocações POR LINHA.
+// TestEncodeNDJSONNaoPagaOCaminhoDoMapa compara os DOIS caminhos no mesmo
+// processo, e essa é a única forma que se sustenta.
 //
-// A primeira versão deste teste comparava 2000 linhas com 200 e exigia razão
-// abaixo de 10 -- o que é impossível de falhar de um jeito e impossível de
-// passar do outro: com qualquer custo por linha a razão é exatamente 10. Um
-// teste que mede a coisa errada é pior que nenhum, porque dá confiança.
+// Este teste já esteve errado duas vezes, e as duas por medir a coisa errada:
 //
-// O que vale é o número por linha, com um teto escrito. Passar um
-// map[string]any ao json.Encoder por registro custava cinco.
-func TestEncodeNDJSONTemOrcamentoPorLinha(t *testing.T) {
+//  1. a primeira versão comparava 2000 linhas com 200 e exigia razão abaixo de
+//     10 -- que com qualquer custo linear dá exatamente 10, impossível de
+//     passar de um jeito e de falhar do outro;
+//  2. a segunda fixou um teto absoluto por linha, medido com o toolchain
+//     local. A CI roda outro, e a análise de escape mudou entre eles: 0,005
+//     por linha no 1.25 viraram 2,00 no 1.27, sem nada no código mudar.
+//
+// Um número absoluto de alocações não é propriedade do código; é propriedade
+// do código MAIS o compilador. O que é do código é a diferença entre as duas
+// estratégias -- e medindo as duas sob o mesmo compilador, ela se sustenta em
+// qualquer um.
+func TestEncodeNDJSONNaoPagaOCaminhoDoMapa(t *testing.T) {
 	const linhas = 2000
 	envelopes := make([]core.Envelope, linhas)
 	for i := range envelopes {
@@ -130,20 +139,56 @@ func TestEncodeNDJSONTemOrcamentoPorLinha(t *testing.T) {
 	}
 	colunas := []string{"a", "b"}
 
-	total := testing.AllocsPerRun(5, func() {
+	direto := testing.AllocsPerRun(5, func() {
 		if _, err := EncodeNDJSON(envelopes, colunas); err != nil {
 			t.Fatal(err)
 		}
 	})
+	viaMapa := testing.AllocsPerRun(5, func() {
+		if _, err := encodeViaMapa(envelopes, colunas); err != nil {
+			t.Fatal(err)
+		}
+	})
 
-	// O teto é apertado de propósito: hoje são ~10 alocações para 2000 linhas
-	// (o buffer que dobra, e mais nada). Um teto frouxo deixaria o caminho
-	// antigo -- cinco por linha -- voltar sem ninguém ver.
-	const teto = 0.05
-	if porLinha := total / linhas; porLinha > teto {
-		t.Errorf("%.2f alocações por linha (teto %.1f); ao todo %.0f para %d linhas",
-			porLinha, teto, total, linhas)
+	// A margem é folgada de propósito: o que se afirma é que o caminho direto
+	// é substancialmente mais barato, não um número exato que o próximo Go
+	// invalidaria.
+	if direto*2 > viaMapa {
+		t.Errorf("o caminho direto custa %.0f alocações e o do mapa %.0f para %d linhas; "+
+			"a vantagem sumiu -- ou o EncodeNDJSON voltou a montar um map por registro",
+			direto, viaMapa, linhas)
 	}
+	t.Logf("direto %.0f, via mapa %.0f (%.1fx) para %d linhas",
+		direto, viaMapa, viaMapa/direto, linhas)
+}
+
+// encodeViaMapa é o caminho que EncodeNDJSON tinha antes: um map[string]any
+// por registro, entregue ao json.Encoder.
+//
+// Vive no teste, e não no código de produção, porque é a referência contra a
+// qual o ganho é medido -- e porque uma referência que mora no teste não pode
+// ser usada por engano.
+func encodeViaMapa(envelopes []core.Envelope, colunas []string) ([]byte, error) {
+	var buf bytes.Buffer
+	buf.Grow(len(envelopes) * 128)
+	enc := json.NewEncoder(&buf)
+
+	for i, e := range envelopes {
+		obj, err := core.AsObject(e.Payload)
+		if err != nil {
+			return nil, fmt.Errorf("row %d: %w", i+1, err)
+		}
+		linha := make(map[string]any, len(colunas))
+		for _, c := range colunas {
+			if v, tem := obj[c]; tem {
+				linha[c] = v
+			}
+		}
+		if err := enc.Encode(linha); err != nil {
+			return nil, err
+		}
+	}
+	return buf.Bytes(), nil
 }
 
 // executorFalso registra o SQL, e é como o driver inteiro é testável sem

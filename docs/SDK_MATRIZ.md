@@ -79,9 +79,14 @@ DDL sair de uma leitura.
 ## Vazão medida
 
 Números de `-bench Carga…`, contra os containers do `docker-compose.drivers.yml`,
-10 mil linhas de 5 colunas por execução. **Servem para comparar as estratégias,
-não como promessa de produção** — a máquina, a rede e a largura da linha mudam
-tudo.
+10 mil linhas de 5 colunas por execução, **com o toolchain Go 1.27**. Servem
+para comparar as estratégias, não como promessa de produção — a máquina, a rede
+e a largura da linha mudam tudo.
+
+E o toolchain também: medindo o mesmo código no Go 1.25 e no 1.27, o
+`EncodeNDJSON` do Redshift saiu de 13 para 40.017 alocações por causa de uma
+mudança de escape analysis, sem nada no código mudar. Um número de alocações é
+propriedade do código **mais o compilador**.
 
 | destino | estratégia | linhas/s | alocações por linha |
 |---|---|---|---|
