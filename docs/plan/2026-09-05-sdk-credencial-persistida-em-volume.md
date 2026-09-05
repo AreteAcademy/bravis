@@ -17,6 +17,24 @@ cliente pode não ter a plataforma — é o que define a forma da solução.
 
 ---
 
+## Como entregar isto a um agente
+
+Esta spec **não é executável de ponta a ponta por um agente só**, e vale saber
+onde ele para:
+
+| passos | quem executa | por quê |
+|---|---|---|
+| 1 e 6 | **um agente no `brevis`** | é código do SDK, e a spec basta |
+| 5 | um agente no `brevis` | é o motor; ver a ressalva do §6.1 sobre o nome da imagem |
+| 2, 3 e 4 | **uma pessoa** | dependem de console GCP e de um segundo repositório (`zarv-applications`, via ArgoCD) |
+| 7 | quem tiver o dev de pé | depende de 2–5 estarem feitos |
+
+E o **passo 1 é uma tarefa própria**, não parte desta: o §9 do
+[`SDK_V9.md`](../SDK_V9.md) tem repro, conserto e prova escritos. Entregue-o
+primeiro e sozinho — um agente que receber só esta spec vai fazer o 6 sobre um
+`Refresh` que ainda não funciona, e o 7 vai devolver
+`refresh response has no field "expires"`.
+
 ## 0. Pré-requisito: sem o §9 isto não resolve nada
 
 O [§9 do `SDK_V9.md`](../SDK_V9.md) é bloqueante para esta feature. Hoje a
@@ -106,6 +124,26 @@ Três razões, e a terceira é a que fecha a discussão:
 A chave é estática: entra uma vez no secret, e nunca mais. É o oposto do cookie.
 
 ---
+
+### O formato em disco, que precisa ser decidido agora
+
+Um arquivo persistido é um contrato: mudar depois exige migração, e migração de
+credencial é a que ninguém quer fazer às pressas. Então fica definido:
+
+```
+brevis-cred/1\n            <- versão, em texto, primeira linha
+<nonce 12 bytes><ciphertext+tag>   <- AES-256-GCM, binário
+```
+
+- **A versão na primeira linha** é o que permite mudar o resto sem adivinhação.
+  Um leitor que não reconhece a versão trata como ausente e cai na semente — não
+  falha, porque uma versão futura num volume compartilhado é cenário normal
+  durante um rollout.
+- **O nonce vai no arquivo**, à frente do texto cifrado, e é sorteado a cada
+  escrita. Reusar nonce com a mesma chave em GCM quebra a cifra, e é o erro mais
+  comum de quem implementa isso pela primeira vez.
+- **Nada de metadado no arquivo** — nem `expires`, nem `user`, nem quando foi
+  gravado. O `mtime` já diz o quando, e o resto é derivável ou envelhece.
 
 ## 4. O que o SDK precisa acertar, e que é fácil errar
 
