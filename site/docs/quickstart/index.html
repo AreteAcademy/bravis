@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#141711">
+
+<title>Quickstart — Documentação</title>
+<meta name="description" content="Do zero à DAG executando na interface, em quatro passos.">
+<meta name="author" content="Aretê Academy">
+<link rel="canonical" href="https://brevis.sh/docs/quickstart/">
+<link rel="alternate" hreflang="pt-BR" href="https://brevis.sh/docs/quickstart/"><link rel="alternate" hreflang="en" href="https://brevis.sh/en/docs/quickstart/">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="brevis.sh">
+<meta property="og:locale" content="pt-BR">
+<meta property="og:title" content="Quickstart — Documentação">
+<meta property="og:description" content="Do zero à DAG executando na interface, em quatro passos.">
+<meta property="og:url" content="https://brevis.sh/docs/quickstart/">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Quickstart — Documentação">
+<meta name="twitter:description" content="Do zero à DAG executando na interface, em quatro passos.">
+
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&amp;family=IBM+Plex+Mono:wght@400;500&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap">
+<link rel="stylesheet" href="/css/styles.css">
+<link rel="stylesheet" href="/css/docs.css">
+
+<script>document.documentElement.classList.add('js');</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  "headline": "Quickstart",
+  "description": "Do zero à DAG executando na interface, em quatro passos.",
+  "inLanguage": "pt-BR",
+  "isPartOf": {
+    "@type": "WebSite",
+    "@id": "https://brevis.sh/#site"
+  },
+  "author": {
+    "@type": "Organization",
+    "name": "Aretê Academy"
+  }
+}
+</script>
+</head>
+<body class="page-doc">
+
+<a class="skip-link" href="#conteudo">Pular para o conteúdo</a>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-mark" viewBox="0 0 24 24">
+    <path d="M5 6.5 L19 12 M5 17.5 L19 12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none" opacity="0.5"/>
+    <circle cx="5" cy="6.5" r="2.4" fill="currentColor" opacity="0.75"/>
+    <circle cx="5" cy="17.5" r="2.4" fill="currentColor" opacity="0.75"/>
+    <circle cx="19" cy="12" r="3.2" fill="currentColor"/>
+  </symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+    <path d="M4 7h16M4 12h16M4 17h16"/>
+  </symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 12h15M13 6l6 6-6 6"/>
+  </symbol>
+  <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 12.5 9.5 18 20 6.5"/>
+  </symbol>
+  <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+    <circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>
+  </symbol>
+  <symbol id="i-github" viewBox="0 0 24 24">
+    <path fill="currentColor" d="M12 1.5a10.5 10.5 0 0 0-3.32 20.47c.53.1.72-.23.72-.5v-1.8c-2.92.63-3.54-1.4-3.54-1.4-.48-1.22-1.17-1.55-1.17-1.55-.95-.65.07-.64.07-.64 1.06.07 1.62 1.09 1.62 1.09.94 1.6 2.45 1.14 3.05.87.1-.68.37-1.14.67-1.4-2.33-.27-4.78-1.17-4.78-5.2 0-1.15.41-2.09 1.08-2.82-.11-.27-.47-1.34.1-2.8 0 0 .88-.28 2.88 1.08a10.1 10.1 0 0 1 5.24 0c2-1.36 2.87-1.08 2.87-1.08.58 1.46.22 2.53.11 2.8a4.05 4.05 0 0 1 1.08 2.82c0 4.04-2.46 4.93-4.8 5.19.38.33.72.97.72 1.96v2.9c0 .28.19.61.73.5A10.5 10.5 0 0 0 12 1.5z"/>
+  </symbol>
+</svg>
+
+<header class="site-header">
+  <div class="shell header-bar">
+    <a class="brand" href="/">
+      <svg class="mark" aria-hidden="true"><use href="#i-mark"></use></svg>
+      <span>brevis<span class="tld">.sh</span></span>
+    </a>
+
+    <nav class="main-nav" id="nav" aria-label="Navegação principal">
+      <a href="/#produto">Produto</a>
+      <a href="/#principios">Princípios</a>
+      <a href="/docs/">Documentação</a>
+      <a href="/#open-source">Open source</a>
+      <div class="lang-switch" role="group" aria-label="Idioma"><a href="/docs/quickstart/" hreflang="pt-BR" aria-current="true">PT</a><a href="/en/docs/quickstart/" hreflang="en">EN</a></div>
+      <a class="button button-secondary button-sm header-cta" href="https://github.com/AreteAcademy/brevis" target="_blank" rel="noopener">
+        <svg aria-hidden="true"><use href="#i-github"></use></svg>
+        Explorar open source
+      </a>
+    </nav>
+
+    <button class="nav-toggle" type="button" id="nav-toggle" aria-label="Abrir menu" aria-expanded="false" aria-controls="nav">
+      <svg aria-hidden="true"><use href="#i-menu"></use></svg>
+    </button>
+  </div>
+</header>
+
+<div class="doc-shell">
+  <button class="side-toggle" type="button" id="side-toggle" aria-expanded="false" aria-controls="side">
+    <svg aria-hidden="true"><use href="#i-menu"></use></svg>
+    Menu da documentação
+  </button>
+
+  <aside class="side" id="side">
+    <div class="side-inner">
+      <form class="search" role="search" onsubmit="return false">
+        <svg aria-hidden="true"><use href="#i-search"></use></svg>
+        <label class="sr-only" for="q">Buscar na documentação</label>
+        <input type="search" id="q" placeholder="Buscar…" autocomplete="off" spellcheck="false">
+      </form>
+      <div class="search-out" id="search-out" data-none="Nada encontrado" hidden></div>
+      <nav class="side-nav" aria-label="Documentação">
+        <p class="side-group">Começar</p><ul class="side-list"><li><a href="/docs/introduction/">Introdução</a></li><li><a href="/docs/installation/">Instalação</a></li><li><a href="/docs/quickstart/" aria-current="page">Quickstart</a></li></ul><p class="side-group">Conceitos</p><ul class="side-list"><li><a href="/docs/workflows/">Workflows</a></li><li><a href="/docs/scheduler-and-queue/">Scheduler e fila</a></li><li><a href="/docs/pod-per-step/">Pod por passo</a></li></ul><p class="side-group">Referência</p><ul class="side-list"><li><a href="/docs/cli/">CLI</a></li><li><a href="/docs/parameters/">Parâmetros</a></li><li><a href="/docs/configuration/">Configuração</a></li></ul><p class="side-group">SDK</p><ul class="side-list"><li><a href="/docs/sdk/">SDK em Go</a></li></ul><p class="side-group">Operação</p><ul class="side-list"><li><a href="/docs/kubernetes/">Kubernetes</a></li><li><a href="/docs/white-label/">Marca branca</a></li></ul>
+      </nav>
+    </div>
+  </aside>
+
+  <main class="doc" id="conteudo">
+    <article class="doc-body">
+      <p class="doc-kicker">Documentação</p>
+      <h1>Quickstart</h1>
+      <p class="doc-desc">Do zero à DAG executando na interface, em quatro passos.</p>
+      <p>Este guia sobe o brevis.sh, publica um workflow e o executa. Ao final você vê o grafo com o estado de cada passo ao vivo.</p>
+<p>Requisito: um PostgreSQL acessível e a variável <code>BREVIS_DATABASE_URL</code>.</p>
+<h2 id="1-aplicar-o-schema">1. Aplicar o schema<a class="anchor" href="#1-aplicar-o-schema" aria-label="link">#</a></h2>
+<div class="code-block" data-code="export BREVIS_DATABASE_URL=&#x27;postgres://brevis:brevis@localhost:5432/brevis?sslmode=disable&#x27;
+brevis migrate up"><div class="code-head"><span class="code-lang">bash</span><button class="code-copy" type="button" aria-label="Copiar" data-done="Copiado">Copiar</button></div><pre><code>export BREVIS_DATABASE_URL='postgres://<span class="t-k">brevis</span>:<span class="t-k">brevis</span>@localhost:5432/<span class="t-k">brevis</span>?sslmode=disable'
+<span class="t-k">brevis</span> migrate up</code></pre></div>
+<h2 id="2-escrever-um-workflow">2. Escrever um workflow<a class="anchor" href="#2-escrever-um-workflow" aria-label="link">#</a></h2>
+<p>Crie <code>hello.yaml</code>. Este exemplo usa apenas shell, então roda em qualquer lugar:</p>
+<div class="code-block" data-code="name: hello
+type: dag
+tags: [exemplo]
+
+steps:
+  - id: preparar
+    run: sh -c &#x27;echo preparando; sleep 1&#x27;
+
+  # Os dois seguintes dependem do mesmo passo, então rodam EM PARALELO.
+  - id: extrair
+    run: sh -c &#x27;sleep 2; echo 42 extraidos&#x27;
+    depends_on: [preparar]
+
+  - id: validar
+    run: sh -c &#x27;sleep 1; echo validado&#x27;
+    depends_on: [preparar]
+
+  - id: publicar
+    run: echo publicado
+    depends_on: [extrair, validar]"><div class="code-head"><span class="code-lang">yaml</span><button class="code-copy" type="button" aria-label="Copiar" data-done="Copiado">Copiar</button></div><pre><code><span class="t-k">name</span>: hello
+<span class="t-k">type</span>: dag
+<span class="t-k">tags</span>: [exemplo]
+
+<span class="t-k">steps</span>:
+  - <span class="t-k">id</span>: preparar
+    <span class="t-k">run</span>: sh -c 'echo preparando; sleep 1'
+
+  <span class="t-c"># Os dois seguintes dependem do mesmo passo, então rodam EM PARALELO.</span>
+  - <span class="t-k">id</span>: extrair
+    <span class="t-k">run</span>: sh -c 'sleep 2; echo 42 extraidos'
+    <span class="t-k">depends_on</span>: [preparar]
+
+  - <span class="t-k">id</span>: validar
+    <span class="t-k">run</span>: sh -c 'sleep 1; echo validado'
+    <span class="t-k">depends_on</span>: [preparar]
+
+  - <span class="t-k">id</span>: publicar
+    <span class="t-k">run</span>: echo publicado
+    <span class="t-k">depends_on</span>: [extrair, validar]</code></pre></div>
+<p>Confira antes de publicar — isto não toca no banco:</p>
+<div class="code-block" data-code="brevis validate hello.yaml"><div class="code-head"><span class="code-lang">bash</span><button class="code-copy" type="button" aria-label="Copiar" data-done="Copiado">Copiar</button></div><pre><code><span class="t-k">brevis</span> validate hello.yaml</code></pre></div>
+<div class="code-block" data-code="  ok    hello                        dag  4 steps, 4 dependencias  (manual)"><div class="code-head"><button class="code-copy" type="button" aria-label="Copiar" data-done="Copiado">Copiar</button></div><pre><code>  ok    hello                        dag  4 steps, 4 dependencias  (manual)</code></pre></div>
+<h2 id="3-executar-agora-sem-fila">3. Executar agora, sem fila<a class="anchor" href="#3-executar-agora-sem-fila" aria-label="link">#</a></h2>
+<p>O caminho mais curto para ver o grafo funcionando:</p>
+<div class="code-block" data-code="brevis run hello.yaml"><div class="code-head"><span class="code-lang">bash</span><button class="code-copy" type="button" aria-label="Copiar" data-done="Copiado">Copiar</button></div><pre><code><span class="t-k">brevis</span> run hello.yaml</code></pre></div>
+<div class="code-block" data-code="workflow hello (dag, 4 steps) em .
+  ▶ preparar
+    preparar | preparando
+  ✓ preparar
+  ▶ extrair
+  ▶ validar
+    validar | validado
+  ✓ validar
+    extrair | 42 extraidos
+  ✓ extrair
+  ▶ publicar
+    publicar | publicado
+  ✓ publicar
+
+workflow hello concluido"><div class="code-head"><button class="code-copy" type="button" aria-label="Copiar" data-done="Copiado">Copiar</button></div><pre><code>workflow hello (dag, 4 steps) em .
+  ▶ preparar
+    preparar | preparando
+  ✓ preparar
+  ▶ extrair
+  ▶ validar
+    validar | validado
+  ✓ validar
+    extrair | 42 extraidos
+  ✓ extrair
+  ▶ publicar
+    publicar | publicado
+  ✓ publicar
+
+workflow hello concluido</code></pre></div>
+<p><code>extrair</code> e <code>validar</code> começam juntos porque dependem do mesmo passo. O runner percorre o grafo por níveis: tudo dentro de um nível roda em paralelo, e o nível seguinte só começa quando o anterior fecha inteiro.</p>
+<aside class="admon admon-note"><p class="admon-t">`run` é local por natureza</p><p><code>brevis run</code> só opera com <code>BREVIS_ENV=local</code> (vazio conta como local) e executa os passos como processos na própria instância — mesmo os que declaram <code>image:</code>. Quem cria pods é o <code>scheduler</code>.</p></aside>
+<h2 id="4-publicar-e-operar">4. Publicar e operar<a class="anchor" href="#4-publicar-e-operar" aria-label="link">#</a></h2>
+<p>Para que o workflow exista no banco, apareça na interface e siga a agenda:</p>
+<div class="code-block" data-code="brevis publish hello.yaml"><div class="code-head"><span class="code-lang">bash</span><button class="code-copy" type="button" aria-label="Copiar" data-done="Copiado">Copiar</button></div><pre><code><span class="t-k">brevis</span> publish hello.yaml</code></pre></div>
+<div class="code-block" data-code="  publicado  hello                    (manual)"><div class="code-head"><button class="code-copy" type="button" aria-label="Copiar" data-done="Copiado">Copiar</button></div><pre><code>  publicado  hello                    (manual)</code></pre></div>
+<p>Suba a interface e o scheduler em dois terminais:</p>
+<div class="code-block" data-code="brevis serve"><div class="code-head"><span class="code-lang">bash</span><button class="code-copy" type="button" aria-label="Copiar" data-done="Copiado">Copiar</button></div><pre><code><span class="t-k">brevis</span> serve</code></pre></div>
+<div class="code-block" data-code="brevis scheduler --interval 5s --concurrency 4"><div class="code-head"><span class="code-lang">bash</span><button class="code-copy" type="button" aria-label="Copiar" data-done="Copiado">Copiar</button></div><pre><code><span class="t-k">brevis</span> scheduler <span class="t-n">--interval</span> 5s <span class="t-n">--concurrency</span> 4</code></pre></div>
+<p>Abra <code>http://localhost:8080</code>, encontre <code>hello</code> na lista de workflows e clique em ▶. O grafo mostra cada passo mudando de estado ao vivo.</p>
+<h2 id="o-que-aconteceu">O que aconteceu<a class="anchor" href="#o-que-aconteceu" aria-label="link">#</a></h2>
+<div class="table-wrap"><table><thead><tr><th></th><th></th></tr></thead><tbody><tr><td><code>migrate up</code></td><td>criou as tabelas</td></tr><tr><td><code>validate</code></td><td>conferiu o YAML sem tocar no banco</td></tr><tr><td><code>run</code></td><td>executou na própria instância, sem fila</td></tr><tr><td><code>publish</code></td><td>gravou o workflow e a agenda</td></tr><tr><td><code>serve</code></td><td>subiu API e interface</td></tr><tr><td><code>scheduler</code></td><td>materializou a agenda e executou a fila</td></tr></tbody></table></div>
+<h2 id="proximos-passos">Próximos passos<a class="anchor" href="#proximos-passos" aria-label="link">#</a></h2>
+<ul><li><a href="/docs/workflows/">Workflows</a> — o formato completo do YAML</li><li><a href="/docs/parameters/">Parâmetros</a> — o que muda entre dois disparos</li><li><a href="/docs/pod-per-step/">Pod por passo</a> — como isso vira Kubernetes</li></ul>
+
+      <nav class="pagers" aria-label="Páginas">
+        <a class="pager pager-prev" href="/docs/installation/"><span>Anterior</span><strong>Instalação</strong></a>
+        <a class="pager pager-next" href="/docs/workflows/"><span>Próximo</span><strong>Workflows</strong></a>
+      </nav>
+
+      <p class="doc-edit">
+        <a href="https://github.com/AreteAcademy/brevis/blob/master/site/content/pt/docs/quickstart.md" target="_blank" rel="noopener">Editar esta página no GitHub</a>
+      </p>
+    </article>
+
+    <aside class="toc" aria-label="Nesta página">
+      <p class="toc-t">Nesta página</p>
+      <ul><li class="toc-2"><a href="#1-aplicar-o-schema">1. Aplicar o schema</a></li><li class="toc-2"><a href="#2-escrever-um-workflow">2. Escrever um workflow</a></li><li class="toc-2"><a href="#3-executar-agora-sem-fila">3. Executar agora, sem fila</a></li><li class="toc-2"><a href="#4-publicar-e-operar">4. Publicar e operar</a></li><li class="toc-2"><a href="#o-que-aconteceu">O que aconteceu</a></li><li class="toc-2"><a href="#proximos-passos">Próximos passos</a></li></ul>
+    </aside>
+  </main>
+</div>
+
+
+<footer class="site-footer">
+  <div class="shell">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <a class="brand" href="/">
+          <svg class="mark" aria-hidden="true"><use href="#i-mark"></use></svg>
+          <span>brevis<span class="tld">.sh</span></span>
+        </a>
+        <p>Filosofia aplicada à infraestrutura de dados.</p>
+      </div>
+
+      <div class="footer-col">
+        <h2>projeto</h2>
+        <ul>
+          <li><a href="/#produto">Produto</a></li>
+          <li><a href="/#principios">Princípios</a></li>
+          <li><a href="/#open-source">Open source</a></li>
+          <li><a href="/#faq">FAQ</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col">
+        <h2>código</h2>
+        <ul>
+          <li><a href="/docs/">Documentação</a></li>
+          <li><a href="https://github.com/AreteAcademy/brevis" target="_blank" rel="noopener">Repositório</a></li>
+          <li><a href="https://github.com/AreteAcademy/brevis/discussions" target="_blank" rel="noopener">Discussões</a></li>
+          <li><a href="https://areteacademy.com.br/" target="_blank" rel="noopener">Aretê Academy</a></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="footer-bottom">
+      <p>Um projeto open source da <a href="https://areteacademy.com.br/" target="_blank" rel="noopener">Aretê Academy</a></p>
+      <p>MIT · construído em Go</p>
+    </div>
+  </div>
+</footer>
+
+<script src="/js/docs.js" defer></script>
+</body>
+</html>

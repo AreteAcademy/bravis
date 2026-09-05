@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#141711">
+
+<title>SDK em Go — Documentação</title>
+<meta name="description" content="Escrever um fetcher — extrair de uma origem, transformar e carregar num destino.">
+<meta name="author" content="Aretê Academy">
+<link rel="canonical" href="https://brevis.sh/docs/sdk/">
+<link rel="alternate" hreflang="pt-BR" href="https://brevis.sh/docs/sdk/"><link rel="alternate" hreflang="en" href="https://brevis.sh/en/docs/sdk/">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="brevis.sh">
+<meta property="og:locale" content="pt-BR">
+<meta property="og:title" content="SDK em Go — Documentação">
+<meta property="og:description" content="Escrever um fetcher — extrair de uma origem, transformar e carregar num destino.">
+<meta property="og:url" content="https://brevis.sh/docs/sdk/">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="SDK em Go — Documentação">
+<meta name="twitter:description" content="Escrever um fetcher — extrair de uma origem, transformar e carregar num destino.">
+
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&amp;family=IBM+Plex+Mono:wght@400;500&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap">
+<link rel="stylesheet" href="/css/styles.css">
+<link rel="stylesheet" href="/css/docs.css">
+
+<script>document.documentElement.classList.add('js');</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  "headline": "SDK em Go",
+  "description": "Escrever um fetcher — extrair de uma origem, transformar e carregar num destino.",
+  "inLanguage": "pt-BR",
+  "isPartOf": {
+    "@type": "WebSite",
+    "@id": "https://brevis.sh/#site"
+  },
+  "author": {
+    "@type": "Organization",
+    "name": "Aretê Academy"
+  }
+}
+</script>
+</head>
+<body class="page-doc">
+
+<a class="skip-link" href="#conteudo">Pular para o conteúdo</a>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-mark" viewBox="0 0 24 24">
+    <path d="M5 6.5 L19 12 M5 17.5 L19 12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none" opacity="0.5"/>
+    <circle cx="5" cy="6.5" r="2.4" fill="currentColor" opacity="0.75"/>
+    <circle cx="5" cy="17.5" r="2.4" fill="currentColor" opacity="0.75"/>
+    <circle cx="19" cy="12" r="3.2" fill="currentColor"/>
+  </symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+    <path d="M4 7h16M4 12h16M4 17h16"/>
+  </symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 12h15M13 6l6 6-6 6"/>
+  </symbol>
+  <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 12.5 9.5 18 20 6.5"/>
+  </symbol>
+  <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+    <circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>
+  </symbol>
+  <symbol id="i-github" viewBox="0 0 24 24">
+    <path fill="currentColor" d="M12 1.5a10.5 10.5 0 0 0-3.32 20.47c.53.1.72-.23.72-.5v-1.8c-2.92.63-3.54-1.4-3.54-1.4-.48-1.22-1.17-1.55-1.17-1.55-.95-.65.07-.64.07-.64 1.06.07 1.62 1.09 1.62 1.09.94 1.6 2.45 1.14 3.05.87.1-.68.37-1.14.67-1.4-2.33-.27-4.78-1.17-4.78-5.2 0-1.15.41-2.09 1.08-2.82-.11-.27-.47-1.34.1-2.8 0 0 .88-.28 2.88 1.08a10.1 10.1 0 0 1 5.24 0c2-1.36 2.87-1.08 2.87-1.08.58 1.46.22 2.53.11 2.8a4.05 4.05 0 0 1 1.08 2.82c0 4.04-2.46 4.93-4.8 5.19.38.33.72.97.72 1.96v2.9c0 .28.19.61.73.5A10.5 10.5 0 0 0 12 1.5z"/>
+  </symbol>
+</svg>
+
+<header class="site-header">
+  <div class="shell header-bar">
+    <a class="brand" href="/">
+      <svg class="mark" aria-hidden="true"><use href="#i-mark"></use></svg>
+      <span>brevis<span class="tld">.sh</span></span>
+    </a>
+
+    <nav class="main-nav" id="nav" aria-label="Navegação principal">
+      <a href="/#produto">Produto</a>
+      <a href="/#principios">Princípios</a>
+      <a href="/docs/">Documentação</a>
+      <a href="/#open-source">Open source</a>
+      <div class="lang-switch" role="group" aria-label="Idioma"><a href="/docs/sdk/" hreflang="pt-BR" aria-current="true">PT</a><a href="/en/docs/sdk/" hreflang="en">EN</a></div>
+      <a class="button button-secondary button-sm header-cta" href="https://github.com/AreteAcademy/brevis" target="_blank" rel="noopener">
+        <svg aria-hidden="true"><use href="#i-github"></use></svg>
+        Explorar open source
+      </a>
+    </nav>
+
+    <button class="nav-toggle" type="button" id="nav-toggle" aria-label="Abrir menu" aria-expanded="false" aria-controls="nav">
+      <svg aria-hidden="true"><use href="#i-menu"></use></svg>
+    </button>
+  </div>
+</header>
+
+<div class="doc-shell">
+  <button class="side-toggle" type="button" id="side-toggle" aria-expanded="false" aria-controls="side">
+    <svg aria-hidden="true"><use href="#i-menu"></use></svg>
+    Menu da documentação
+  </button>
+
+  <aside class="side" id="side">
+    <div class="side-inner">
+      <form class="search" role="search" onsubmit="return false">
+        <svg aria-hidden="true"><use href="#i-search"></use></svg>
+        <label class="sr-only" for="q">Buscar na documentação</label>
+        <input type="search" id="q" placeholder="Buscar…" autocomplete="off" spellcheck="false">
+      </form>
+      <div class="search-out" id="search-out" data-none="Nada encontrado" hidden></div>
+      <nav class="side-nav" aria-label="Documentação">
+        <p class="side-group">Começar</p><ul class="side-list"><li><a href="/docs/introduction/">Introdução</a></li><li><a href="/docs/installation/">Instalação</a></li><li><a href="/docs/quickstart/">Quickstart</a></li></ul><p class="side-group">Conceitos</p><ul class="side-list"><li><a href="/docs/workflows/">Workflows</a></li><li><a href="/docs/scheduler-and-queue/">Scheduler e fila</a></li><li><a href="/docs/pod-per-step/">Pod por passo</a></li></ul><p class="side-group">Referência</p><ul class="side-list"><li><a href="/docs/cli/">CLI</a></li><li><a href="/docs/parameters/">Parâmetros</a></li><li><a href="/docs/configuration/">Configuração</a></li></ul><p class="side-group">SDK</p><ul class="side-list"><li><a href="/docs/sdk/" aria-current="page">SDK em Go</a></li></ul><p class="side-group">Operação</p><ul class="side-list"><li><a href="/docs/kubernetes/">Kubernetes</a></li><li><a href="/docs/white-label/">Marca branca</a></li></ul>
+      </nav>
+    </div>
+  </aside>
+
+  <main class="doc" id="conteudo">
+    <article class="doc-body">
+      <p class="doc-kicker">Documentação</p>
+      <h1>SDK em Go</h1>
+      <p class="doc-desc">Escrever um fetcher — extrair de uma origem, transformar e carregar num destino.</p>
+      <p>Quando o trabalho de um passo é <strong>buscar dados e carregá-los em algum lugar</strong>, o SDK em Go entrega o fetcher inteiro em poucas linhas. Ele é um módulo à parte, versionado independentemente do engine.</p>
+<div class="code-block" data-code="go get github.com/AreteAcademy/brevis/sdk@latest"><div class="code-head"><span class="code-lang">bash</span><button class="code-copy" type="button" aria-label="Copiar" data-done="Copiado">Copiar</button></div><pre><code><span class="t-k">go</span> get github.com/AreteAcademy/<span class="t-k">brevis</span>/sdk@latest</code></pre></div>
+<p>Requer Go 1.23 ou mais novo — o SDK entrega linhas como <code>iter.Seq2</code>.</p>
+<aside class="admon admon-warning"><p class="admon-t">Não use a `v0.1.0`</p><p>Ela saiu com um <code>go.mod</code> apontando para uma revisão que não existe, e o proxy de módulos do Go é imutável. Comece na <code>v0.1.1</code>.</p></aside>
+<h2 id="tres-passos">Três passos<a class="anchor" href="#tres-passos" aria-label="link">#</a></h2>
+<div class="code-block" data-code="import (
+	&quot;github.com/AreteAcademy/brevis/sdk&quot;
+	&quot;github.com/AreteAcademy/brevis/sdk/from&quot;
+	&quot;github.com/AreteAcademy/brevis/sdk/to/bigquery&quot;
+)
+
+dados, err := sdk.Extract(ctx, sdk.Source{
+	From: from.HTTP{URL: &quot;https://api.exemplo.com/v1/eventos&quot;},
+})
+
+dados = sdk.Transform(dados, sdk.Accept(&quot;id&quot;, &quot;criado_em&quot;, &quot;valor&quot;))
+
+res, err := sdk.Load(ctx, dados, sdk.Target{
+	To:      bigquery.Table{Dataset: &quot;bronze&quot;, Name: &quot;eventos&quot;},
+	Columns: []string{&quot;id&quot;, &quot;criado_em&quot;, &quot;valor&quot;},
+})"><div class="code-head"><span class="code-lang">go</span><button class="code-copy" type="button" aria-label="Copiar" data-done="Copiado">Copiar</button></div><pre><code><span class="t-k">import</span> (
+	"github.com/AreteAcademy/brevis/sdk"
+	"github.com/AreteAcademy/brevis/sdk/from"
+	"github.com/AreteAcademy/brevis/sdk/to/bigquery"
+)
+
+dados, <span class="t-k">err</span> := sdk.Extract(ctx, sdk.Source{
+	From: from.HTTP{URL: "https:<span class="t-c">//api.exemplo.com/v1/eventos"},</span>
+})
+
+dados = sdk.Transform(dados, sdk.Accept("id", "criado_em", "valor"))
+
+res, <span class="t-k">err</span> := sdk.Load(ctx, dados, sdk.Target{
+	To:      bigquery.Table{Dataset: "bronze", Name: "eventos"},
+	Columns: []string{"id", "criado_em", "valor"},
+})</code></pre></div>
+<p><code>Extract</code> lê, <code>Transform</code> reformata, <code>Load</code> escreve. Cada um recebe e devolve uma sequência — nada é materializado em memória de uma vez.</p>
+<h2 id="o-driver-e-um-valor-nao-uma-configuracao">O driver é um valor, não uma configuração<a class="anchor" href="#o-driver-e-um-valor-nao-uma-configuracao" aria-label="link">#</a></h2>
+<p><code>from.HTTP</code> carrega tudo que uma origem HTTP precisa: URL, cabeçalhos, retry, paginação e o que uma resposta significa. <code>from.Files</code> carrega um caminho e um formato. Nenhum precisa abrir espaço para os campos do outro, então não existe uma struct de origem com quarenta opções das quais cada driver lê seis.</p>
+<p>Isso também decide <strong>o que você compila</strong>. Go poda dependências por pacote importado, nunca por campo usado:</p>
+<div class="table-wrap"><table><thead><tr><th>o que você importa</th><th>pacotes</th><th>AWS</th><th>Google</th></tr></thead><tbody><tr><td><code>sdk</code></td><td>190</td><td>não</td><td>não</td></tr><tr><td><code>sdk</code> + <code>from</code></td><td>194</td><td>não</td><td>não</td></tr><tr><td><code>sdk</code> + <code>from</code> + <code>to</code> (arquivos)</td><td>195</td><td>não</td><td>não</td></tr><tr><td><code>sdk</code> + <code>to/bigquery</code></td><td>456</td><td>não</td><td><strong>sim</strong></td></tr><tr><td><code>sdk</code> + <code>from</code> + <code>store/s3</code></td><td>265</td><td><strong>sim</strong></td><td>não</td></tr></tbody></table></div>
+<p>Um pipeline inteiro de arquivos — ler e escrever — custa 195 pacotes e nenhum SDK de nuvem. <strong>Um driver com SDK de fornecedor atrás vive no próprio pacote</strong>, que é por que BigQuery é <code>to/bigquery</code> e os object stores são <code>store/s3</code> e <code>store/gcs</code>.</p>
+<h2 id="origens-e-destinos">Origens e destinos<a class="anchor" href="#origens-e-destinos" aria-label="link">#</a></h2>
+<div class="table-wrap"><table><thead><tr><th>origem</th><th>pacote</th></tr></thead><tbody><tr><td>HTTP</td><td><code>from.HTTP</code></td></tr><tr><td>arquivos (local, S3, GCS)</td><td><code>from.Files</code></td></tr><tr><td>Postgres</td><td><code>from/postgres</code></td></tr><tr><td>MySQL</td><td><code>from/mysql</code></td></tr><tr><td>várias origens</td><td><code>from.Many</code></td></tr></tbody></table></div>
+<div class="table-wrap"><table><thead><tr><th>destino</th><th>pacote</th></tr></thead><tbody><tr><td>arquivos</td><td><code>to.Files</code></td></tr><tr><td>BigQuery</td><td><code>to/bigquery</code></td></tr><tr><td>Postgres</td><td><code>to/postgres</code></td></tr><tr><td>MySQL</td><td><code>to/mysql</code></td></tr><tr><td>Redshift</td><td><code>to/redshift</code></td></tr></tbody></table></div>
+<p>O esquema do caminho decide o backend, e o <code>Store</code> é <strong>passado</strong> em vez de escolhido dentro do driver:</p>
+<div class="code-block" data-code="from.Files{Path: &quot;s3://bucket/dia=1/*.ndjson&quot;, Store: s3.New(cliente)}
+to.Files{Path: &quot;gs://bucket/landing/&quot;, Store: gcs.New(cliente)}"><div class="code-head"><span class="code-lang">go</span><button class="code-copy" type="button" aria-label="Copiar" data-done="Copiado">Copiar</button></div><pre><code>from.Files{Path: "s3:<span class="t-c">//bucket/dia=1/*.ndjson", Store: s3.New(cliente)}</span>
+to.Files{Path: "gs:<span class="t-c">//bucket/landing/", Store: gcs.New(cliente)}</span></code></pre></div>
+<p>É isso que faz um programa de arquivos locais não compilar uma linha da AWS nem do Google.</p>
+<h2 id="um-fetcher-inteiro">Um fetcher inteiro<a class="anchor" href="#um-fetcher-inteiro" aria-label="link">#</a></h2>
+<p><code>sdk.Run</code> toma conta de flags, <code>-dry-run</code>, logging, retry, paginação, procedência, criação de tabela e código de saída. O que sobra no arquivo é só o que é específico daquela fonte:</p>
+<div class="code-block" data-code="package main
+
+import (
+	&quot;time&quot;
+
+	&quot;github.com/AreteAcademy/brevis/sdk&quot;
+	&quot;github.com/AreteAcademy/brevis/sdk/from&quot;
+)
+
+func main() {
+	sdk.Run(sdk.Pipeline{
+		Source: sdk.Source{
+			From: from.HTTP{
+				URL:     &quot;https://api.exemplo.com/v1/eventos&quot;,
+				Timeout: 15 * time.Second,
+			},
+			Guard:  sdk.RejectIf(&quot;error&quot;),
+			Expand: sdk.ArrayAt(&quot;results&quot;),
+		},
+		Target: sdk.Target{
+			Provider: &quot;exemplo&quot;,
+			Entity:   &quot;eventos&quot;,
+			Key:      sdk.Key(&quot;id&quot;),
+			When:     sdk.Field(&quot;created_at&quot;),
+		},
+	})
+}"><div class="code-head"><span class="code-lang">go</span><button class="code-copy" type="button" aria-label="Copiar" data-done="Copiado">Copiar</button></div><pre><code><span class="t-k">package</span> main
+
+<span class="t-k">import</span> (
+	"time"
+
+	"github.com/AreteAcademy/brevis/sdk"
+	"github.com/AreteAcademy/brevis/sdk/from"
+)
+
+<span class="t-k">func</span> main() {
+	sdk.Run(sdk.Pipeline{
+		Source: sdk.Source{
+			From: from.HTTP{
+				URL:     "https:<span class="t-c">//api.exemplo.com/v1/eventos",</span>
+				Timeout: 15 * time.Second,
+			},
+			Guard:  sdk.RejectIf("error"),
+			Expand: sdk.ArrayAt("results"),
+		},
+		Target: sdk.Target{
+			Provider: "exemplo",
+			Entity:   "eventos",
+			Key:      sdk.Key("id"),
+			When:     sdk.Field("created_at"),
+		},
+	})
+}</code></pre></div>
+<div class="code-block" data-code="go run ./fetcher -dry-run   # extrai, conta linhas e erros, não escreve
+go run ./fetcher"><div class="code-head"><span class="code-lang">bash</span><button class="code-copy" type="button" aria-label="Copiar" data-done="Copiado">Copiar</button></div><pre><code><span class="t-k">go</span> run ./fetcher <span class="t-n">-dry-run</span>   <span class="t-c"># extrai, conta linhas e erros, não escreve</span>
+<span class="t-k">go</span> run ./fetcher</code></pre></div>
+<h2 id="o-contexto-do-run">O contexto do run<a class="anchor" href="#o-contexto-do-run" aria-label="link">#</a></h2>
+<p>Quando o fetcher roda <strong>como passo de um workflow</strong>, o engine injeta no ambiente o que ele não teria como saber: se é a primeira execução, com que parâmetros foi disparado, qual run é. O SDK lê isso em <code>Pipeline.Run</code>:</p>
+<div class="code-block" data-code="Before: func(ctx context.Context, p *sdk.Pipeline) error {
+	if p.Run.Params[&quot;load_full&quot;] == &quot;true&quot; {
+		p.Source.From = from.HTTP{URL: base + &quot;?full=1&quot;}
+	}
+	return nil
+},"><div class="code-head"><span class="code-lang">go</span><button class="code-copy" type="button" aria-label="Copiar" data-done="Copiado">Copiar</button></div><pre><code>Before: <span class="t-k">func</span>(ctx context.Context, p *sdk.Pipeline) error {
+	<span class="t-k">if</span> p.Run.Params["load_full"] == "true" {
+		p.Source.From = from.HTTP{URL: base + "?full=1"}
+	}
+	<span class="t-k">return</span> <span class="t-k">nil</span>
+},</code></pre></div>
+<p>Rodando à mão, <code>Run</code> vem zerado — ler é opcional, e ignorá-lo não custa nada.</p>
+<p>Sem histórico, a resposta para "é a primeira execução?" é sempre <strong>não</strong>: criar tabela sem certeza é pior do que não criar.</p>
+<h2 id="referencia">Referência<a class="anchor" href="#referencia" aria-label="link">#</a></h2>
+<ul><li><a href="https://pkg.go.dev/github.com/AreteAcademy/brevis/sdk" target="_blank" rel="noopener">pkg.go.dev</a> — a API completa</li><li><a href="https://github.com/AreteAcademy/brevis/tree/master/examples" target="_blank" rel="noopener"><code>examples/</code></a> — doze exemplos executáveis</li><li><a href="https://github.com/AreteAcademy/brevis/blob/master/CHANGELOG.md" target="_blank" rel="noopener"><code>CHANGELOG.md</code></a> — histórico versão a versão</li></ul>
+
+      <nav class="pagers" aria-label="Páginas">
+        <a class="pager pager-prev" href="/docs/configuration/"><span>Anterior</span><strong>Configuração</strong></a>
+        <a class="pager pager-next" href="/docs/kubernetes/"><span>Próximo</span><strong>Kubernetes</strong></a>
+      </nav>
+
+      <p class="doc-edit">
+        <a href="https://github.com/AreteAcademy/brevis/blob/master/site/content/pt/docs/sdk.md" target="_blank" rel="noopener">Editar esta página no GitHub</a>
+      </p>
+    </article>
+
+    <aside class="toc" aria-label="Nesta página">
+      <p class="toc-t">Nesta página</p>
+      <ul><li class="toc-2"><a href="#tres-passos">Três passos</a></li><li class="toc-2"><a href="#o-driver-e-um-valor-nao-uma-configuracao">O driver é um valor, não uma configuração</a></li><li class="toc-2"><a href="#origens-e-destinos">Origens e destinos</a></li><li class="toc-2"><a href="#um-fetcher-inteiro">Um fetcher inteiro</a></li><li class="toc-2"><a href="#o-contexto-do-run">O contexto do run</a></li><li class="toc-2"><a href="#referencia">Referência</a></li></ul>
+    </aside>
+  </main>
+</div>
+
+
+<footer class="site-footer">
+  <div class="shell">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <a class="brand" href="/">
+          <svg class="mark" aria-hidden="true"><use href="#i-mark"></use></svg>
+          <span>brevis<span class="tld">.sh</span></span>
+        </a>
+        <p>Filosofia aplicada à infraestrutura de dados.</p>
+      </div>
+
+      <div class="footer-col">
+        <h2>projeto</h2>
+        <ul>
+          <li><a href="/#produto">Produto</a></li>
+          <li><a href="/#principios">Princípios</a></li>
+          <li><a href="/#open-source">Open source</a></li>
+          <li><a href="/#faq">FAQ</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col">
+        <h2>código</h2>
+        <ul>
+          <li><a href="/docs/">Documentação</a></li>
+          <li><a href="https://github.com/AreteAcademy/brevis" target="_blank" rel="noopener">Repositório</a></li>
+          <li><a href="https://github.com/AreteAcademy/brevis/discussions" target="_blank" rel="noopener">Discussões</a></li>
+          <li><a href="https://areteacademy.com.br/" target="_blank" rel="noopener">Aretê Academy</a></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="footer-bottom">
+      <p>Um projeto open source da <a href="https://areteacademy.com.br/" target="_blank" rel="noopener">Aretê Academy</a></p>
+      <p>MIT · construído em Go</p>
+    </div>
+  </div>
+</footer>
+
+<script src="/js/docs.js" defer></script>
+</body>
+</html>

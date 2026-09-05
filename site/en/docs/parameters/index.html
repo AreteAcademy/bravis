@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#141711">
+
+<title>Parameters — Documentation</title>
+<meta name="description" content="What changes between two runs of the same workflow, without editing the file.">
+<meta name="author" content="Aretê Academy">
+<link rel="canonical" href="https://brevis.sh/en/docs/parameters/">
+<link rel="alternate" hreflang="pt-BR" href="https://brevis.sh/docs/parameters/"><link rel="alternate" hreflang="en" href="https://brevis.sh/en/docs/parameters/">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="brevis.sh">
+<meta property="og:locale" content="en">
+<meta property="og:title" content="Parameters — Documentation">
+<meta property="og:description" content="What changes between two runs of the same workflow, without editing the file.">
+<meta property="og:url" content="https://brevis.sh/en/docs/parameters/">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Parameters — Documentation">
+<meta name="twitter:description" content="What changes between two runs of the same workflow, without editing the file.">
+
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&amp;family=IBM+Plex+Mono:wght@400;500&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap">
+<link rel="stylesheet" href="/css/styles.css">
+<link rel="stylesheet" href="/css/docs.css">
+
+<script>document.documentElement.classList.add('js');</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  "headline": "Parameters",
+  "description": "What changes between two runs of the same workflow, without editing the file.",
+  "inLanguage": "en",
+  "isPartOf": {
+    "@type": "WebSite",
+    "@id": "https://brevis.sh/#site"
+  },
+  "author": {
+    "@type": "Organization",
+    "name": "Aretê Academy"
+  }
+}
+</script>
+</head>
+<body class="page-doc">
+
+<a class="skip-link" href="#conteudo">Skip to content</a>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-mark" viewBox="0 0 24 24">
+    <path d="M5 6.5 L19 12 M5 17.5 L19 12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none" opacity="0.5"/>
+    <circle cx="5" cy="6.5" r="2.4" fill="currentColor" opacity="0.75"/>
+    <circle cx="5" cy="17.5" r="2.4" fill="currentColor" opacity="0.75"/>
+    <circle cx="19" cy="12" r="3.2" fill="currentColor"/>
+  </symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+    <path d="M4 7h16M4 12h16M4 17h16"/>
+  </symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 12h15M13 6l6 6-6 6"/>
+  </symbol>
+  <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 12.5 9.5 18 20 6.5"/>
+  </symbol>
+  <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+    <circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>
+  </symbol>
+  <symbol id="i-github" viewBox="0 0 24 24">
+    <path fill="currentColor" d="M12 1.5a10.5 10.5 0 0 0-3.32 20.47c.53.1.72-.23.72-.5v-1.8c-2.92.63-3.54-1.4-3.54-1.4-.48-1.22-1.17-1.55-1.17-1.55-.95-.65.07-.64.07-.64 1.06.07 1.62 1.09 1.62 1.09.94 1.6 2.45 1.14 3.05.87.1-.68.37-1.14.67-1.4-2.33-.27-4.78-1.17-4.78-5.2 0-1.15.41-2.09 1.08-2.82-.11-.27-.47-1.34.1-2.8 0 0 .88-.28 2.88 1.08a10.1 10.1 0 0 1 5.24 0c2-1.36 2.87-1.08 2.87-1.08.58 1.46.22 2.53.11 2.8a4.05 4.05 0 0 1 1.08 2.82c0 4.04-2.46 4.93-4.8 5.19.38.33.72.97.72 1.96v2.9c0 .28.19.61.73.5A10.5 10.5 0 0 0 12 1.5z"/>
+  </symbol>
+</svg>
+
+<header class="site-header">
+  <div class="shell header-bar">
+    <a class="brand" href="/en/">
+      <svg class="mark" aria-hidden="true"><use href="#i-mark"></use></svg>
+      <span>brevis<span class="tld">.sh</span></span>
+    </a>
+
+    <nav class="main-nav" id="nav" aria-label="Main navigation">
+      <a href="/en/#produto">Product</a>
+      <a href="/en/#principios">Principles</a>
+      <a href="/en/docs/">Documentation</a>
+      <a href="/en/#open-source">Open source</a>
+      <div class="lang-switch" role="group" aria-label="Language"><a href="/docs/parameters/" hreflang="pt-BR">PT</a><a href="/en/docs/parameters/" hreflang="en" aria-current="true">EN</a></div>
+      <a class="button button-secondary button-sm header-cta" href="https://github.com/AreteAcademy/brevis" target="_blank" rel="noopener">
+        <svg aria-hidden="true"><use href="#i-github"></use></svg>
+        Explore open source
+      </a>
+    </nav>
+
+    <button class="nav-toggle" type="button" id="nav-toggle" aria-label="Open menu" aria-expanded="false" aria-controls="nav">
+      <svg aria-hidden="true"><use href="#i-menu"></use></svg>
+    </button>
+  </div>
+</header>
+
+<div class="doc-shell">
+  <button class="side-toggle" type="button" id="side-toggle" aria-expanded="false" aria-controls="side">
+    <svg aria-hidden="true"><use href="#i-menu"></use></svg>
+    Documentation menu
+  </button>
+
+  <aside class="side" id="side">
+    <div class="side-inner">
+      <form class="search" role="search" onsubmit="return false">
+        <svg aria-hidden="true"><use href="#i-search"></use></svg>
+        <label class="sr-only" for="q">Search the documentation</label>
+        <input type="search" id="q" placeholder="Search…" autocomplete="off" spellcheck="false">
+      </form>
+      <div class="search-out" id="search-out" data-none="No results" hidden></div>
+      <nav class="side-nav" aria-label="Documentation">
+        <p class="side-group">Getting started</p><ul class="side-list"><li><a href="/en/docs/introduction/">Introduction</a></li><li><a href="/en/docs/installation/">Installation</a></li><li><a href="/en/docs/quickstart/">Quickstart</a></li></ul><p class="side-group">Concepts</p><ul class="side-list"><li><a href="/en/docs/workflows/">Workflows</a></li><li><a href="/en/docs/scheduler-and-queue/">Scheduler and queue</a></li><li><a href="/en/docs/pod-per-step/">Pod per step</a></li></ul><p class="side-group">Reference</p><ul class="side-list"><li><a href="/en/docs/cli/">CLI</a></li><li><a href="/en/docs/parameters/" aria-current="page">Parameters</a></li><li><a href="/en/docs/configuration/">Configuration</a></li></ul><p class="side-group">SDK</p><ul class="side-list"><li><a href="/en/docs/sdk/">Go SDK</a></li></ul><p class="side-group">Operations</p><ul class="side-list"><li><a href="/en/docs/kubernetes/">Kubernetes</a></li><li><a href="/en/docs/white-label/">White label</a></li></ul>
+      </nav>
+    </div>
+  </aside>
+
+  <main class="doc" id="conteudo">
+    <article class="doc-body">
+      <p class="doc-kicker">Documentation</p>
+      <h1>Parameters</h1>
+      <p class="doc-desc">What changes between two runs of the same workflow, without editing the file.</p>
+      <p>A workflow can declare <strong>run parameters</strong>: values that change between two triggers without the file changing.</p>
+<h2 id="declaring">Declaring<a class="anchor" href="#declaring" aria-label="link">#</a></h2>
+<div class="code-block" data-code="params:
+  - name: load_full
+    type: boolean
+    default: &quot;false&quot;
+
+  - name: start_date
+    type: string
+    pattern: &#x27;^\d{4}-\d{2}-\d{2}$&#x27;
+
+steps:
+  - id: run
+    run: dbt build --vars &#x27;{&quot;load_full&quot;:&quot;{{ .load_full }}&quot;}&#x27; --select bronze+"><div class="code-head"><span class="code-lang">yaml</span><button class="code-copy" type="button" aria-label="Copy" data-done="Copied">Copy</button></div><pre><code><span class="t-k">params</span>:
+  - <span class="t-k">name</span>: load_full
+    <span class="t-k">type</span>: boolean
+    <span class="t-k">default</span>: "<span class="t-n">false</span>"
+
+  - <span class="t-k">name</span>: start_date
+    <span class="t-k">type</span>: string
+    <span class="t-k">pattern</span>: '^\d{4}-\d{2}-\d{2}$'
+
+<span class="t-k">steps</span>:
+  - <span class="t-k">id</span>: run
+    <span class="t-k">run</span>: dbt build --vars '{"load_full":"{{ .load_full }}"}' --select bronze+</code></pre></div>
+<div class="table-wrap"><table><thead><tr><th>field</th><th></th><th></th></tr></thead><tbody><tr><td><code>name</code></td><td><strong>required</strong></td><td>the name used in the template and in <code>--param</code></td></tr><tr><td><code>type</code></td><td></td><td><code>string</code> or <code>boolean</code></td></tr><tr><td><code>default</code></td><td></td><td>used when the trigger provides no value</td></tr><tr><td><code>pattern</code></td><td></td><td>regular expression the value must match</td></tr></tbody></table></div>
+<p>A parameter <strong>without a <code>default</code></strong> is required: a trigger that omits it fails before executing any step.</p>
+<h2 id="using-it-in-the-command">Using it in the command<a class="anchor" href="#using-it-in-the-command" aria-label="link">#</a></h2>
+<p>The value enters <code>run</code> through a template, in double braces with a dot:</p>
+<div class="code-block" data-code="run: ./load.sh --since {{ .start_date }}"><div class="code-head"><span class="code-lang">yaml</span><button class="code-copy" type="button" aria-label="Copy" data-done="Copied">Copy</button></div><pre><code><span class="t-k">run</span>: ./load.sh --since {{ .start_date }}</code></pre></div>
+<h2 id="passing-it-on-the-command-line">Passing it on the command line<a class="anchor" href="#passing-it-on-the-command-line" aria-label="link">#</a></h2>
+<div class="code-block" data-code="brevis run wf.yaml --param load_full=true
+brevis run wf.yaml --param load_full=true --param start_date=2026-01-01"><div class="code-head"><span class="code-lang">bash</span><button class="code-copy" type="button" aria-label="Copy" data-done="Copied">Copy</button></div><pre><code><span class="t-k">brevis</span> run wf.yaml <span class="t-n">--param</span> load_full=true
+<span class="t-k">brevis</span> run wf.yaml <span class="t-n">--param</span> load_full=true <span class="t-n">--param</span> start_date=2026-01-01</code></pre></div>
+<p><code>--param</code> is repeatable. Input without <code>=</code> is an <strong>error</strong>:</p>
+<div class="code-block" data-code="erro: --param &quot;load_full&quot;: use chave=valor"><div class="code-head"><button class="code-copy" type="button" aria-label="Copy" data-done="Copied">Copy</button></div><pre><code>erro: --param "load_full": use chave=valor</code></pre></div>
+<p>That is deliberate. <code>--param load_full</code>, forgetting the value, would run with the default — and the operator would believe the backfill happened with the parameter they intended.</p>
+<h2 id="in-a-backfill">In a backfill<a class="anchor" href="#in-a-backfill" aria-label="link">#</a></h2>
+<p>The values apply to <strong>every</strong> slot in the range. This is the central use case: "reprocess all of January with <code>load_full=true</code>".</p>
+<div class="code-block" data-code="brevis backfill daily --from 2026-01-01 --to 2026-01-31 --param load_full=true"><div class="code-head"><span class="code-lang">bash</span><button class="code-copy" type="button" aria-label="Copy" data-done="Copied">Copy</button></div><pre><code><span class="t-k">brevis</span> backfill daily <span class="t-n">--from</span> 2026-01-01 <span class="t-n">--to</span> 2026-01-31 <span class="t-n">--param</span> load_full=true</code></pre></div>
+<h2 id="in-the-interface">In the interface<a class="anchor" href="#in-the-interface" aria-label="link">#</a></h2>
+<p>A workflow with <code>params</code> gets a <strong>form</strong> in place of the simple trigger button. Fields come from the declaration, and <code>pattern</code> is validated before submission.</p>
+<h2 id="in-the-step-environment">In the step environment<a class="anchor" href="#in-the-step-environment" aria-label="link">#</a></h2>
+<p>Run parameters also enter each step's <strong>environment</strong>, prefixed. This exists so that a fetcher written with the <a href="/en/docs/sdk/">SDK</a> can see them without receiving anything as an argument:</p>
+<div class="code-block" data-code="Before: func(ctx context.Context, p *sdk.Pipeline) error {
+    if p.Run.Params[&quot;load_full&quot;] == &quot;true&quot; {
+        p.Source.URL += &quot;&amp;full=1&quot;
+    }
+    return nil
+},"><div class="code-head"><span class="code-lang">go</span><button class="code-copy" type="button" aria-label="Copy" data-done="Copied">Copy</button></div><pre><code>Before: <span class="t-k">func</span>(ctx context.Context, p *sdk.Pipeline) error {
+    <span class="t-k">if</span> p.Run.Params["load_full"] == "true" {
+        p.Source.URL += "&amp;full=1"
+    }
+    <span class="t-k">return</span> <span class="t-k">nil</span>
+},</code></pre></div>
+<h2 id="the-snapshot">The snapshot<a class="anchor" href="#the-snapshot" aria-label="link">#</a></h2>
+<p>Parameters are stored <strong>in the run</strong>, not read from the workflow at execution time. The run carries the input it was triggered with, and the log of a January execution keeps showing January's values even after the default changes.</p>
+<h2 id="next-steps">Next steps<a class="anchor" href="#next-steps" aria-label="link">#</a></h2>
+<ul><li><a href="/en/docs/configuration/">Configuration</a> — process environment variables</li><li><a href="/en/docs/sdk/">SDK</a> — how a fetcher reads the run context</li></ul>
+
+      <nav class="pagers" aria-label="Pages">
+        <a class="pager pager-prev" href="/en/docs/cli/"><span>Previous</span><strong>CLI</strong></a>
+        <a class="pager pager-next" href="/en/docs/configuration/"><span>Next</span><strong>Configuration</strong></a>
+      </nav>
+
+      <p class="doc-edit">
+        <a href="https://github.com/AreteAcademy/brevis/blob/master/site/content/en/docs/parameters.md" target="_blank" rel="noopener">Edit this page on GitHub</a>
+      </p>
+    </article>
+
+    <aside class="toc" aria-label="On this page">
+      <p class="toc-t">On this page</p>
+      <ul><li class="toc-2"><a href="#declaring">Declaring</a></li><li class="toc-2"><a href="#using-it-in-the-command">Using it in the command</a></li><li class="toc-2"><a href="#passing-it-on-the-command-line">Passing it on the command line</a></li><li class="toc-2"><a href="#in-a-backfill">In a backfill</a></li><li class="toc-2"><a href="#in-the-interface">In the interface</a></li><li class="toc-2"><a href="#in-the-step-environment">In the step environment</a></li><li class="toc-2"><a href="#the-snapshot">The snapshot</a></li><li class="toc-2"><a href="#next-steps">Next steps</a></li></ul>
+    </aside>
+  </main>
+</div>
+
+
+<footer class="site-footer">
+  <div class="shell">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <a class="brand" href="/en/">
+          <svg class="mark" aria-hidden="true"><use href="#i-mark"></use></svg>
+          <span>brevis<span class="tld">.sh</span></span>
+        </a>
+        <p>Philosophy applied to data infrastructure.</p>
+      </div>
+
+      <div class="footer-col">
+        <h2>project</h2>
+        <ul>
+          <li><a href="/en/#produto">Product</a></li>
+          <li><a href="/en/#principios">Principles</a></li>
+          <li><a href="/en/#open-source">Open source</a></li>
+          <li><a href="/en/#faq">FAQ</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col">
+        <h2>code</h2>
+        <ul>
+          <li><a href="/en/docs/">Documentation</a></li>
+          <li><a href="https://github.com/AreteAcademy/brevis" target="_blank" rel="noopener">Repository</a></li>
+          <li><a href="https://github.com/AreteAcademy/brevis/discussions" target="_blank" rel="noopener">Discussions</a></li>
+          <li><a href="https://areteacademy.com.br/" target="_blank" rel="noopener">Aretê Academy</a></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="footer-bottom">
+      <p>An open source project by <a href="https://areteacademy.com.br/" target="_blank" rel="noopener">Aretê Academy</a></p>
+      <p>MIT · built in Go</p>
+    </div>
+  </div>
+</footer>
+
+<script src="/js/docs.js" defer></script>
+</body>
+</html>

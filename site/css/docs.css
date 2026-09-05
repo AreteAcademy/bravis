@@ -1,0 +1,666 @@
+/* ===========================================================================
+   brevis.sh — documentação
+
+   Três colunas: navegação, conteúdo e índice da página. É o arranjo que todo
+   dev já sabe operar sem aprender nada, e a razão de não inventarmos outro.
+
+   Herda os tokens de styles.css. Nada de cor nova aqui.
+   =========================================================================== */
+
+.page-doc {
+  --side: 268px;
+  --toc: 210px;
+}
+
+.doc-shell {
+  display: grid;
+  grid-template-columns: var(--side) minmax(0, 1fr);
+  gap: 0;
+  width: min(1440px, 100%);
+  margin-inline: auto;
+  align-items: start;
+}
+
+/* ------------------------------------------------------------- sidebar ---- */
+
+.side {
+  position: sticky;
+  top: 61px;
+  height: calc(100vh - 61px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-right: 1px solid var(--line-soft);
+  padding: 2rem 1.25rem 3rem 1.5rem;
+}
+
+.side-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.side-group {
+  margin: 1.75rem 0 0.6rem;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--olive);
+}
+
+.side-nav > .side-group:first-child {
+  margin-top: 0;
+}
+
+.side-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.1rem;
+}
+
+.side-list a {
+  display: block;
+  padding: 0.4rem 0.7rem;
+  border-radius: var(--r);
+  border-left: 2px solid transparent;
+  font-size: 0.92rem;
+  line-height: 1.45;
+  color: var(--text-dim);
+  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+
+.side-list a:hover {
+  color: var(--text);
+  background: var(--surface);
+}
+
+.side-list a[aria-current="page"] {
+  color: var(--lime);
+  background: var(--lime-wash);
+  border-left-color: var(--lime);
+}
+
+/* -------------------------------------------------------------- busca ---- */
+
+.search {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.search svg {
+  position: absolute;
+  left: 0.7rem;
+  width: 15px;
+  height: 15px;
+  color: var(--olive);
+  pointer-events: none;
+}
+
+.search input {
+  width: 100%;
+  padding: 0.55rem 0.7rem 0.55rem 2.1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 0.88rem;
+}
+
+.search input::placeholder {
+  color: var(--olive);
+}
+
+.search input:focus {
+  outline: none;
+  border-color: var(--lime);
+}
+
+.search-out {
+  display: grid;
+  gap: 0.15rem;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 0.4rem;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--surface);
+}
+
+.search-out a {
+  display: block;
+  padding: 0.5rem 0.6rem;
+  border-radius: var(--r);
+}
+
+.search-out a:hover,
+.search-out a:focus-visible {
+  background: var(--surface-2);
+}
+
+.search-out .r-t {
+  font-size: 0.88rem;
+  color: var(--text);
+}
+
+.search-out .r-g {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--olive);
+}
+
+.search-out .r-none {
+  padding: 0.6rem;
+  font-size: 0.86rem;
+  color: var(--text-dim);
+}
+
+.side-toggle {
+  display: none;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.7rem 1.25rem;
+  border: 0;
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--surface);
+  color: var(--text-dim);
+  font-family: var(--font-sans);
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+
+.side-toggle svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* ------------------------------------------------------------ conteúdo ---- */
+
+.doc {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--toc);
+  gap: clamp(1.5rem, 3vw, 3rem);
+  padding: clamp(2rem, 4vw, 3.5rem) clamp(1.25rem, 3vw, 3rem) 5rem;
+  align-items: start;
+}
+
+.doc-body {
+  min-width: 0;
+  max-width: 76ch;
+}
+
+.doc-kicker {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--olive);
+  margin: 0 0 0.9rem;
+}
+
+.doc-body h1 {
+  font-size: clamp(2.1rem, 4vw, 3rem);
+  line-height: 1.06;
+}
+
+.doc-desc {
+  margin: 1rem 0 0;
+  font-size: 1.08rem;
+  line-height: 1.7;
+  color: var(--text-dim);
+}
+
+.doc-body h2 {
+  margin: 3.5rem 0 1rem;
+  padding-top: 1.75rem;
+  border-top: 1px solid var(--line-soft);
+  font-size: clamp(1.55rem, 2.6vw, 2rem);
+  line-height: 1.15;
+}
+
+.doc-body h3 {
+  margin: 2.5rem 0 0.75rem;
+  font-family: var(--font-sans);
+  font-size: 1.08rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.4;
+  color: var(--text);
+}
+
+.doc-body h4 {
+  margin: 2rem 0 0.6rem;
+  font-size: 0.95rem;
+  color: var(--text-dim);
+}
+
+/* A âncora só aparece no hover do heading, mas continua alcançável por
+   teclado — quem navega por Tab precisa dela tanto quanto quem aponta. */
+.anchor {
+  margin-left: 0.5rem;
+  font-family: var(--font-mono);
+  font-weight: 400;
+  color: var(--olive);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+h2:hover .anchor,
+h3:hover .anchor,
+.anchor:focus-visible {
+  opacity: 1;
+}
+
+.doc-body p {
+  margin: 1.1rem 0;
+  line-height: 1.8;
+  color: var(--text-dim);
+}
+
+.doc-body strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.doc-body a:not(.button):not(.pager):not(.anchor) {
+  color: var(--lime);
+  border-bottom: 1px solid var(--lime-edge);
+}
+
+.doc-body a:not(.button):not(.pager):not(.anchor):hover {
+  border-bottom-color: var(--lime);
+}
+
+.doc-body ul,
+.doc-body ol {
+  margin: 1.1rem 0;
+  padding-left: 1.35rem;
+  color: var(--text-dim);
+}
+
+.doc-body li {
+  margin: 0.5rem 0;
+  line-height: 1.75;
+}
+
+.doc-body li::marker {
+  color: var(--olive);
+}
+
+.doc-body blockquote {
+  margin: 1.75rem 0;
+  padding: 0.25rem 0 0.25rem 1.25rem;
+  border-left: 2px solid var(--olive);
+}
+
+.doc-body blockquote p {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 1.2rem;
+  font-style: italic;
+  color: var(--text);
+}
+
+.doc-body hr {
+  margin: 3rem 0;
+  border: 0;
+  border-top: 1px solid var(--line-soft);
+}
+
+.doc-body table {
+  width: 100%;
+  min-width: 480px;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+
+.doc-body .table-wrap {
+  overflow-x: auto;
+  margin: 1.75rem 0;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-lg);
+}
+
+.doc-body th,
+.doc-body td {
+  padding: 0.75rem 1rem;
+  text-align: left;
+  border-bottom: 1px solid var(--line-soft);
+  vertical-align: top;
+}
+
+.doc-body th {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--olive);
+  background: var(--surface);
+  white-space: nowrap;
+}
+
+.doc-body td {
+  color: var(--text-dim);
+}
+
+.doc-body tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+/* ---------------------------------------------------------- admonições ---- */
+
+.admon {
+  margin: 1.75rem 0;
+  padding: 1.1rem 1.25rem;
+  border: 1px solid var(--line);
+  border-left-width: 2px;
+  border-radius: var(--r);
+  background: var(--surface);
+}
+
+.admon p {
+  margin: 0.5rem 0 0;
+  font-size: 0.94rem;
+}
+
+.admon p:first-of-type {
+  margin-top: 0;
+}
+
+.admon-t {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin: 0 0 0.6rem !important;
+}
+
+.admon-note {
+  border-left-color: var(--olive);
+}
+
+.admon-note .admon-t {
+  color: var(--olive);
+}
+
+.admon-tip {
+  border-left-color: var(--lime);
+}
+
+.admon-tip .admon-t {
+  color: var(--lime);
+}
+
+.admon-warning,
+.admon-danger {
+  border-left-color: #d9a05b;
+}
+
+.admon-warning .admon-t,
+.admon-danger .admon-t {
+  color: #d9a05b;
+}
+
+/* --------------------------------------------------------------- código ---- */
+
+.doc-body .code-block {
+  margin: 1.75rem 0;
+}
+
+.code-lang {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  color: var(--olive);
+}
+
+.code-copy {
+  margin-left: auto;
+  padding: 0.2rem 0.55rem;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: transparent;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.code-copy:hover {
+  color: var(--lime);
+  border-color: var(--lime-edge);
+}
+
+.code-copy.is-done {
+  color: var(--lime);
+  border-color: var(--lime);
+}
+
+.doc-body :not(pre) > code {
+  padding: 0.12em 0.38em;
+  font-size: 0.87em;
+  background: var(--surface-2);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r);
+  color: var(--lime);
+}
+
+/* ---------------------------------------------------------------- TOC ---- */
+
+.toc {
+  position: sticky;
+  top: 85px;
+  max-height: calc(100vh - 110px);
+  overflow-y: auto;
+  padding-left: 1.25rem;
+  border-left: 1px solid var(--line-soft);
+}
+
+.toc-t {
+  margin: 0 0 0.85rem;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--olive);
+}
+
+.toc ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.15rem;
+}
+
+.toc a {
+  display: block;
+  padding: 0.25rem 0;
+  font-size: 0.84rem;
+  line-height: 1.5;
+  color: var(--text-dim);
+  transition: color 0.15s ease;
+}
+
+.toc a:hover,
+.toc a.is-active {
+  color: var(--lime);
+}
+
+.toc-3 a {
+  padding-left: 0.9rem;
+  font-size: 0.8rem;
+}
+
+/* ------------------------------------------------------------- rodapés ---- */
+
+.pagers {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+  gap: 1rem;
+  margin-top: 4rem;
+  padding-top: 2rem;
+  border-top: 1px solid var(--line-soft);
+}
+
+.pager {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  transition: border-color 0.2s ease;
+}
+
+.pager:hover {
+  border-color: var(--olive);
+}
+
+.pager span {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  color: var(--olive);
+}
+
+.pager strong {
+  font-weight: 500;
+  color: var(--text);
+}
+
+.pager-next {
+  text-align: right;
+}
+
+.doc-edit {
+  margin-top: 2rem;
+  font-size: 0.86rem;
+}
+
+.doc-edit a {
+  color: var(--olive);
+}
+
+.doc-edit a:hover {
+  color: var(--lime);
+}
+
+/* ------------------------------------------------- seletor de idioma ---- */
+
+.lang-switch {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  overflow: hidden;
+}
+
+.lang-switch a {
+  padding: 0.28rem 0.55rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.lang-switch a + a {
+  border-left: 1px solid var(--line);
+}
+
+.lang-switch a:hover {
+  color: var(--text);
+  background: var(--surface);
+}
+
+.lang-switch a[aria-current="true"] {
+  color: var(--bg);
+  background: var(--lime);
+}
+
+/* --------------------------------------------------------- responsivo ---- */
+
+@media (max-width: 1180px) {
+  .doc {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* O índice vira um bloco antes do texto: sem coluna à direita, ele não pode
+     ficar depois do conteúdo, onde ninguém o encontraria. */
+  .toc {
+    position: static;
+    max-height: none;
+    order: -1;
+    padding: 1rem 1.25rem;
+    border: 1px solid var(--line-soft);
+    border-radius: var(--r-lg);
+    background: var(--surface);
+  }
+
+  .toc ul {
+    grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr));
+    display: grid;
+  }
+}
+
+@media (max-width: 900px) {
+  .doc-shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .side-toggle {
+    display: flex;
+  }
+
+  .side {
+    display: none;
+    position: static;
+    height: auto;
+    max-height: 70vh;
+    border-right: 0;
+    border-bottom: 1px solid var(--line-soft);
+  }
+
+  .side.is-open {
+    display: block;
+  }
+}
+
+/* ------------------------------------------------- índice da documentação ---- */
+
+.doc-index {
+  padding: clamp(3rem, 6vw, 5rem) 0 clamp(4rem, 8vw, 6rem);
+}
+
+.doc-index h2 {
+  margin: clamp(2.5rem, 5vw, 3.5rem) 0 1.25rem;
+  font-size: clamp(1.4rem, 2.4vw, 1.75rem);
+}
+
+.doc-index .lead {
+  margin-bottom: 1rem;
+}
+
+/* O cartão inteiro é o link: um alvo grande é mais fácil de acertar do que um
+   título de duas palavras. */
+.doc-index .surface {
+  display: block;
+  padding: 1.5rem;
+}
+
+.doc-index .surface h3 {
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--text);
+}
+
+.doc-index .surface:hover h3 {
+  color: var(--lime);
+}

@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#141711">
+
+<title>Scheduler e fila — Documentação</title>
+<meta name="description" content="Dois laços independentes — quem cria os runs, quem os executa, e por que estão separados.">
+<meta name="author" content="Aretê Academy">
+<link rel="canonical" href="https://brevis.sh/docs/scheduler-and-queue/">
+<link rel="alternate" hreflang="pt-BR" href="https://brevis.sh/docs/scheduler-and-queue/"><link rel="alternate" hreflang="en" href="https://brevis.sh/en/docs/scheduler-and-queue/">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="brevis.sh">
+<meta property="og:locale" content="pt-BR">
+<meta property="og:title" content="Scheduler e fila — Documentação">
+<meta property="og:description" content="Dois laços independentes — quem cria os runs, quem os executa, e por que estão separados.">
+<meta property="og:url" content="https://brevis.sh/docs/scheduler-and-queue/">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Scheduler e fila — Documentação">
+<meta name="twitter:description" content="Dois laços independentes — quem cria os runs, quem os executa, e por que estão separados.">
+
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&amp;family=IBM+Plex+Mono:wght@400;500&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap">
+<link rel="stylesheet" href="/css/styles.css">
+<link rel="stylesheet" href="/css/docs.css">
+
+<script>document.documentElement.classList.add('js');</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  "headline": "Scheduler e fila",
+  "description": "Dois laços independentes — quem cria os runs, quem os executa, e por que estão separados.",
+  "inLanguage": "pt-BR",
+  "isPartOf": {
+    "@type": "WebSite",
+    "@id": "https://brevis.sh/#site"
+  },
+  "author": {
+    "@type": "Organization",
+    "name": "Aretê Academy"
+  }
+}
+</script>
+</head>
+<body class="page-doc">
+
+<a class="skip-link" href="#conteudo">Pular para o conteúdo</a>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-mark" viewBox="0 0 24 24">
+    <path d="M5 6.5 L19 12 M5 17.5 L19 12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none" opacity="0.5"/>
+    <circle cx="5" cy="6.5" r="2.4" fill="currentColor" opacity="0.75"/>
+    <circle cx="5" cy="17.5" r="2.4" fill="currentColor" opacity="0.75"/>
+    <circle cx="19" cy="12" r="3.2" fill="currentColor"/>
+  </symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+    <path d="M4 7h16M4 12h16M4 17h16"/>
+  </symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 12h15M13 6l6 6-6 6"/>
+  </symbol>
+  <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 12.5 9.5 18 20 6.5"/>
+  </symbol>
+  <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+    <circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>
+  </symbol>
+  <symbol id="i-github" viewBox="0 0 24 24">
+    <path fill="currentColor" d="M12 1.5a10.5 10.5 0 0 0-3.32 20.47c.53.1.72-.23.72-.5v-1.8c-2.92.63-3.54-1.4-3.54-1.4-.48-1.22-1.17-1.55-1.17-1.55-.95-.65.07-.64.07-.64 1.06.07 1.62 1.09 1.62 1.09.94 1.6 2.45 1.14 3.05.87.1-.68.37-1.14.67-1.4-2.33-.27-4.78-1.17-4.78-5.2 0-1.15.41-2.09 1.08-2.82-.11-.27-.47-1.34.1-2.8 0 0 .88-.28 2.88 1.08a10.1 10.1 0 0 1 5.24 0c2-1.36 2.87-1.08 2.87-1.08.58 1.46.22 2.53.11 2.8a4.05 4.05 0 0 1 1.08 2.82c0 4.04-2.46 4.93-4.8 5.19.38.33.72.97.72 1.96v2.9c0 .28.19.61.73.5A10.5 10.5 0 0 0 12 1.5z"/>
+  </symbol>
+</svg>
+
+<header class="site-header">
+  <div class="shell header-bar">
+    <a class="brand" href="/">
+      <svg class="mark" aria-hidden="true"><use href="#i-mark"></use></svg>
+      <span>brevis<span class="tld">.sh</span></span>
+    </a>
+
+    <nav class="main-nav" id="nav" aria-label="Navegação principal">
+      <a href="/#produto">Produto</a>
+      <a href="/#principios">Princípios</a>
+      <a href="/docs/">Documentação</a>
+      <a href="/#open-source">Open source</a>
+      <div class="lang-switch" role="group" aria-label="Idioma"><a href="/docs/scheduler-and-queue/" hreflang="pt-BR" aria-current="true">PT</a><a href="/en/docs/scheduler-and-queue/" hreflang="en">EN</a></div>
+      <a class="button button-secondary button-sm header-cta" href="https://github.com/AreteAcademy/brevis" target="_blank" rel="noopener">
+        <svg aria-hidden="true"><use href="#i-github"></use></svg>
+        Explorar open source
+      </a>
+    </nav>
+
+    <button class="nav-toggle" type="button" id="nav-toggle" aria-label="Abrir menu" aria-expanded="false" aria-controls="nav">
+      <svg aria-hidden="true"><use href="#i-menu"></use></svg>
+    </button>
+  </div>
+</header>
+
+<div class="doc-shell">
+  <button class="side-toggle" type="button" id="side-toggle" aria-expanded="false" aria-controls="side">
+    <svg aria-hidden="true"><use href="#i-menu"></use></svg>
+    Menu da documentação
+  </button>
+
+  <aside class="side" id="side">
+    <div class="side-inner">
+      <form class="search" role="search" onsubmit="return false">
+        <svg aria-hidden="true"><use href="#i-search"></use></svg>
+        <label class="sr-only" for="q">Buscar na documentação</label>
+        <input type="search" id="q" placeholder="Buscar…" autocomplete="off" spellcheck="false">
+      </form>
+      <div class="search-out" id="search-out" data-none="Nada encontrado" hidden></div>
+      <nav class="side-nav" aria-label="Documentação">
+        <p class="side-group">Começar</p><ul class="side-list"><li><a href="/docs/introduction/">Introdução</a></li><li><a href="/docs/installation/">Instalação</a></li><li><a href="/docs/quickstart/">Quickstart</a></li></ul><p class="side-group">Conceitos</p><ul class="side-list"><li><a href="/docs/workflows/">Workflows</a></li><li><a href="/docs/scheduler-and-queue/" aria-current="page">Scheduler e fila</a></li><li><a href="/docs/pod-per-step/">Pod por passo</a></li></ul><p class="side-group">Referência</p><ul class="side-list"><li><a href="/docs/cli/">CLI</a></li><li><a href="/docs/parameters/">Parâmetros</a></li><li><a href="/docs/configuration/">Configuração</a></li></ul><p class="side-group">SDK</p><ul class="side-list"><li><a href="/docs/sdk/">SDK em Go</a></li></ul><p class="side-group">Operação</p><ul class="side-list"><li><a href="/docs/kubernetes/">Kubernetes</a></li><li><a href="/docs/white-label/">Marca branca</a></li></ul>
+      </nav>
+    </div>
+  </aside>
+
+  <main class="doc" id="conteudo">
+    <article class="doc-body">
+      <p class="doc-kicker">Documentação</p>
+      <h1>Scheduler e fila</h1>
+      <p class="doc-desc">Dois laços independentes — quem cria os runs, quem os executa, e por que estão separados.</p>
+      <p>O brevis.sh separa <strong>criar</strong> uma execução de <strong>executá-la</strong>. São dois laços que correm juntos e não dependem um do outro.</p>
+<div class="code-block" data-code="scheduler                          fila
+─────────                          ────
+lê a agenda
+materializa o slot
+cria o Run  ──────────────────►  (pendente no banco)
+                                   reivindica
+                                   percorre o grafo
+                                   executa cada passo
+                                   grava estado e log"><div class="code-head"><button class="code-copy" type="button" aria-label="Copiar" data-done="Copiado">Copiar</button></div><pre><code>scheduler                          fila
+─────────                          ────
+lê a agenda
+materializa o slot
+cria o Run  ──────────────────►  (pendente no banco)
+                                   reivindica
+                                   percorre o grafo
+                                   executa cada passo
+                                   grava estado e log</code></pre></div>
+<h2 id="por-que-separados">Por que separados<a class="anchor" href="#por-que-separados" aria-label="link">#</a></h2>
+<p>Um único laço que agenda e executa tem uma propriedade ruim: quando a execução trava, o agendamento para junto. As doze horas seguintes de slots simplesmente não existem, e ninguém percebe até alguém procurar um dado que nunca chegou.</p>
+<p>Com os dois separados:</p>
+<ul><li>o <strong>scheduler</strong> pode cair e a fila continua drenando o que já foi criado;</li><li>a <strong>fila</strong> pode cair e os slots continuam sendo materializados, para serem executados quando ela voltar;</li><li><strong>reprocessar não depende do relógio</strong> — <code>backfill</code> cria runs passados pelo mesmo caminho que o cron usaria.</li></ul>
+<h2 id="o-processo">O processo<a class="anchor" href="#o-processo" aria-label="link">#</a></h2>
+<p>Os dois laços vivem no mesmo comando:</p>
+<div class="code-block" data-code="brevis scheduler --interval 5s --concurrency 4 --max-pods 10"><div class="code-head"><span class="code-lang">bash</span><button class="code-copy" type="button" aria-label="Copiar" data-done="Copiado">Copiar</button></div><pre><code><span class="t-k">brevis</span> scheduler <span class="t-n">--interval</span> 5s <span class="t-n">--concurrency</span> 4 <span class="t-n">--max-pods</span> 10</code></pre></div>
+<div class="table-wrap"><table><thead><tr><th>flag</th><th>padrão</th><th></th></tr></thead><tbody><tr><td><code>--interval</code></td><td><code>10s</code></td><td>intervalo entre ciclos do scheduler</td></tr><tr><td><code>--concurrency</code></td><td><code>5</code></td><td><strong>runs</strong> simultâneos</td></tr><tr><td><code>--max-pods</code></td><td><code>5</code></td><td><strong>passos</strong> simultâneos no total</td></tr></tbody></table></div>
+<p><code>--concurrency</code> e <code>--max-pods</code> contam coisas diferentes, e isso é deliberado: cinco runs com três passos paralelos cada dariam quinze pods se o único limite fosse o de runs.</p>
+<aside class="admon admon-note"><p class="admon-t">`serve` não materializa agendas</p><p>O processo da API sobe o mesmo scheduler, mas <strong>sem o laço</strong> — ele existe ali só para atender o disparo manual da interface, e assim a regra "o scheduler cria os runs" continua com um dono só. Para as agendas rodarem, é preciso um <code>brevis scheduler</code> ao lado.</p></aside>
+<h2 id="o-snapshot-da-definicao">O snapshot da definição<a class="anchor" href="#o-snapshot-da-definicao" aria-label="link">#</a></h2>
+<p>Quando o scheduler cria um run, ele grava <strong>a definição do workflow dentro do run</strong>. A execução lê esse snapshot, não o YAML em disco.</p>
+<p>A razão é concreta: entre o disparo e a execução, alguém pode ter editado o arquivo e feito deploy. Sem o snapshot, um run criado às 5h com uma definição seria executado às 5h02 com outra — e o log não teria como explicar a diferença.</p>
+<h2 id="retries">Retries<a class="anchor" href="#retries" aria-label="link">#</a></h2>
+<p>A tentativa é persistida, não é estado de processo. Uma reinicialização do worker não apaga o que já se sabia sobre aquele run.</p>
+<p>A tentativa <strong>do run</strong> entra no nome do pod. Sem isso, o retry recomeçaria o run do zero, encontraria o pod da tentativa anterior com o mesmo nome e ficaria preso em <code>Pending</code> para sempre.</p>
+<h2 id="backfill">Backfill<a class="anchor" href="#backfill" aria-label="link">#</a></h2>
+<p>Materializa slots passados de um workflow já publicado:</p>
+<div class="code-block" data-code="brevis backfill diario --from 2026-01-01 --to 2026-01-31
+brevis backfill diario --from 2026-01-01 --to 2026-01-31 --param load_full=true"><div class="code-head"><span class="code-lang">bash</span><button class="code-copy" type="button" aria-label="Copiar" data-done="Copiado">Copiar</button></div><pre><code><span class="t-k">brevis</span> backfill diario <span class="t-n">--from</span> 2026-01-01 <span class="t-n">--to</span> 2026-01-31
+<span class="t-k">brevis</span> backfill diario <span class="t-n">--from</span> 2026-01-01 <span class="t-n">--to</span> 2026-01-31 <span class="t-n">--param</span> load_full=true</code></pre></div>
+<div class="code-block" data-code="  31 run(s) de backfill enfileirados para diario (2026-01-01 a 2026-01-31)
+  rode `brevis scheduler` para executa-los"><div class="code-head"><button class="code-copy" type="button" aria-label="Copiar" data-done="Copiado">Copiar</button></div><pre><code>  31 run(s) de backfill enfileirados para diario (2026-01-01 a 2026-01-31)
+  rode `brevis scheduler` para executa-los</code></pre></div>
+<p><strong>Enfileira, não executa.</strong> Quem executa é o <code>scheduler</code> — de novo, a mesma separação. <code>--to</code> inclui o dia inteiro.</p>
+<h2 id="alertas">Alertas<a class="anchor" href="#alertas" aria-label="link">#</a></h2>
+<div class="code-block" data-code="export BREVIS_SLACK_WEBHOOK=&#x27;https://hooks.slack.com/services/...&#x27;
+export BREVIS_UI_URL=&#x27;https://brevis.exemplo.com&#x27;"><div class="code-head"><span class="code-lang">bash</span><button class="code-copy" type="button" aria-label="Copiar" data-done="Copiado">Copiar</button></div><pre><code>export BREVIS_SLACK_WEBHOOK='https://hooks.slack.com/services/...'
+export BREVIS_UI_URL='https://<span class="t-k">brevis</span>.exemplo.com'</code></pre></div>
+<p>Sem o webhook, o processo avisa no boot que falhas não serão comunicadas. Uma instalação que falha em silêncio costuma ser descoberta pelo cliente, não pelo time.</p>
+<p><code>BREVIS_UI_URL</code> monta o link da execução dentro do alerta — sem ela, o aviso diz o que falhou mas obriga quem lê a procurar a run na mão.</p>
+<h2 id="proximos-passos">Próximos passos<a class="anchor" href="#proximos-passos" aria-label="link">#</a></h2>
+<ul><li><a href="/docs/pod-per-step/">Pod por passo</a> — onde cada passo realmente executa</li><li><a href="/docs/cli/">CLI</a> — todas as flags de <code>scheduler</code> e <code>backfill</code></li></ul>
+
+      <nav class="pagers" aria-label="Páginas">
+        <a class="pager pager-prev" href="/docs/workflows/"><span>Anterior</span><strong>Workflows</strong></a>
+        <a class="pager pager-next" href="/docs/pod-per-step/"><span>Próximo</span><strong>Pod por passo</strong></a>
+      </nav>
+
+      <p class="doc-edit">
+        <a href="https://github.com/AreteAcademy/brevis/blob/master/site/content/pt/docs/scheduler-and-queue.md" target="_blank" rel="noopener">Editar esta página no GitHub</a>
+      </p>
+    </article>
+
+    <aside class="toc" aria-label="Nesta página">
+      <p class="toc-t">Nesta página</p>
+      <ul><li class="toc-2"><a href="#por-que-separados">Por que separados</a></li><li class="toc-2"><a href="#o-processo">O processo</a></li><li class="toc-2"><a href="#o-snapshot-da-definicao">O snapshot da definição</a></li><li class="toc-2"><a href="#retries">Retries</a></li><li class="toc-2"><a href="#backfill">Backfill</a></li><li class="toc-2"><a href="#alertas">Alertas</a></li><li class="toc-2"><a href="#proximos-passos">Próximos passos</a></li></ul>
+    </aside>
+  </main>
+</div>
+
+
+<footer class="site-footer">
+  <div class="shell">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <a class="brand" href="/">
+          <svg class="mark" aria-hidden="true"><use href="#i-mark"></use></svg>
+          <span>brevis<span class="tld">.sh</span></span>
+        </a>
+        <p>Filosofia aplicada à infraestrutura de dados.</p>
+      </div>
+
+      <div class="footer-col">
+        <h2>projeto</h2>
+        <ul>
+          <li><a href="/#produto">Produto</a></li>
+          <li><a href="/#principios">Princípios</a></li>
+          <li><a href="/#open-source">Open source</a></li>
+          <li><a href="/#faq">FAQ</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col">
+        <h2>código</h2>
+        <ul>
+          <li><a href="/docs/">Documentação</a></li>
+          <li><a href="https://github.com/AreteAcademy/brevis" target="_blank" rel="noopener">Repositório</a></li>
+          <li><a href="https://github.com/AreteAcademy/brevis/discussions" target="_blank" rel="noopener">Discussões</a></li>
+          <li><a href="https://areteacademy.com.br/" target="_blank" rel="noopener">Aretê Academy</a></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="footer-bottom">
+      <p>Um projeto open source da <a href="https://areteacademy.com.br/" target="_blank" rel="noopener">Aretê Academy</a></p>
+      <p>MIT · construído em Go</p>
+    </div>
+  </div>
+</footer>
+
+<script src="/js/docs.js" defer></script>
+</body>
+</html>

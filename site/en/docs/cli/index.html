@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#141711">
+
+<title>CLI — Documentation</title>
+<meta name="description" content="The engine&#x27;s ten subcommands, with flags, arguments and what each one requires.">
+<meta name="author" content="Aretê Academy">
+<link rel="canonical" href="https://brevis.sh/en/docs/cli/">
+<link rel="alternate" hreflang="pt-BR" href="https://brevis.sh/docs/cli/"><link rel="alternate" hreflang="en" href="https://brevis.sh/en/docs/cli/">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="brevis.sh">
+<meta property="og:locale" content="en">
+<meta property="og:title" content="CLI — Documentation">
+<meta property="og:description" content="The engine&#x27;s ten subcommands, with flags, arguments and what each one requires.">
+<meta property="og:url" content="https://brevis.sh/en/docs/cli/">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="CLI — Documentation">
+<meta name="twitter:description" content="The engine&#x27;s ten subcommands, with flags, arguments and what each one requires.">
+
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&amp;family=IBM+Plex+Mono:wght@400;500&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap">
+<link rel="stylesheet" href="/css/styles.css">
+<link rel="stylesheet" href="/css/docs.css">
+
+<script>document.documentElement.classList.add('js');</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  "headline": "CLI",
+  "description": "The engine's ten subcommands, with flags, arguments and what each one requires.",
+  "inLanguage": "en",
+  "isPartOf": {
+    "@type": "WebSite",
+    "@id": "https://brevis.sh/#site"
+  },
+  "author": {
+    "@type": "Organization",
+    "name": "Aretê Academy"
+  }
+}
+</script>
+</head>
+<body class="page-doc">
+
+<a class="skip-link" href="#conteudo">Skip to content</a>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-mark" viewBox="0 0 24 24">
+    <path d="M5 6.5 L19 12 M5 17.5 L19 12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none" opacity="0.5"/>
+    <circle cx="5" cy="6.5" r="2.4" fill="currentColor" opacity="0.75"/>
+    <circle cx="5" cy="17.5" r="2.4" fill="currentColor" opacity="0.75"/>
+    <circle cx="19" cy="12" r="3.2" fill="currentColor"/>
+  </symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+    <path d="M4 7h16M4 12h16M4 17h16"/>
+  </symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 12h15M13 6l6 6-6 6"/>
+  </symbol>
+  <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 12.5 9.5 18 20 6.5"/>
+  </symbol>
+  <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+    <circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>
+  </symbol>
+  <symbol id="i-github" viewBox="0 0 24 24">
+    <path fill="currentColor" d="M12 1.5a10.5 10.5 0 0 0-3.32 20.47c.53.1.72-.23.72-.5v-1.8c-2.92.63-3.54-1.4-3.54-1.4-.48-1.22-1.17-1.55-1.17-1.55-.95-.65.07-.64.07-.64 1.06.07 1.62 1.09 1.62 1.09.94 1.6 2.45 1.14 3.05.87.1-.68.37-1.14.67-1.4-2.33-.27-4.78-1.17-4.78-5.2 0-1.15.41-2.09 1.08-2.82-.11-.27-.47-1.34.1-2.8 0 0 .88-.28 2.88 1.08a10.1 10.1 0 0 1 5.24 0c2-1.36 2.87-1.08 2.87-1.08.58 1.46.22 2.53.11 2.8a4.05 4.05 0 0 1 1.08 2.82c0 4.04-2.46 4.93-4.8 5.19.38.33.72.97.72 1.96v2.9c0 .28.19.61.73.5A10.5 10.5 0 0 0 12 1.5z"/>
+  </symbol>
+</svg>
+
+<header class="site-header">
+  <div class="shell header-bar">
+    <a class="brand" href="/en/">
+      <svg class="mark" aria-hidden="true"><use href="#i-mark"></use></svg>
+      <span>brevis<span class="tld">.sh</span></span>
+    </a>
+
+    <nav class="main-nav" id="nav" aria-label="Main navigation">
+      <a href="/en/#produto">Product</a>
+      <a href="/en/#principios">Principles</a>
+      <a href="/en/docs/">Documentation</a>
+      <a href="/en/#open-source">Open source</a>
+      <div class="lang-switch" role="group" aria-label="Language"><a href="/docs/cli/" hreflang="pt-BR">PT</a><a href="/en/docs/cli/" hreflang="en" aria-current="true">EN</a></div>
+      <a class="button button-secondary button-sm header-cta" href="https://github.com/AreteAcademy/brevis" target="_blank" rel="noopener">
+        <svg aria-hidden="true"><use href="#i-github"></use></svg>
+        Explore open source
+      </a>
+    </nav>
+
+    <button class="nav-toggle" type="button" id="nav-toggle" aria-label="Open menu" aria-expanded="false" aria-controls="nav">
+      <svg aria-hidden="true"><use href="#i-menu"></use></svg>
+    </button>
+  </div>
+</header>
+
+<div class="doc-shell">
+  <button class="side-toggle" type="button" id="side-toggle" aria-expanded="false" aria-controls="side">
+    <svg aria-hidden="true"><use href="#i-menu"></use></svg>
+    Documentation menu
+  </button>
+
+  <aside class="side" id="side">
+    <div class="side-inner">
+      <form class="search" role="search" onsubmit="return false">
+        <svg aria-hidden="true"><use href="#i-search"></use></svg>
+        <label class="sr-only" for="q">Search the documentation</label>
+        <input type="search" id="q" placeholder="Search…" autocomplete="off" spellcheck="false">
+      </form>
+      <div class="search-out" id="search-out" data-none="No results" hidden></div>
+      <nav class="side-nav" aria-label="Documentation">
+        <p class="side-group">Getting started</p><ul class="side-list"><li><a href="/en/docs/introduction/">Introduction</a></li><li><a href="/en/docs/installation/">Installation</a></li><li><a href="/en/docs/quickstart/">Quickstart</a></li></ul><p class="side-group">Concepts</p><ul class="side-list"><li><a href="/en/docs/workflows/">Workflows</a></li><li><a href="/en/docs/scheduler-and-queue/">Scheduler and queue</a></li><li><a href="/en/docs/pod-per-step/">Pod per step</a></li></ul><p class="side-group">Reference</p><ul class="side-list"><li><a href="/en/docs/cli/" aria-current="page">CLI</a></li><li><a href="/en/docs/parameters/">Parameters</a></li><li><a href="/en/docs/configuration/">Configuration</a></li></ul><p class="side-group">SDK</p><ul class="side-list"><li><a href="/en/docs/sdk/">Go SDK</a></li></ul><p class="side-group">Operations</p><ul class="side-list"><li><a href="/en/docs/kubernetes/">Kubernetes</a></li><li><a href="/en/docs/white-label/">White label</a></li></ul>
+      </nav>
+    </div>
+  </aside>
+
+  <main class="doc" id="conteudo">
+    <article class="doc-body">
+      <p class="doc-kicker">Documentation</p>
+      <h1>CLI</h1>
+      <p class="doc-desc">The engine&#x27;s ten subcommands, with flags, arguments and what each one requires.</p>
+      <p>The engine is one binary with subcommands, not several binaries: API, scheduler and workers are roles of the same system, and one binary keeps one version, one image and one build path.</p>
+<div class="code-block" data-code="brevis [command] [flags]"><div class="code-head"><button class="code-copy" type="button" aria-label="Copy" data-done="Copied">Copy</button></div><pre><code>brevis [command] [flags]</code></pre></div>
+<div class="table-wrap"><table><thead><tr><th>command</th><th>database</th><th>credentials outside <code>local</code></th><th>role</th></tr></thead><tbody><tr><td><a href="#serve"><code>serve</code></a></td><td><strong>yes</strong></td><td><strong>required</strong></td><td>API + interface</td></tr><tr><td><a href="#scheduler"><code>scheduler</code></a></td><td><strong>yes</strong></td><td><strong>required</strong></td><td>both loops</td></tr><tr><td><a href="#migrate"><code>migrate</code></a></td><td><strong>yes</strong></td><td><strong>required</strong></td><td>schema</td></tr><tr><td><a href="#publish"><code>publish</code></a></td><td><strong>yes</strong></td><td><strong>required</strong></td><td>stores workflow and schedule</td></tr><tr><td><a href="#backfill"><code>backfill</code></a></td><td><strong>yes</strong></td><td><strong>required</strong></td><td>reprocesses a range</td></tr><tr><td><a href="#run"><code>run</code></a></td><td>no</td><td>—</td><td>runs now, on the instance itself</td></tr><tr><td><a href="#validate"><code>validate</code></a></td><td>no</td><td>—</td><td>validates workflow YAML</td></tr><tr><td><a href="#marca"><code>marca</code></a></td><td>no</td><td>—</td><td>validates branding YAML</td></tr><tr><td><a href="#hash"><code>hash</code></a></td><td>no</td><td>—</td><td>generates the password hash</td></tr><tr><td><a href="#version"><code>version</code></a></td><td>no</td><td>—</td><td>version, commit, build</td></tr></tbody></table></div>
+<p>The first five load configuration, which <strong>fails at boot</strong> without <code>BREVIS_DATABASE_URL</code>. The other five do not — which is why <code>validate</code> works in CI, where there is no Postgres.</p>
+<p>Those same five inherit the credentials rule: with <code>BREVIS_ENV</code> other than <code>local</code>, coming up without the three authentication variables is a <strong>boot error</strong>.</p>
+<hr>
+<h2 id="serve">serve<a class="anchor" href="#serve" aria-label="link">#</a></h2>
+<p>Brings up the HTTP API and the interface. No flags — everything comes from the environment.</p>
+<div class="code-block" data-code="brevis serve"><div class="code-head"><span class="code-lang">bash</span><button class="code-copy" type="button" aria-label="Copy" data-done="Copied">Copy</button></div><pre><code><span class="t-k">brevis</span> serve</code></pre></div>
+<p>Shuts down on <code>SIGINT</code>/<code>SIGTERM</code> gracefully, so a deploy does not cut requests in flight. This process <strong>does not materialise schedules</strong>: that needs a <code>brevis scheduler</code> alongside.</p>
+<p><code>CMD</code> of the <code>api</code> image (distroless, no shell).</p>
+<hr>
+<h2 id="scheduler">scheduler<a class="anchor" href="#scheduler" aria-label="link">#</a></h2>
+<p>Both loops: the scheduler materialises schedules into runs, the dispatcher pulls from the queue and executes.</p>
+<div class="code-block" data-code="brevis scheduler --interval 5s --concurrency 4 --max-pods 10"><div class="code-head"><span class="code-lang">bash</span><button class="code-copy" type="button" aria-label="Copy" data-done="Copied">Copy</button></div><pre><code><span class="t-k">brevis</span> scheduler <span class="t-n">--interval</span> 5s <span class="t-n">--concurrency</span> 4 <span class="t-n">--max-pods</span> 10</code></pre></div>
+<div class="table-wrap"><table><thead><tr><th>flag</th><th>type</th><th>default</th><th></th></tr></thead><tbody><tr><td><code>--interval</code></td><td>duration</td><td><code>10s</code></td><td>interval between cycles</td></tr><tr><td><code>--concurrency</code></td><td>int</td><td><code>5</code></td><td>simultaneous <strong>runs</strong></td></tr><tr><td><code>--max-pods</code></td><td>int</td><td><code>5</code></td><td>simultaneous <strong>steps</strong> in total</td></tr></tbody></table></div>
+<p><code>CMD</code> of the <code>worker</code> image (alpine with a shell, because <code>run:</code> steps need one).</p>
+<hr>
+<h2 id="migrate">migrate<a class="anchor" href="#migrate" aria-label="link">#</a></h2>
+<div class="code-block" data-code="brevis migrate up      # applies what is missing
+brevis migrate down    # reverts the last one
+brevis migrate status  # shows the state"><div class="code-head"><span class="code-lang">bash</span><button class="code-copy" type="button" aria-label="Copy" data-done="Copied">Copy</button></div><pre><code><span class="t-k">brevis</span> migrate up      <span class="t-c"># applies what is missing</span>
+<span class="t-k">brevis</span> migrate down    <span class="t-c"># reverts the last one</span>
+<span class="t-k">brevis</span> migrate status  <span class="t-c"># shows the state</span></code></pre></div>
+<p>Takes exactly one argument. Migrations are embedded in the binary and applied by their own subcommand — <strong><code>serve</code> never alters the schema</strong>.</p>
+<hr>
+<h2 id="validate">validate<a class="anchor" href="#validate" aria-label="link">#</a></h2>
+<p>Validates one or more workflow files. Takes a file <strong>or a directory</strong>.</p>
+<div class="code-block" data-code="brevis validate examples/"><div class="code-head"><span class="code-lang">bash</span><button class="code-copy" type="button" aria-label="Copy" data-done="Copied">Copy</button></div><pre><code><span class="t-k">brevis</span> validate examples/</code></pre></div>
+<div class="code-block" data-code="  ok    daily_analytics              dag  5 steps, 5 dependencias  (manual)
+  ok    hello                        dag  4 steps, 4 dependencias  (manual)"><div class="code-head"><button class="code-copy" type="button" aria-label="Copy" data-done="Copied">Copy</button></div><pre><code>  ok    daily_analytics              dag  5 steps, 5 dependencias  (manual)
+  ok    hello                        dag  4 steps, 4 dependencias  (manual)</code></pre></div>
+<p>It touches no database and starts no server, so it runs in the editor and in CI. It exits non-zero and counts the failures.</p>
+<hr>
+<h2 id="run">run<a class="anchor" href="#run" aria-label="link">#</a></h2>
+<p>Runs a workflow <strong>now, on the instance itself</strong>: no queue, no database, no scheduler.</p>
+<div class="code-block" data-code="brevis run examples/hello.yaml
+brevis run wf.yaml --param load_full=true --retries 3 --timeout 5m"><div class="code-head"><span class="code-lang">bash</span><button class="code-copy" type="button" aria-label="Copy" data-done="Copied">Copy</button></div><pre><code><span class="t-k">brevis</span> run examples/hello.yaml
+<span class="t-k">brevis</span> run wf.yaml <span class="t-n">--param</span> load_full=true <span class="t-n">--retries</span> 3 <span class="t-n">--timeout</span> 5m</code></pre></div>
+<div class="table-wrap"><table><thead><tr><th>flag</th><th>type</th><th>default</th><th></th></tr></thead><tbody><tr><td><code>--param</code></td><td>repeatable</td><td>—</td><td><code>key=value</code> for a declared parameter</td></tr><tr><td><code>--workdir</code></td><td>string</td><td>the file's directory</td><td>working directory for steps</td></tr><tr><td><code>--retries</code></td><td>int</td><td><code>1</code></td><td>attempts per step (<code>1</code> = no retry)</td></tr><tr><td><code>--timeout</code></td><td>duration</td><td><code>0</code></td><td>timeout per step (<code>0</code> = no limit)</td></tr></tbody></table></div>
+<p><code>--param</code> without <code>=</code> is an <strong>error</strong>, not a warning: <code>--param load_full</code>, forgetting the value, would run with the default — and the operator would believe the value was applied.</p>
+<aside class="admon admon-warning"><p class="admon-t">Three limits</p><p><code>run</code> only operates with <code>BREVIS_ENV=local</code>; a step with <code>image:</code> runs on the instance itself and says so; and there is no Go task registry, so an <code>action:</code> for an unregistered task fails naming the ones available.</p></aside>
+<hr>
+<h2 id="publish">publish<a class="anchor" href="#publish" aria-label="link">#</a></h2>
+<p>Stores workflows and their schedules in the database. Takes a file or a directory.</p>
+<div class="code-block" data-code="brevis publish examples/hello.yaml
+brevis publish workflows/ --project acme --prune"><div class="code-head"><span class="code-lang">bash</span><button class="code-copy" type="button" aria-label="Copy" data-done="Copied">Copy</button></div><pre><code><span class="t-k">brevis</span> publish examples/hello.yaml
+<span class="t-k">brevis</span> publish workflows/ <span class="t-n">--project</span> acme <span class="t-n">--prune</span></code></pre></div>
+<div class="table-wrap"><table><thead><tr><th>flag</th><th>type</th><th>default</th><th></th></tr></thead><tbody><tr><td><code>--project</code></td><td>string</td><td><code>default</code></td><td>project slug</td></tr><tr><td><code>--prune</code></td><td>bool</td><td><code>false</code></td><td>removes from the project the workflows absent from the list</td></tr></tbody></table></div>
+<p>With <code>--prune</code>, the history of removed workflows is preserved.</p>
+<hr>
+<h2 id="backfill">backfill<a class="anchor" href="#backfill" aria-label="link">#</a></h2>
+<p>Materialises past slots of a workflow already published. It <strong>enqueues, it does not execute.</strong></p>
+<div class="code-block" data-code="brevis backfill daily --from 2026-01-01 --to 2026-01-31 --param load_full=true"><div class="code-head"><span class="code-lang">bash</span><button class="code-copy" type="button" aria-label="Copy" data-done="Copied">Copy</button></div><pre><code><span class="t-k">brevis</span> backfill daily <span class="t-n">--from</span> 2026-01-01 <span class="t-n">--to</span> 2026-01-31 <span class="t-n">--param</span> load_full=true</code></pre></div>
+<div class="table-wrap"><table><thead><tr><th>flag</th><th></th><th></th></tr></thead><tbody><tr><td><code>--from</code></td><td><strong>required</strong></td><td>start date, <code>YYYY-MM-DD</code></td></tr><tr><td><code>--to</code></td><td><strong>required</strong></td><td>end date, <code>YYYY-MM-DD</code></td></tr><tr><td><code>--param</code></td><td></td><td>applies to <strong>every</strong> slot in the range</td></tr></tbody></table></div>
+<p><code>--to</code> includes the whole day: internally the end becomes <code>23:59:59</code> of that date.</p>
+<hr>
+<h2 id="marca">marca<a class="anchor" href="#marca" aria-label="link">#</a></h2>
+<p>Validates a branding file without starting the server.</p>
+<div class="code-block" data-code="brevis marca brand.yaml"><div class="code-head"><span class="code-lang">bash</span><button class="code-copy" type="button" aria-label="Copy" data-done="Copied">Copy</button></div><pre><code><span class="t-k">brevis</span> marca brand.yaml</code></pre></div>
+<div class="code-block" data-code="  ok    Brevis · Orquestração
+        logo      /assets/logo.svg  (simbolo embutido)
+        destaque  #aa8450
+        Powered by Brevis"><div class="code-head"><button class="code-copy" type="button" aria-label="Copy" data-done="Copied">Copy</button></div><pre><code>  ok    Brevis · Orquestração
+        logo      /assets/logo.svg  (simbolo embutido)
+        destaque  #aa8450
+        Powered by Brevis</code></pre></div>
+<p>One behavioural difference from boot: <strong>a missing file is an error</strong>. In <code>serve</code>, absence means "use the default identity"; someone who asked to validate a path expects to be told it does not exist.</p>
+<hr>
+<h2 id="hash">hash<a class="anchor" href="#hash" aria-label="link">#</a></h2>
+<p>Generates the <code>BREVIS_AUTH_SENHA_HASH</code> value.</p>
+<div class="code-block" data-code="brevis hash"><div class="code-head"><span class="code-lang">bash</span><button class="code-copy" type="button" aria-label="Copy" data-done="Copied">Copy</button></div><pre><code><span class="t-k">brevis</span> hash</code></pre></div>
+<p>The password is read from the terminal <strong>without echo</strong>, never from an argument: an argument shows up in any process's <code>ps</code> and stays in shell history. It refuses passwords shorter than 12 characters.</p>
+<p>The hash goes alone to <strong>stdout</strong> and the labels to <strong>stderr</strong>, so <code>brevis hash &gt; hash.txt</code> stores only what matters.</p>
+<hr>
+<h2 id="version">version<a class="anchor" href="#version" aria-label="link">#</a></h2>
+<div class="code-block" data-code="brevis version"><div class="code-head"><span class="code-lang">bash</span><button class="code-copy" type="button" aria-label="Copy" data-done="Copied">Copy</button></div><pre><code><span class="t-k">brevis</span> version</code></pre></div>
+<div class="code-block" data-code="brevis 0.3.0
+  commit  bb832ff
+  build   2026-09-05T12:00:00Z
+  go      go1.25.7 darwin/arm64"><div class="code-head"><button class="code-copy" type="button" aria-label="Copy" data-done="Copied">Copy</button></div><pre><code>brevis 0.3.0
+  commit  bb832ff
+  build   2026-09-05T12:00:00Z
+  go      go1.25.7 darwin/arm64</code></pre></div>
+<p>Built directly with <code>go build</code>, it prints <code>brevis dev</code> with no commit and no date — and telling that apart from a release artefact matters when someone reports odd behaviour.</p>
+
+      <nav class="pagers" aria-label="Pages">
+        <a class="pager pager-prev" href="/en/docs/pod-per-step/"><span>Previous</span><strong>Pod per step</strong></a>
+        <a class="pager pager-next" href="/en/docs/parameters/"><span>Next</span><strong>Parameters</strong></a>
+      </nav>
+
+      <p class="doc-edit">
+        <a href="https://github.com/AreteAcademy/brevis/blob/master/site/content/en/docs/cli.md" target="_blank" rel="noopener">Edit this page on GitHub</a>
+      </p>
+    </article>
+
+    <aside class="toc" aria-label="On this page">
+      <p class="toc-t">On this page</p>
+      <ul><li class="toc-2"><a href="#serve">serve</a></li><li class="toc-2"><a href="#scheduler">scheduler</a></li><li class="toc-2"><a href="#migrate">migrate</a></li><li class="toc-2"><a href="#validate">validate</a></li><li class="toc-2"><a href="#run">run</a></li><li class="toc-2"><a href="#publish">publish</a></li><li class="toc-2"><a href="#backfill">backfill</a></li><li class="toc-2"><a href="#marca">marca</a></li><li class="toc-2"><a href="#hash">hash</a></li><li class="toc-2"><a href="#version">version</a></li></ul>
+    </aside>
+  </main>
+</div>
+
+
+<footer class="site-footer">
+  <div class="shell">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <a class="brand" href="/en/">
+          <svg class="mark" aria-hidden="true"><use href="#i-mark"></use></svg>
+          <span>brevis<span class="tld">.sh</span></span>
+        </a>
+        <p>Philosophy applied to data infrastructure.</p>
+      </div>
+
+      <div class="footer-col">
+        <h2>project</h2>
+        <ul>
+          <li><a href="/en/#produto">Product</a></li>
+          <li><a href="/en/#principios">Principles</a></li>
+          <li><a href="/en/#open-source">Open source</a></li>
+          <li><a href="/en/#faq">FAQ</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col">
+        <h2>code</h2>
+        <ul>
+          <li><a href="/en/docs/">Documentation</a></li>
+          <li><a href="https://github.com/AreteAcademy/brevis" target="_blank" rel="noopener">Repository</a></li>
+          <li><a href="https://github.com/AreteAcademy/brevis/discussions" target="_blank" rel="noopener">Discussions</a></li>
+          <li><a href="https://areteacademy.com.br/" target="_blank" rel="noopener">Aretê Academy</a></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="footer-bottom">
+      <p>An open source project by <a href="https://areteacademy.com.br/" target="_blank" rel="noopener">Aretê Academy</a></p>
+      <p>MIT · built in Go</p>
+    </div>
+  </div>
+</footer>
+
+<script src="/js/docs.js" defer></script>
+</body>
+</html>

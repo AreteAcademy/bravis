@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#141711">
+
+<title>Configuração — Documentação</title>
+<meta name="description" content="Todas as variáveis de ambiente, com padrão, formato e o que acontece quando faltam.">
+<meta name="author" content="Aretê Academy">
+<link rel="canonical" href="https://brevis.sh/docs/configuration/">
+<link rel="alternate" hreflang="pt-BR" href="https://brevis.sh/docs/configuration/"><link rel="alternate" hreflang="en" href="https://brevis.sh/en/docs/configuration/">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="brevis.sh">
+<meta property="og:locale" content="pt-BR">
+<meta property="og:title" content="Configuração — Documentação">
+<meta property="og:description" content="Todas as variáveis de ambiente, com padrão, formato e o que acontece quando faltam.">
+<meta property="og:url" content="https://brevis.sh/docs/configuration/">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Configuração — Documentação">
+<meta name="twitter:description" content="Todas as variáveis de ambiente, com padrão, formato e o que acontece quando faltam.">
+
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&amp;family=IBM+Plex+Mono:wght@400;500&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap">
+<link rel="stylesheet" href="/css/styles.css">
+<link rel="stylesheet" href="/css/docs.css">
+
+<script>document.documentElement.classList.add('js');</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  "headline": "Configuração",
+  "description": "Todas as variáveis de ambiente, com padrão, formato e o que acontece quando faltam.",
+  "inLanguage": "pt-BR",
+  "isPartOf": {
+    "@type": "WebSite",
+    "@id": "https://brevis.sh/#site"
+  },
+  "author": {
+    "@type": "Organization",
+    "name": "Aretê Academy"
+  }
+}
+</script>
+</head>
+<body class="page-doc">
+
+<a class="skip-link" href="#conteudo">Pular para o conteúdo</a>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-mark" viewBox="0 0 24 24">
+    <path d="M5 6.5 L19 12 M5 17.5 L19 12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none" opacity="0.5"/>
+    <circle cx="5" cy="6.5" r="2.4" fill="currentColor" opacity="0.75"/>
+    <circle cx="5" cy="17.5" r="2.4" fill="currentColor" opacity="0.75"/>
+    <circle cx="19" cy="12" r="3.2" fill="currentColor"/>
+  </symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+    <path d="M4 7h16M4 12h16M4 17h16"/>
+  </symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 12h15M13 6l6 6-6 6"/>
+  </symbol>
+  <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 12.5 9.5 18 20 6.5"/>
+  </symbol>
+  <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+    <circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>
+  </symbol>
+  <symbol id="i-github" viewBox="0 0 24 24">
+    <path fill="currentColor" d="M12 1.5a10.5 10.5 0 0 0-3.32 20.47c.53.1.72-.23.72-.5v-1.8c-2.92.63-3.54-1.4-3.54-1.4-.48-1.22-1.17-1.55-1.17-1.55-.95-.65.07-.64.07-.64 1.06.07 1.62 1.09 1.62 1.09.94 1.6 2.45 1.14 3.05.87.1-.68.37-1.14.67-1.4-2.33-.27-4.78-1.17-4.78-5.2 0-1.15.41-2.09 1.08-2.82-.11-.27-.47-1.34.1-2.8 0 0 .88-.28 2.88 1.08a10.1 10.1 0 0 1 5.24 0c2-1.36 2.87-1.08 2.87-1.08.58 1.46.22 2.53.11 2.8a4.05 4.05 0 0 1 1.08 2.82c0 4.04-2.46 4.93-4.8 5.19.38.33.72.97.72 1.96v2.9c0 .28.19.61.73.5A10.5 10.5 0 0 0 12 1.5z"/>
+  </symbol>
+</svg>
+
+<header class="site-header">
+  <div class="shell header-bar">
+    <a class="brand" href="/">
+      <svg class="mark" aria-hidden="true"><use href="#i-mark"></use></svg>
+      <span>brevis<span class="tld">.sh</span></span>
+    </a>
+
+    <nav class="main-nav" id="nav" aria-label="Navegação principal">
+      <a href="/#produto">Produto</a>
+      <a href="/#principios">Princípios</a>
+      <a href="/docs/">Documentação</a>
+      <a href="/#open-source">Open source</a>
+      <div class="lang-switch" role="group" aria-label="Idioma"><a href="/docs/configuration/" hreflang="pt-BR" aria-current="true">PT</a><a href="/en/docs/configuration/" hreflang="en">EN</a></div>
+      <a class="button button-secondary button-sm header-cta" href="https://github.com/AreteAcademy/brevis" target="_blank" rel="noopener">
+        <svg aria-hidden="true"><use href="#i-github"></use></svg>
+        Explorar open source
+      </a>
+    </nav>
+
+    <button class="nav-toggle" type="button" id="nav-toggle" aria-label="Abrir menu" aria-expanded="false" aria-controls="nav">
+      <svg aria-hidden="true"><use href="#i-menu"></use></svg>
+    </button>
+  </div>
+</header>
+
+<div class="doc-shell">
+  <button class="side-toggle" type="button" id="side-toggle" aria-expanded="false" aria-controls="side">
+    <svg aria-hidden="true"><use href="#i-menu"></use></svg>
+    Menu da documentação
+  </button>
+
+  <aside class="side" id="side">
+    <div class="side-inner">
+      <form class="search" role="search" onsubmit="return false">
+        <svg aria-hidden="true"><use href="#i-search"></use></svg>
+        <label class="sr-only" for="q">Buscar na documentação</label>
+        <input type="search" id="q" placeholder="Buscar…" autocomplete="off" spellcheck="false">
+      </form>
+      <div class="search-out" id="search-out" data-none="Nada encontrado" hidden></div>
+      <nav class="side-nav" aria-label="Documentação">
+        <p class="side-group">Começar</p><ul class="side-list"><li><a href="/docs/introduction/">Introdução</a></li><li><a href="/docs/installation/">Instalação</a></li><li><a href="/docs/quickstart/">Quickstart</a></li></ul><p class="side-group">Conceitos</p><ul class="side-list"><li><a href="/docs/workflows/">Workflows</a></li><li><a href="/docs/scheduler-and-queue/">Scheduler e fila</a></li><li><a href="/docs/pod-per-step/">Pod por passo</a></li></ul><p class="side-group">Referência</p><ul class="side-list"><li><a href="/docs/cli/">CLI</a></li><li><a href="/docs/parameters/">Parâmetros</a></li><li><a href="/docs/configuration/" aria-current="page">Configuração</a></li></ul><p class="side-group">SDK</p><ul class="side-list"><li><a href="/docs/sdk/">SDK em Go</a></li></ul><p class="side-group">Operação</p><ul class="side-list"><li><a href="/docs/kubernetes/">Kubernetes</a></li><li><a href="/docs/white-label/">Marca branca</a></li></ul>
+      </nav>
+    </div>
+  </aside>
+
+  <main class="doc" id="conteudo">
+    <article class="doc-body">
+      <p class="doc-kicker">Documentação</p>
+      <h1>Configuração</h1>
+      <p class="doc-desc">Todas as variáveis de ambiente, com padrão, formato e o que acontece quando faltam.</p>
+      <p>Toda a configuração vem do <strong>ambiente</strong>, lida uma vez no boot. Nada consulta o ambiente depois: um processo cuja configuração muda no meio da execução é um processo cujo comportamento ninguém consegue reproduzir.</p>
+<h2 id="obrigatoria">Obrigatória<a class="anchor" href="#obrigatoria" aria-label="link">#</a></h2>
+<div class="table-wrap"><table><thead><tr><th>variável</th><th></th></tr></thead><tbody><tr><td><code>BREVIS_DATABASE_URL</code></td><td>Postgres. Ausente = <strong>erro de boot</strong> nos cinco subcomandos que usam banco</td></tr></tbody></table></div>
+<h2 id="processo">Processo<a class="anchor" href="#processo" aria-label="link">#</a></h2>
+<div class="table-wrap"><table><thead><tr><th>variável</th><th>padrão</th><th></th></tr></thead><tbody><tr><td><code>BREVIS_ENV</code></td><td><code>local</code></td><td><code>local</code> usa log em texto e libera a interface sem senha; o resto exige credencial e loga JSON</td></tr><tr><td><code>BREVIS_HTTP_ADDR</code></td><td><code>:8080</code></td><td>endereço de escuta</td></tr><tr><td><code>BREVIS_LOG_LEVEL</code></td><td><code>info</code></td><td></td></tr><tr><td><code>BREVIS_SHUTDOWN_TIMEOUT_SECONDS</code></td><td><code>15</code></td><td>inteiro; valor não numérico é erro de boot</td></tr><tr><td><code>BREVIS_BRAND_FILE</code></td><td><code>brand.yaml</code></td><td>identidade visual; ausente = padrão</td></tr><tr><td><code>BREVIS_UI_URL</code></td><td>—</td><td>base do link da execução no alerta</td></tr><tr><td><code>BREVIS_SLACK_WEBHOOK</code></td><td>—</td><td>destino do alerta de falha. Vazio = ninguém é avisado</td></tr></tbody></table></div>
+<h2 id="autenticacao">Autenticação<a class="anchor" href="#autenticacao" aria-label="link">#</a></h2>
+<div class="table-wrap"><table><thead><tr><th>variável</th><th></th></tr></thead><tbody><tr><td><code>BREVIS_AUTH_USUARIO</code></td><td>usuário da interface</td></tr><tr><td><code>BREVIS_AUTH_SENHA_HASH</code></td><td>hash <code>pbkdf2-sha256$…</code>, gerado por <code>brevis hash</code></td></tr><tr><td><code>BREVIS_AUTH_SEGREDO</code></td><td>32+ bytes para assinar a sessão (<code>openssl rand -base64 48</code>)</td></tr></tbody></table></div>
+<p>As três vêm juntas ou nenhuma vem.</p>
+<aside class="admon admon-danger"><p class="admon-t">Metade configurada é erro de boot</p><p>Quem preencheu o usuário acredita que fechou a porta. A interface dispara pipeline: um <code>POST /workflows/&lt;slug&gt;/trigger</code> roda um <code>dbt build</code> que escreve no warehouse. Aberta na internet, ela é um controle remoto do warehouse — e um aviso no log não desfaz essa crença, porque ninguém lê o log de um processo que funciona.</p></aside>
+<p>Fora de <code>BREVIS_ENV=local</code>, subir sem credencial é recusado:</p>
+<div class="code-block" data-code="erro: BREVIS_ENV=production exige credencial: defina BREVIS_AUTH_USUARIO,
+BREVIS_AUTH_SENHA_HASH (gere com `brevis hash`) e BREVIS_AUTH_SEGREDO"><div class="code-head"><button class="code-copy" type="button" aria-label="Copiar" data-done="Copiado">Copiar</button></div><pre><code>erro: BREVIS_ENV=production exige credencial: defina BREVIS_AUTH_USUARIO,
+BREVIS_AUTH_SENHA_HASH (gere com `brevis hash`) e BREVIS_AUTH_SEGREDO</code></pre></div>
+<h2 id="ambiente-das-tasks">Ambiente das tasks<a class="anchor" href="#ambiente-das-tasks" aria-label="link">#</a></h2>
+<div class="table-wrap"><table><thead><tr><th>variável</th><th>padrão</th><th></th></tr></thead><tbody><tr><td><code>BREVIS_TASK_ENV</code></td><td>vazio</td><td>o que cada passo recebe</td></tr></tbody></table></div>
+<p>A task <strong>não herda</strong> o ambiente do orquestrador. A razão é concreta: o processo carrega <code>BREVIS_DATABASE_URL</code> com usuário e senha do Postgres, e um workflow é um comando arbitrário escrito por outra pessoa — herdar entregaria a credencial do banco a todo passo de todo pipeline.</p>
+<p>O que a task precisa é declarado:</p>
+<div class="code-block" data-code="BREVIS_TASK_ENV=GOOGLE_PROJECT_ID,STAGE   # repassa essas duas do processo
+BREVIS_TASK_ENV=STAGE=prod                # define um literal
+BREVIS_TASK_ENV=&#x27;*&#x27;                       # repassa tudo MENOS as BREVIS_*"><div class="code-head"><span class="code-lang">bash</span><button class="code-copy" type="button" aria-label="Copiar" data-done="Copiado">Copiar</button></div><pre><code>BREVIS_TASK_ENV=GOOGLE_PROJECT_ID,STAGE   <span class="t-c"># repassa essas duas do processo</span>
+BREVIS_TASK_ENV=STAGE=prod                <span class="t-c"># define um literal</span>
+BREVIS_TASK_ENV='*'                       <span class="t-c"># repassa tudo MENOS as BREVIS_*</span></code></pre></div>
+<p><code>PATH</code> e <code>HOME</code> entram sempre — sem <code>PATH</code> nenhum comando resolve, e o erro seria um "not found" que não explica nada.</p>
+<p>Um nome ausente <strong>não</strong> vira string vazia: <code>GOOGLE_PROJECT_ID=""</code> faria o dbt falhar com uma mensagem pior que a de variável ausente.</p>
+<h2 id="kubernetes">Kubernetes<a class="anchor" href="#kubernetes" aria-label="link">#</a></h2>
+<p>Decisões da <strong>instalação</strong>, não do workflow.</p>
+<div class="table-wrap"><table><thead><tr><th>variável</th><th>padrão</th><th>formato</th></tr></thead><tbody><tr><td><code>BREVIS_PODS</code></td><td><code>auto</code></td><td><code>auto</code>, <code>on</code> ou <code>off</code>; inválido é erro de boot</td></tr><tr><td><code>BREVIS_POD_NAMESPACE</code></td><td>o do cluster</td><td></td></tr><tr><td><code>BREVIS_POD_SERVICE_ACCOUNT</code></td><td>—</td><td></td></tr><tr><td><code>BREVIS_POD_PULL_SECRETS</code></td><td>—</td><td>lista por vírgula</td></tr><tr><td><code>BREVIS_POD_ENV_FROM_SECRETS</code></td><td>—</td><td>lista por vírgula</td></tr><tr><td><code>BREVIS_POD_ENV_FROM_CONFIGMAPS</code></td><td>—</td><td>lista por vírgula</td></tr><tr><td><code>BREVIS_POD_ALLOWED_SECRETS</code></td><td>—</td><td>lista por vírgula</td></tr><tr><td><code>BREVIS_POD_CREDENTIAL_PATH</code></td><td>—</td><td>caminho montado no pod</td></tr><tr><td><code>BREVIS_POD_CREDENTIAL_PVC</code></td><td>—</td><td>PVC com as credenciais</td></tr><tr><td><code>BREVIS_POD_NODE_SELECTOR</code></td><td>—</td><td><code>chave=valor,outra=valor</code></td></tr><tr><td><code>BREVIS_POD_TOLERATIONS</code></td><td>—</td><td><code>chave=valor:efeito,…</code>; só o operador <code>Equal</code></td></tr><tr><td><code>BREVIS_POD_MANTER_EM_FALHA</code></td><td><code>false</code></td><td><code>true</code> mantém o pod para inspeção</td></tr></tbody></table></div>
+<p>Em listas, vazios são ignorados: <code>a,,b</code> é erro de digitação, e um nome de secret vazio faria o servidor recusar o pod inteiro.</p>
+<h2 id="testes">Testes<a class="anchor" href="#testes" aria-label="link">#</a></h2>
+<div class="table-wrap"><table><thead><tr><th>variável</th><th></th></tr></thead><tbody><tr><td><code>BREVIS_TEST_DATABASE_URL</code></td><td>banco dos testes de integração; sem ela, eles pulam</td></tr></tbody></table></div>
+<h2 id="endpoints-de-saude">Endpoints de saúde<a class="anchor" href="#endpoints-de-saude" aria-label="link">#</a></h2>
+<div class="table-wrap"><table><thead><tr><th></th><th></th></tr></thead><tbody><tr><td><code>GET /health</code></td><td>liveness — <strong>não</strong> consulta o banco</td></tr><tr><td><code>GET /ready</code></td><td>readiness — consulta, e nomeia a dependência que falhou</td></tr></tbody></table></div>
+<p>A separação é deliberada: liveness que depende de serviço externo faz o Kubernetes <strong>matar o pod</strong> quando o banco oscila, em vez de apenas tirá-lo do balanceador.</p>
+<h2 id="exemplo-completo">Exemplo completo<a class="anchor" href="#exemplo-completo" aria-label="link">#</a></h2>
+<div class="code-block" data-code="# obrigatória
+export BREVIS_DATABASE_URL=&#x27;postgres://brevis:senha@db:5432/brevis?sslmode=require&#x27;
+
+# produção exige credencial
+export BREVIS_ENV=production
+export BREVIS_AUTH_USUARIO=operador
+export BREVIS_AUTH_SENHA_HASH=&quot;$(brevis hash &lt; senha.txt)&quot;
+export BREVIS_AUTH_SEGREDO=&quot;$(openssl rand -base64 48)&quot;
+
+# o que as tasks precisam, e nada além
+export BREVIS_TASK_ENV=GOOGLE_PROJECT_ID,STAGE,DBT_KEYFILE
+
+# pods
+export BREVIS_PODS=on
+export BREVIS_POD_NAMESPACE=dados
+export BREVIS_POD_SERVICE_ACCOUNT=brevis-runner
+export BREVIS_POD_ENV_FROM_SECRETS=bigquery-cred
+
+# alertas
+export BREVIS_SLACK_WEBHOOK=&#x27;https://hooks.slack.com/services/...&#x27;
+export BREVIS_UI_URL=&#x27;https://brevis.exemplo.com&#x27;"><div class="code-head"><span class="code-lang">bash</span><button class="code-copy" type="button" aria-label="Copiar" data-done="Copiado">Copiar</button></div><pre><code><span class="t-c"># obrigatória</span>
+export BREVIS_DATABASE_URL='postgres://<span class="t-k">brevis</span>:senha@db:5432/<span class="t-k">brevis</span>?sslmode=require'
+
+<span class="t-c"># produção exige credencial</span>
+export BREVIS_ENV=production
+export BREVIS_AUTH_USUARIO=operador
+export BREVIS_AUTH_SENHA_HASH="$(<span class="t-k">brevis</span> hash &lt; senha.txt)"
+export BREVIS_AUTH_SEGREDO="$(openssl rand <span class="t-n">-base64</span> 48)"
+
+<span class="t-c"># o que as tasks precisam, e nada além</span>
+export BREVIS_TASK_ENV=GOOGLE_PROJECT_ID,STAGE,DBT_KEYFILE
+
+<span class="t-c"># pods</span>
+export BREVIS_PODS=on
+export BREVIS_POD_NAMESPACE=dados
+export BREVIS_POD_SERVICE_ACCOUNT=<span class="t-k">brevis</span>-runner
+export BREVIS_POD_ENV_FROM_SECRETS=bigquery-cred
+
+<span class="t-c"># alertas</span>
+export BREVIS_SLACK_WEBHOOK='https://hooks.slack.com/services/...'
+export BREVIS_UI_URL='https://<span class="t-k">brevis</span>.exemplo.com'</code></pre></div>
+
+      <nav class="pagers" aria-label="Páginas">
+        <a class="pager pager-prev" href="/docs/parameters/"><span>Anterior</span><strong>Parâmetros</strong></a>
+        <a class="pager pager-next" href="/docs/sdk/"><span>Próximo</span><strong>SDK em Go</strong></a>
+      </nav>
+
+      <p class="doc-edit">
+        <a href="https://github.com/AreteAcademy/brevis/blob/master/site/content/pt/docs/configuration.md" target="_blank" rel="noopener">Editar esta página no GitHub</a>
+      </p>
+    </article>
+
+    <aside class="toc" aria-label="Nesta página">
+      <p class="toc-t">Nesta página</p>
+      <ul><li class="toc-2"><a href="#obrigatoria">Obrigatória</a></li><li class="toc-2"><a href="#processo">Processo</a></li><li class="toc-2"><a href="#autenticacao">Autenticação</a></li><li class="toc-2"><a href="#ambiente-das-tasks">Ambiente das tasks</a></li><li class="toc-2"><a href="#kubernetes">Kubernetes</a></li><li class="toc-2"><a href="#testes">Testes</a></li><li class="toc-2"><a href="#endpoints-de-saude">Endpoints de saúde</a></li><li class="toc-2"><a href="#exemplo-completo">Exemplo completo</a></li></ul>
+    </aside>
+  </main>
+</div>
+
+
+<footer class="site-footer">
+  <div class="shell">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <a class="brand" href="/">
+          <svg class="mark" aria-hidden="true"><use href="#i-mark"></use></svg>
+          <span>brevis<span class="tld">.sh</span></span>
+        </a>
+        <p>Filosofia aplicada à infraestrutura de dados.</p>
+      </div>
+
+      <div class="footer-col">
+        <h2>projeto</h2>
+        <ul>
+          <li><a href="/#produto">Produto</a></li>
+          <li><a href="/#principios">Princípios</a></li>
+          <li><a href="/#open-source">Open source</a></li>
+          <li><a href="/#faq">FAQ</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col">
+        <h2>código</h2>
+        <ul>
+          <li><a href="/docs/">Documentação</a></li>
+          <li><a href="https://github.com/AreteAcademy/brevis" target="_blank" rel="noopener">Repositório</a></li>
+          <li><a href="https://github.com/AreteAcademy/brevis/discussions" target="_blank" rel="noopener">Discussões</a></li>
+          <li><a href="https://areteacademy.com.br/" target="_blank" rel="noopener">Aretê Academy</a></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="footer-bottom">
+      <p>Um projeto open source da <a href="https://areteacademy.com.br/" target="_blank" rel="noopener">Aretê Academy</a></p>
+      <p>MIT · construído em Go</p>
+    </div>
+  </div>
+</footer>
+
+<script src="/js/docs.js" defer></script>
+</body>
+</html>

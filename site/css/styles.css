@@ -1257,3 +1257,16 @@ dd code {
     display: none;
   }
 }
+
+/* ---------------------------------------------------------------- 404 ---- */
+
+.erro-404 {
+  display: flex;
+  align-items: center;
+  min-height: 60vh;
+  padding: clamp(4rem, 10vw, 8rem) 0;
+}
+
+.erro-404 .lead {
+  max-width: 46ch;
+}

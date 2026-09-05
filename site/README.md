@@ -1,116 +1,143 @@
-# Landing page do brevis.sh
+# Site do brevis.sh
 
-HTML, CSS e JS estáticos. Sem build, sem dependência, sem `node_modules` —
-o que está no diretório é o que vai para o ar.
-
-```
-site/
-├── index.html          # a página inteira, dez seções
-├── css/styles.css      # tokens + componentes
-├── js/main.js          # menu e entrada dos blocos
-└── assets/favicon.svg  # a marca, com fundo sólido
-```
-
-Total servido: ~12,5 KB gzip (HTML + CSS + JS), fora as fontes do Google Fonts.
-
-## Rodar
+Landing page e documentação, em português e inglês. HTML estático **gerado** por
+um script Python sem dependências — nada de Node, nada de `node_modules`.
 
 ```bash
-python3 -m http.server 8000   # ou: npx http-server .
+python3 build.py           # gera 28 páginas em ~0,3 s
+python3 build.py --check   # falha se o HTML commitado estiver desatualizado
 ```
 
-## Identidade
+O HTML gerado **vai commitado**. O deploy serve arquivos estáticos e não roda
+nada; o `--check` na CI é o que garante que o commitado corresponde às fontes.
 
-Escura por decisão, não por preferência do sistema: a página é um terminal
-editorial, e um modo claro seria outro projeto. Por isso **não há bloco
-`prefers-color-scheme`** — há um `color-scheme: dark` declarado, para que os
-controles nativos do navegador acompanhem.
+## O que é fonte e o que é gerado
 
-| token | valor | uso |
-|---|---|---|
-| `--bg` | `#141711` | fundo |
-| `--surface` | `#1a1e15` | superfícies operacionais |
-| `--surface-2` | `#1f2419` | superfície em destaque |
-| `--green-2` | `#38412b` | filete estrutural |
-| `--lime` | `#c7d66d` | acento e estado ativo |
-| `--olive` | `#7d8e50` | rótulos e detalhes |
-| `--text` | `#ecefe4` | texto principal |
-| `--text-dim` | `#a3ad97` | texto secundário |
+| fonte — edite | gerado — não edite |
+|---|---|
+| `build.py` | `index.html`, `404.html` |
+| `templates/*.html` | `docs/**/index.html` |
+| `i18n.json` | `en/**` |
+| `content/<lang>/docs/*.md` | `sitemap.xml`, `robots.txt`, `search-index.json` |
+| `css/*.css`, `js/*.js`, `assets/*` | |
 
-Contraste medido sobre o fundo: texto **15,6:1**, secundário **7,7:1**, lima
-**11,4:1**, oliva **5,1:1**. O `--green-2` rende **1,7:1** — ele é filete
-estrutural e nada mais. Nunca use para texto nem para contorno de controle;
-para isso existe o oliva.
+## Idiomas
 
-Tipografia: **Cormorant Garamond** nos títulos, **IBM Plex Sans** no texto,
-**IBM Plex Mono** em rótulos, comandos e dados.
+O padrão fica na raiz; os demais ganham prefixo. Trocar `PADRAO` no `build.py`
+troca quem fica em `/` — e nada mais precisa mudar.
 
-Os rótulos de seção usam o prefixo `//`, e ele vem do **CSS**
-(`.eyebrow::before`), não do HTML — assim um leitor de tela não anuncia "barra
-barra" antes de cada seção.
+```
+brevis.sh/            → pt-BR      brevis.sh/en/           → inglês
+brevis.sh/docs/       → pt-BR      brevis.sh/en/docs/      → inglês
+```
 
-## Estrutura
+Cada página declara `hreflang` para os dois idiomas mais `x-default`. O seletor
+no topo leva ao **mesmo lugar** no outro idioma, não à home.
 
-Dez seções, na ordem: header · hero · contraste de visão · produto ·
-princípios · open source · filosofia · FAQ · CTA · footer.
+**Os slugs são iguais nos dois idiomas** (`/docs/installation/` e
+`/en/docs/installation/`). Só os títulos são traduzidos. Isso é o que permite o
+`hreflang` apontar de uma página para a sua correspondente sem uma tabela de
+tradução de URLs.
 
-Um único `<h1>`, na hero. Cada seção abre com `<h2>`; os cards internos usam
-`<h3>`. O rótulo acima do título é um `<p class="eyebrow">`, **não** um
-heading — ele é um rótulo, e promovê-lo a `h2` roubaria o nível do título real.
+Dentro do Markdown, escreva sempre `/docs/x/`: o gerador acrescenta o prefixo do
+idioma quando ele não é o padrão.
+
+## Escrevendo uma página
+
+Um arquivo `.md` em `content/<lang>/docs/`, com front matter:
+
+```markdown
+---
+title: Instalação
+description: Uma frase — vira o subtítulo, a meta description e o texto do card.
+group: Começar
+order: 2
+slug: installation
+---
+
+Conteúdo.
+```
+
+`order` define a posição na barra lateral; `group` define o agrupamento, na
+ordem em que os grupos aparecem. **Adicione a página nos dois idiomas** — o
+`hreflang` supõe que a correspondente existe.
+
+O número no nome do arquivo (`02-installation.md`) é só para o `ls` ficar
+legível; quem manda é o `order`.
+
+### Markdown suportado
+
+Um subconjunto deliberado: heading (`##` e `###` entram no índice lateral),
+parágrafo, lista, tabela, citação, cerca de código, regra e admonição. **HTML
+embutido não é aceito** — um parser que aceita tudo é um parser que aceita erro.
+
+````markdown
+:::note Título opcional
+Uma nota. Também há `tip`, `warning` e `danger`.
+:::
+
+```yaml
+name: exemplo   # realce para bash, yaml, go, json e sql
+```
+````
+
+## Busca
+
+`search-index.json` é gerado com título, descrição e os primeiros 1400
+caracteres de cada página, por idioma. A busca é client-side, filtra pelo idioma
+da página e pontua título acima de corpo. Sem serviço externo, sem chave de API.
+
+`/` foca o campo, como em qualquer documentação.
 
 ## Armadilhas já encontradas
 
-Ao editar, quatro coisas que quebram em silêncio:
+- **Restaure placeholders do último para o primeiro.** Em `inline()`, um link
+  com código dentro — ``[`serve`](#serve)`` — guarda o `<code>` como
+  placeholder 0 e o `<a>` que o contém como 1. Restaurando 0 antes de 1, o 0
+  ainda não está no texto, e o `\x00` some na renderização deixando o dígito: a
+  coluna inteira vira "0".
+- **`[hidden]` precisa de `!important`.** O `hidden` do UA vale menos que
+  qualquer seletor de classe.
+- **Em grid, `minmax(0, 1fr)`, nunca `1fr`.** `1fr` é `minmax(auto, 1fr)`: o
+  track não encolhe abaixo do min-content, e um `<pre>` empurra a página inteira
+  para a rolagem horizontal no celular.
+- **`{{ .campo }}` nos exemplos é template do Brevis**, não do gerador. O
+  gerador só troca `{{ identificador }}`; um placeholder seu sem valor levanta
+  `KeyError` no build, em vez de sobreviver até o HTML.
 
-- **`[hidden]` precisa do `!important`.** O `hidden` do UA vale menos que
-  qualquer seletor de classe, e vários blocos aqui declaram `display`.
-- **Em grid, use `minmax(0, 1fr)`, nunca `1fr`.** `1fr` é `minmax(auto, 1fr)`:
-  o track não encolhe abaixo do min-content do filho, e um `<pre>` de código
-  empurra a página inteira para a rolagem horizontal no celular. Nos `auto-fit`,
-  a forma segura é `minmax(min(280px, 100%), 1fr)`.
-- **`gap` no `.brand` separa a marca do TLD.** O texto precisa estar num
-  `<span>` único, senão o flex trata `brevis` e `.sh` como dois itens e a logo
-  vira `brevis .sh`.
-- **`margin-top: auto` só funciona no flex item.** Um botão dentro de um `<p>`
-  não é o item; quem recebe é o `<p>`.
+## Identidade
+
+Escura por decisão, não por preferência do sistema. Contraste medido sobre o
+fundo `#141711`: texto **15,6:1**, secundário **7,7:1**, lima **11,4:1**, oliva
+**5,1:1**. O `--green-2` rende **1,7:1** — filete estrutural e nada mais.
+
+Tipografia: Cormorant Garamond nos títulos, IBM Plex Sans no texto, IBM Plex
+Mono em rótulos e código.
 
 ## Acessibilidade
 
-Alvo do Lighthouse CI: performance ≥ 0,9 e acessibilidade ≥ 0,95
-(`.lighthouserc.json`). O que sustenta isso:
-
-- contraste AA em todo texto, incluindo os tokens de sintaxe do bloco de código;
-- **FAQ em `<details>` + `<summary>`** — accordion nativo, operável por teclado,
-  sem uma linha de script;
-- `data-reveal` só esconde quando a classe `.js` confirma que o script rodou —
-  uma falha de JS não apaga a página;
-- `prefers-reduced-motion` desliga animação, o pulso do separador e a rolagem
-  suave;
-- skip link, `<main>`, e hierarquia de headings sem salto.
-
-## SEO
-
-`title`, `description`, Open Graph, Twitter Card e **JSON-LD** com um `@graph`
-de `WebSite`, `SoftwareSourceCode` e `Organization`. O JSON-LD declara apenas o
-que é verificável: repositório, linguagem, licença MIT e autoria. Sem métricas,
-sem contagem de comunidade, sem clientes.
+- um `<h1>` por página, sem salto de nível;
+- FAQ em `<details>`/`<summary>` — accordion nativo, sem script;
+- `prefers-reduced-motion` desliga animação e rolagem suave;
+- `data-reveal` só esconde quando a classe `.js` confirma que o script rodou;
+- skip link, `<main>`, foco visível.
 
 ## Deploy
 
-`netlify.toml`, `vercel.json` e `Dockerfile` (nginx) já estão no diretório, com
-os redirects `/github`, `/docs`, `/issues` e `/discussions`. A CI
-(`.github/workflows/build-site.yml`) valida, roda Lighthouse no PR e publica a
-imagem no push.
+O `Dockerfile` (nginx) remove as fontes de build da imagem e devolve **404 de
+verdade** para caminho inexistente — `try_files … /index.html` serviria a
+landing com status 200, e um link quebrado passaria despercebido.
 
 ```bash
-vercel .                       # ou: netlify deploy --dir=.
-docker build -t brevis-site .  # o que a CI faz
+docker build -t brevis-site .
+vercel .                        # ou: netlify deploy --dir=.
 ```
 
-## Analytics
+A CI (`.github/workflows/build-site.yml`) roda `build.py --check`, valida o HTML
+das 28 páginas, roda Lighthouse no PR e publica a imagem no push.
 
-Não há nenhum. Para adicionar, uma linha antes de `</body>`:
+## Documentação futura em `docs.brevis.sh`
 
-```html
-<script defer data-domain="brevis.sh" src="https://plausible.io/js/script.js"></script>
-```
+O gerador já produz tudo sob `/docs/`. Para mover, aponte o subdomínio para o
+mesmo artefato e ajuste `BASE_URL` no `build.py` — os links internos são
+absolutos a partir da raiz, então nada mais muda.

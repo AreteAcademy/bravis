@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#141711">
+
+<title>Marca branca — Documentação</title>
+<meta name="description" content="Trocar título, frase, logo e paleta da interface por um arquivo YAML.">
+<meta name="author" content="Aretê Academy">
+<link rel="canonical" href="https://brevis.sh/docs/white-label/">
+<link rel="alternate" hreflang="pt-BR" href="https://brevis.sh/docs/white-label/"><link rel="alternate" hreflang="en" href="https://brevis.sh/en/docs/white-label/">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="brevis.sh">
+<meta property="og:locale" content="pt-BR">
+<meta property="og:title" content="Marca branca — Documentação">
+<meta property="og:description" content="Trocar título, frase, logo e paleta da interface por um arquivo YAML.">
+<meta property="og:url" content="https://brevis.sh/docs/white-label/">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Marca branca — Documentação">
+<meta name="twitter:description" content="Trocar título, frase, logo e paleta da interface por um arquivo YAML.">
+
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&amp;family=IBM+Plex+Mono:wght@400;500&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap">
+<link rel="stylesheet" href="/css/styles.css">
+<link rel="stylesheet" href="/css/docs.css">
+
+<script>document.documentElement.classList.add('js');</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  "headline": "Marca branca",
+  "description": "Trocar título, frase, logo e paleta da interface por um arquivo YAML.",
+  "inLanguage": "pt-BR",
+  "isPartOf": {
+    "@type": "WebSite",
+    "@id": "https://brevis.sh/#site"
+  },
+  "author": {
+    "@type": "Organization",
+    "name": "Aretê Academy"
+  }
+}
+</script>
+</head>
+<body class="page-doc">
+
+<a class="skip-link" href="#conteudo">Pular para o conteúdo</a>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-mark" viewBox="0 0 24 24">
+    <path d="M5 6.5 L19 12 M5 17.5 L19 12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none" opacity="0.5"/>
+    <circle cx="5" cy="6.5" r="2.4" fill="currentColor" opacity="0.75"/>
+    <circle cx="5" cy="17.5" r="2.4" fill="currentColor" opacity="0.75"/>
+    <circle cx="19" cy="12" r="3.2" fill="currentColor"/>
+  </symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+    <path d="M4 7h16M4 12h16M4 17h16"/>
+  </symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 12h15M13 6l6 6-6 6"/>
+  </symbol>
+  <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 12.5 9.5 18 20 6.5"/>
+  </symbol>
+  <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+    <circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>
+  </symbol>
+  <symbol id="i-github" viewBox="0 0 24 24">
+    <path fill="currentColor" d="M12 1.5a10.5 10.5 0 0 0-3.32 20.47c.53.1.72-.23.72-.5v-1.8c-2.92.63-3.54-1.4-3.54-1.4-.48-1.22-1.17-1.55-1.17-1.55-.95-.65.07-.64.07-.64 1.06.07 1.62 1.09 1.62 1.09.94 1.6 2.45 1.14 3.05.87.1-.68.37-1.14.67-1.4-2.33-.27-4.78-1.17-4.78-5.2 0-1.15.41-2.09 1.08-2.82-.11-.27-.47-1.34.1-2.8 0 0 .88-.28 2.88 1.08a10.1 10.1 0 0 1 5.24 0c2-1.36 2.87-1.08 2.87-1.08.58 1.46.22 2.53.11 2.8a4.05 4.05 0 0 1 1.08 2.82c0 4.04-2.46 4.93-4.8 5.19.38.33.72.97.72 1.96v2.9c0 .28.19.61.73.5A10.5 10.5 0 0 0 12 1.5z"/>
+  </symbol>
+</svg>
+
+<header class="site-header">
+  <div class="shell header-bar">
+    <a class="brand" href="/">
+      <svg class="mark" aria-hidden="true"><use href="#i-mark"></use></svg>
+      <span>brevis<span class="tld">.sh</span></span>
+    </a>
+
+    <nav class="main-nav" id="nav" aria-label="Navegação principal">
+      <a href="/#produto">Produto</a>
+      <a href="/#principios">Princípios</a>
+      <a href="/docs/">Documentação</a>
+      <a href="/#open-source">Open source</a>
+      <div class="lang-switch" role="group" aria-label="Idioma"><a href="/docs/white-label/" hreflang="pt-BR" aria-current="true">PT</a><a href="/en/docs/white-label/" hreflang="en">EN</a></div>
+      <a class="button button-secondary button-sm header-cta" href="https://github.com/AreteAcademy/brevis" target="_blank" rel="noopener">
+        <svg aria-hidden="true"><use href="#i-github"></use></svg>
+        Explorar open source
+      </a>
+    </nav>
+
+    <button class="nav-toggle" type="button" id="nav-toggle" aria-label="Abrir menu" aria-expanded="false" aria-controls="nav">
+      <svg aria-hidden="true"><use href="#i-menu"></use></svg>
+    </button>
+  </div>
+</header>
+
+<div class="doc-shell">
+  <button class="side-toggle" type="button" id="side-toggle" aria-expanded="false" aria-controls="side">
+    <svg aria-hidden="true"><use href="#i-menu"></use></svg>
+    Menu da documentação
+  </button>
+
+  <aside class="side" id="side">
+    <div class="side-inner">
+      <form class="search" role="search" onsubmit="return false">
+        <svg aria-hidden="true"><use href="#i-search"></use></svg>
+        <label class="sr-only" for="q">Buscar na documentação</label>
+        <input type="search" id="q" placeholder="Buscar…" autocomplete="off" spellcheck="false">
+      </form>
+      <div class="search-out" id="search-out" data-none="Nada encontrado" hidden></div>
+      <nav class="side-nav" aria-label="Documentação">
+        <p class="side-group">Começar</p><ul class="side-list"><li><a href="/docs/introduction/">Introdução</a></li><li><a href="/docs/installation/">Instalação</a></li><li><a href="/docs/quickstart/">Quickstart</a></li></ul><p class="side-group">Conceitos</p><ul class="side-list"><li><a href="/docs/workflows/">Workflows</a></li><li><a href="/docs/scheduler-and-queue/">Scheduler e fila</a></li><li><a href="/docs/pod-per-step/">Pod por passo</a></li></ul><p class="side-group">Referência</p><ul class="side-list"><li><a href="/docs/cli/">CLI</a></li><li><a href="/docs/parameters/">Parâmetros</a></li><li><a href="/docs/configuration/">Configuração</a></li></ul><p class="side-group">SDK</p><ul class="side-list"><li><a href="/docs/sdk/">SDK em Go</a></li></ul><p class="side-group">Operação</p><ul class="side-list"><li><a href="/docs/kubernetes/">Kubernetes</a></li><li><a href="/docs/white-label/" aria-current="page">Marca branca</a></li></ul>
+      </nav>
+    </div>
+  </aside>
+
+  <main class="doc" id="conteudo">
+    <article class="doc-body">
+      <p class="doc-kicker">Documentação</p>
+      <h1>Marca branca</h1>
+      <p class="doc-desc">Trocar título, frase, logo e paleta da interface por um arquivo YAML.</p>
+      <p>A interface é personalizável por um arquivo. As cores sobrescrevem as variáveis CSS <strong>em tempo de execução</strong>, então trocar o tema de um cliente não recompila nada.</p>
+<h2 id="o-arquivo">O arquivo<a class="anchor" href="#o-arquivo" aria-label="link">#</a></h2>
+<p>Copie <code>brand.example.yaml</code> para <code>brand.yaml</code> na raiz, ou aponte <code>BREVIS_BRAND_FILE</code>:</p>
+<div class="code-block" data-code="titulo: Dados Acme
+subtitulo: Plataforma de dados
+
+frase: |
+  Medir antes de decidir.
+  Decidir antes de escalar.
+
+cores:
+  fundo:    &quot;#f4efe4&quot;
+  tinta:    &quot;#21180f&quot;
+  destaque: &quot;#aa8450&quot;"><div class="code-head"><span class="code-lang">yaml</span><button class="code-copy" type="button" aria-label="Copiar" data-done="Copiado">Copiar</button></div><pre><code><span class="t-k">titulo</span>: Dados Acme
+<span class="t-k">subtitulo</span>: Plataforma de dados
+
+<span class="t-k">frase</span>: |
+  Medir antes de decidir.
+  Decidir antes de escalar.
+
+<span class="t-k">cores</span>:
+  <span class="t-k">fundo</span>:    "<span class="t-c">#f4efe4"</span>
+  <span class="t-k">tinta</span>:    "<span class="t-c">#21180f"</span>
+  <span class="t-k">destaque</span>: "<span class="t-c">#aa8450"</span></code></pre></div>
+<p><strong>Todos os campos são opcionais.</strong> O que você não escrever mantém o padrão, então um arquivo com apenas <code>titulo:</code> já é válido.</p>
+<p>A quebra de linha em <code>frase</code> é preservada: ela define o ritmo da frase na barra lateral.</p>
+<h2 id="logo">Logo<a class="anchor" href="#logo" aria-label="link">#</a></h2>
+<div class="code-block" data-code="logo: https://exemplo.com/marca.svg"><div class="code-head"><span class="code-lang">yaml</span><button class="code-copy" type="button" aria-label="Copiar" data-done="Copiado">Copiar</button></div><pre><code><span class="t-k">logo</span>: https://exemplo.com/marca.svg</code></pre></div>
+<p>Aceita URL (<code>https://</code> ou <code>http://</code>) ou caminho interno começando em <code>/</code>. Ausente, usa o símbolo embutido, que acompanha a cor do tema.</p>
+<aside class="admon admon-warning"><p class="admon-t">Uma logo hospedada fora depende daquele host</p><p>Se ele cair, ou se o cluster não tiver saída para a internet, a imagem não carrega. O resto da interface segue funcionando, mas conte com isso ao escolher — o restante da UI, incluindo fontes e bundles, é servido do próprio binário justamente para não depender da rede.</p></aside>
+<h2 id="validando">Validando<a class="anchor" href="#validando" aria-label="link">#</a></h2>
+<p>Um hexadecimal errado só apareceria quando o container subisse, e a mensagem chegaria pelo log do pod — longe de quem editou o arquivo. Por isso existe um subcomando:</p>
+<div class="code-block" data-code="brevis marca brand.yaml"><div class="code-head"><span class="code-lang">bash</span><button class="code-copy" type="button" aria-label="Copiar" data-done="Copiado">Copiar</button></div><pre><code><span class="t-k">brevis</span> marca brand.yaml</code></pre></div>
+<div class="code-block" data-code="  ok    Dados Acme · Plataforma de dados
+        logo      /assets/logo.svg  (simbolo embutido)
+        destaque  #aa8450
+        Powered by Brevis"><div class="code-head"><button class="code-copy" type="button" aria-label="Copiar" data-done="Copiado">Copiar</button></div><pre><code>  ok    Dados Acme · Plataforma de dados
+        logo      /assets/logo.svg  (simbolo embutido)
+        destaque  #aa8450
+        Powered by Brevis</code></pre></div>
+<p>Chame isso na CI da instalação e o erro volta no pull request.</p>
+<aside class="admon admon-note"><p class="admon-t">Ausência significa coisas diferentes</p><p>No <code>serve</code>, arquivo ausente quer dizer "usa a identidade padrão" — e a API sobe. No <code>marca</code>, arquivo ausente é <strong>erro</strong>: quem pediu para validar um caminho espera saber que ele não existe.</p></aside>
+<h2 id="comportamento-no-boot">Comportamento no boot<a class="anchor" href="#comportamento-no-boot" aria-label="link">#</a></h2>
+<p>Um erro de conteúdo — cor inválida, YAML quebrado — <strong>não impede a interface de subir</strong>. O processo registra um aviso e usa o tema padrão. Derrubar a API por causa de uma cor seria pior do que servi-la com o tema padrão.</p>
+<div class="code-block" data-code="level=WARN msg=&quot;identidade visual ignorada&quot; arquivo=brand.yaml erro=&quot;cor invalida: #gggggg&quot;"><div class="code-head"><button class="code-copy" type="button" aria-label="Copiar" data-done="Copiado">Copiar</button></div><pre><code>level=WARN msg="identidade visual ignorada" arquivo=brand.yaml erro="cor invalida: #gggggg"</code></pre></div>
+<h2 id="o-que-nao-se-customiza">O que não se customiza<a class="anchor" href="#o-que-nao-se-customiza" aria-label="link">#</a></h2>
+<p>O rodapé <strong>"Powered by Brevis"</strong> não vem da configuração — vem do código.</p>
+<h2 id="em-kubernetes">Em Kubernetes<a class="anchor" href="#em-kubernetes" aria-label="link">#</a></h2>
+<p>Monte o arquivo por ConfigMap:</p>
+<div class="code-block" data-code="volumes:
+  - name: marca
+    configMap: {name: brevis-brand}
+containers:
+  - name: api
+    volumeMounts:
+      - {name: marca, mountPath: /etc/brevis}
+    env:
+      - name: BREVIS_BRAND_FILE
+        value: /etc/brevis/brand.yaml"><div class="code-head"><span class="code-lang">yaml</span><button class="code-copy" type="button" aria-label="Copiar" data-done="Copiado">Copiar</button></div><pre><code><span class="t-k">volumes</span>:
+  - <span class="t-k">name</span>: marca
+    <span class="t-k">configMap</span>: {name: brevis-brand}
+<span class="t-k">containers</span>:
+  - <span class="t-k">name</span>: api
+    <span class="t-k">volumeMounts</span>:
+      - {name: marca, mountPath: /etc/brevis}
+    <span class="t-k">env</span>:
+      - <span class="t-k">name</span>: BREVIS_BRAND_FILE
+        <span class="t-k">value</span>: /etc/brevis/brand.yaml</code></pre></div>
+
+      <nav class="pagers" aria-label="Páginas">
+        <a class="pager pager-prev" href="/docs/kubernetes/"><span>Anterior</span><strong>Kubernetes</strong></a>
+        
+      </nav>
+
+      <p class="doc-edit">
+        <a href="https://github.com/AreteAcademy/brevis/blob/master/site/content/pt/docs/white-label.md" target="_blank" rel="noopener">Editar esta página no GitHub</a>
+      </p>
+    </article>
+
+    <aside class="toc" aria-label="Nesta página">
+      <p class="toc-t">Nesta página</p>
+      <ul><li class="toc-2"><a href="#o-arquivo">O arquivo</a></li><li class="toc-2"><a href="#logo">Logo</a></li><li class="toc-2"><a href="#validando">Validando</a></li><li class="toc-2"><a href="#comportamento-no-boot">Comportamento no boot</a></li><li class="toc-2"><a href="#o-que-nao-se-customiza">O que não se customiza</a></li><li class="toc-2"><a href="#em-kubernetes">Em Kubernetes</a></li></ul>
+    </aside>
+  </main>
+</div>
+
+
+<footer class="site-footer">
+  <div class="shell">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <a class="brand" href="/">
+          <svg class="mark" aria-hidden="true"><use href="#i-mark"></use></svg>
+          <span>brevis<span class="tld">.sh</span></span>
+        </a>
+        <p>Filosofia aplicada à infraestrutura de dados.</p>
+      </div>
+
+      <div class="footer-col">
+        <h2>projeto</h2>
+        <ul>
+          <li><a href="/#produto">Produto</a></li>
+          <li><a href="/#principios">Princípios</a></li>
+          <li><a href="/#open-source">Open source</a></li>
+          <li><a href="/#faq">FAQ</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col">
+        <h2>código</h2>
+        <ul>
+          <li><a href="/docs/">Documentação</a></li>
+          <li><a href="https://github.com/AreteAcademy/brevis" target="_blank" rel="noopener">Repositório</a></li>
+          <li><a href="https://github.com/AreteAcademy/brevis/discussions" target="_blank" rel="noopener">Discussões</a></li>
+          <li><a href="https://areteacademy.com.br/" target="_blank" rel="noopener">Aretê Academy</a></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="footer-bottom">
+      <p>Um projeto open source da <a href="https://areteacademy.com.br/" target="_blank" rel="noopener">Aretê Academy</a></p>
+      <p>MIT · construído em Go</p>
+    </div>
+  </div>
+</footer>
+
+<script src="/js/docs.js" defer></script>
+</body>
+</html>

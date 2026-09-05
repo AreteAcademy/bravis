@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#141711">
+
+<title>Documentação — brevis.sh</title>
+<meta name="description" content="Tudo para instalar, entender e operar o brevis.sh — do primeiro workflow ao deploy em Kubernetes.">
+<meta name="author" content="Aretê Academy">
+<link rel="canonical" href="https://brevis.sh/docs/">
+<link rel="alternate" hreflang="pt-BR" href="https://brevis.sh/docs/"><link rel="alternate" hreflang="en" href="https://brevis.sh/en/docs/">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="brevis.sh">
+<meta property="og:locale" content="pt-BR">
+<meta property="og:title" content="Documentação — brevis.sh">
+<meta property="og:description" content="Tudo para instalar, entender e operar o brevis.sh — do primeiro workflow ao deploy em Kubernetes.">
+<meta property="og:url" content="https://brevis.sh/docs/">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Documentação — brevis.sh">
+<meta name="twitter:description" content="Tudo para instalar, entender e operar o brevis.sh — do primeiro workflow ao deploy em Kubernetes.">
+
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&amp;family=IBM+Plex+Mono:wght@400;500&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap">
+<link rel="stylesheet" href="/css/styles.css">
+<link rel="stylesheet" href="/css/docs.css">
+
+<script>document.documentElement.classList.add('js');</script>
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "CollectionPage", "name": "Documentação", "inLanguage": "pt-BR"}
+</script>
+</head>
+<body class="page-landing">
+
+<a class="skip-link" href="#conteudo">Pular para o conteúdo</a>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-mark" viewBox="0 0 24 24">
+    <path d="M5 6.5 L19 12 M5 17.5 L19 12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none" opacity="0.5"/>
+    <circle cx="5" cy="6.5" r="2.4" fill="currentColor" opacity="0.75"/>
+    <circle cx="5" cy="17.5" r="2.4" fill="currentColor" opacity="0.75"/>
+    <circle cx="19" cy="12" r="3.2" fill="currentColor"/>
+  </symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+    <path d="M4 7h16M4 12h16M4 17h16"/>
+  </symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 12h15M13 6l6 6-6 6"/>
+  </symbol>
+  <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 12.5 9.5 18 20 6.5"/>
+  </symbol>
+  <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+    <circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>
+  </symbol>
+  <symbol id="i-github" viewBox="0 0 24 24">
+    <path fill="currentColor" d="M12 1.5a10.5 10.5 0 0 0-3.32 20.47c.53.1.72-.23.72-.5v-1.8c-2.92.63-3.54-1.4-3.54-1.4-.48-1.22-1.17-1.55-1.17-1.55-.95-.65.07-.64.07-.64 1.06.07 1.62 1.09 1.62 1.09.94 1.6 2.45 1.14 3.05.87.1-.68.37-1.14.67-1.4-2.33-.27-4.78-1.17-4.78-5.2 0-1.15.41-2.09 1.08-2.82-.11-.27-.47-1.34.1-2.8 0 0 .88-.28 2.88 1.08a10.1 10.1 0 0 1 5.24 0c2-1.36 2.87-1.08 2.87-1.08.58 1.46.22 2.53.11 2.8a4.05 4.05 0 0 1 1.08 2.82c0 4.04-2.46 4.93-4.8 5.19.38.33.72.97.72 1.96v2.9c0 .28.19.61.73.5A10.5 10.5 0 0 0 12 1.5z"/>
+  </symbol>
+</svg>
+
+<header class="site-header">
+  <div class="shell header-bar">
+    <a class="brand" href="/">
+      <svg class="mark" aria-hidden="true"><use href="#i-mark"></use></svg>
+      <span>brevis<span class="tld">.sh</span></span>
+    </a>
+
+    <nav class="main-nav" id="nav" aria-label="Navegação principal">
+      <a href="/#produto">Produto</a>
+      <a href="/#principios">Princípios</a>
+      <a href="/docs/">Documentação</a>
+      <a href="/#open-source">Open source</a>
+      <div class="lang-switch" role="group" aria-label="Idioma"><a href="/docs/" hreflang="pt-BR" aria-current="true">PT</a><a href="/en/docs/" hreflang="en">EN</a></div>
+      <a class="button button-secondary button-sm header-cta" href="https://github.com/AreteAcademy/brevis" target="_blank" rel="noopener">
+        <svg aria-hidden="true"><use href="#i-github"></use></svg>
+        Explorar open source
+      </a>
+    </nav>
+
+    <button class="nav-toggle" type="button" id="nav-toggle" aria-label="Abrir menu" aria-expanded="false" aria-controls="nav">
+      <svg aria-hidden="true"><use href="#i-menu"></use></svg>
+    </button>
+  </div>
+</header>
+
+<main id="conteudo" class="doc-index"><div class="shell"><p class="eyebrow">Documentação</p><h1>Documentação</h1><p class="lead">Tudo para instalar, entender e operar o brevis.sh — do primeiro workflow ao deploy em Kubernetes.</p><h2>Começar</h2><div class="surface-grid"><a class="surface" href="/docs/introduction/"><h3>Introdução</h3><p>O que é o brevis.sh, que problema ele resolve e quando ele não é a escolha certa.</p></a><a class="surface" href="/docs/installation/"><h3>Instalação</h3><p>Como obter o binário, o que ele exige e como confirmar que a instalação está correta.</p></a><a class="surface" href="/docs/quickstart/"><h3>Quickstart</h3><p>Do zero à DAG executando na interface, em quatro passos.</p></a></div><h2>Conceitos</h2><div class="surface-grid"><a class="surface" href="/docs/workflows/"><h3>Workflows</h3><p>O formato YAML completo — passos, dependências, imagens, recursos e agenda.</p></a><a class="surface" href="/docs/scheduler-and-queue/"><h3>Scheduler e fila</h3><p>Dois laços independentes — quem cria os runs, quem os executa, e por que estão separados.</p></a><a class="surface" href="/docs/pod-per-step/"><h3>Pod por passo</h3><p>Por que cada etapa executa em seu próprio pod, e o que isso muda em custo e isolamento.</p></a></div><h2>Referência</h2><div class="surface-grid"><a class="surface" href="/docs/cli/"><h3>CLI</h3><p>Os dez subcomandos do engine, com flags, argumentos e o que cada um exige.</p></a><a class="surface" href="/docs/parameters/"><h3>Parâmetros</h3><p>O que muda entre dois disparos do mesmo workflow, sem editar o arquivo.</p></a><a class="surface" href="/docs/configuration/"><h3>Configuração</h3><p>Todas as variáveis de ambiente, com padrão, formato e o que acontece quando faltam.</p></a></div><h2>SDK</h2><div class="surface-grid"><a class="surface" href="/docs/sdk/"><h3>SDK em Go</h3><p>Escrever um fetcher — extrair de uma origem, transformar e carregar num destino.</p></a></div><h2>Operação</h2><div class="surface-grid"><a class="surface" href="/docs/kubernetes/"><h3>Kubernetes</h3><p>Como implantar o engine, com que permissões, e o que verificar depois.</p></a><a class="surface" href="/docs/white-label/"><h3>Marca branca</h3><p>Trocar título, frase, logo e paleta da interface por um arquivo YAML.</p></a></div></div></main>
+
+<footer class="site-footer">
+  <div class="shell">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <a class="brand" href="/">
+          <svg class="mark" aria-hidden="true"><use href="#i-mark"></use></svg>
+          <span>brevis<span class="tld">.sh</span></span>
+        </a>
+        <p>Filosofia aplicada à infraestrutura de dados.</p>
+      </div>
+
+      <div class="footer-col">
+        <h2>projeto</h2>
+        <ul>
+          <li><a href="/#produto">Produto</a></li>
+          <li><a href="/#principios">Princípios</a></li>
+          <li><a href="/#open-source">Open source</a></li>
+          <li><a href="/#faq">FAQ</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col">
+        <h2>código</h2>
+        <ul>
+          <li><a href="/docs/">Documentação</a></li>
+          <li><a href="https://github.com/AreteAcademy/brevis" target="_blank" rel="noopener">Repositório</a></li>
+          <li><a href="https://github.com/AreteAcademy/brevis/discussions" target="_blank" rel="noopener">Discussões</a></li>
+          <li><a href="https://areteacademy.com.br/" target="_blank" rel="noopener">Aretê Academy</a></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="footer-bottom">
+      <p>Um projeto open source da <a href="https://areteacademy.com.br/" target="_blank" rel="noopener">Aretê Academy</a></p>
+      <p>MIT · construído em Go</p>
+    </div>
+  </div>
+</footer>
+
+
+</body>
+</html>

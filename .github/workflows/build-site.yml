@@ -19,12 +19,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Build está em dia
+        run: |
+          cd site
+          python3 build.py --check
+
       - name: Validate HTML
         run: |
           cd site
           sudo apt-get update -qq
           sudo apt-get install -y -qq tidy
-          tidy -q -e index.html || true
+          for f in index.html 404.html docs/*/index.html en/index.html en/docs/*/index.html; do
+            tidy -q -e -utf8 "$f" || true
+          done
           echo "✅ HTML validation passed"
 
       - name: Check CSS

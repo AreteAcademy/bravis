@@ -9,30 +9,26 @@
 <meta name="description" content="brevis.sh é um runtime Go open source para transformar, orquestrar e operar dados sem inflar a stack. Transformação, fila, scheduler e interface operacional num único binário. Um projeto da Aretê Academy.">
 <meta name="author" content="Aretê Academy">
 <link rel="canonical" href="https://brevis.sh/">
+<link rel="alternate" hreflang="pt-BR" href="https://brevis.sh/"><link rel="alternate" hreflang="en" href="https://brevis.sh/en/"><link rel="alternate" hreflang="x-default" href="https://brevis.sh/">
 
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="brevis.sh">
-<meta property="og:locale" content="pt_BR">
-<meta property="og:title" content="brevis.sh — a vida é breve, sua arquitetura não precisa ser complexa">
-<meta property="og:description" content="Runtime Go open source para transformar, orquestrar e operar dados sem inflar a stack. Um projeto da Aretê Academy.">
+<meta property="og:locale" content="pt-BR">
+<meta property="og:title" content="brevis.sh — infraestrutura de dados open source em Go">
+<meta property="og:description" content="brevis.sh é um runtime Go open source para transformar, orquestrar e operar dados sem inflar a stack. Transformação, fila, scheduler e interface operacional num único binário. Um projeto da Aretê Academy.">
 <meta property="og:url" content="https://brevis.sh/">
-
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="brevis.sh — infraestrutura de dados open source em Go">
-<meta name="twitter:description" content="Transformação, orquestração, fila e scheduler num único binário. Filosofia aplicada à infraestrutura de dados.">
+<meta name="twitter:description" content="brevis.sh é um runtime Go open source para transformar, orquestrar e operar dados sem inflar a stack. Transformação, fila, scheduler e interface operacional num único binário. Um projeto da Aretê Academy.">
 
-<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&amp;family=IBM+Plex+Mono:wght@400;500&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap">
-<link rel="stylesheet" href="css/styles.css">
+<link rel="stylesheet" href="/css/styles.css">
 
-<script>
-  /* Marca que o script roda. O CSS só esconde os blocos de entrada quando esta
-     classe existe — sem ela, uma falha de JS deixaria a página em branco. */
-  document.documentElement.classList.add('js');
-</script>
 
+<script>document.documentElement.classList.add('js');</script>
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
@@ -43,40 +39,41 @@
       "url": "https://brevis.sh/",
       "name": "brevis.sh",
       "inLanguage": "pt-BR",
-      "description": "Infraestrutura de dados open source em Go: transformação, orquestração, fila e scheduler num único runtime.",
-      "publisher": { "@id": "https://areteacademy.com.br/#org" }
+      "description": "brevis.sh é um runtime Go open source para transformar, orquestrar e operar dados sem inflar a stack. Transformação, fila, scheduler e interface operacional num único binário. Um projeto da Aretê Academy.",
+      "publisher": {
+        "@id": "https://areteacademy.com.br/#org"
+      }
     },
     {
       "@type": "SoftwareSourceCode",
       "@id": "https://brevis.sh/#projeto",
       "name": "brevis.sh",
-      "description": "Runtime de orquestração de dados escrito em Go. Reúne transformação declarativa, orquestração de workflows, fila persistente, scheduler e interface operacional num único binário, com execução isolada de etapas em pods.",
+      "description": "brevis.sh é um runtime Go open source para transformar, orquestrar e operar dados sem inflar a stack. Transformação, fila, scheduler e interface operacional num único binário. Um projeto da Aretê Academy.",
       "url": "https://brevis.sh/",
       "codeRepository": "https://github.com/AreteAcademy/brevis",
       "programmingLanguage": "Go",
       "license": "https://opensource.org/licenses/MIT",
       "isAccessibleForFree": true,
-      "inLanguage": "pt-BR",
-      "author": { "@id": "https://areteacademy.com.br/#org" }
+      "author": {
+        "@id": "https://areteacademy.com.br/#org"
+      }
     },
     {
       "@type": "Organization",
       "@id": "https://areteacademy.com.br/#org",
       "name": "Aretê Academy",
-      "url": "https://areteacademy.com.br/",
-      "description": "Filosofia aplicada ao software: disciplina, propósito e excelência na construção de sistemas."
+      "url": "https://areteacademy.com.br/"
     }
   ]
 }
 </script>
 </head>
-<body>
+<body class="page-landing">
 
 <a class="skip-link" href="#conteudo">Pular para o conteúdo</a>
 
 <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
   <symbol id="i-mark" viewBox="0 0 24 24">
-    <!-- Três etapas convergindo: a forma do que o runtime faz, legível a 18px. -->
     <path d="M5 6.5 L19 12 M5 17.5 L19 12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none" opacity="0.5"/>
     <circle cx="5" cy="6.5" r="2.4" fill="currentColor" opacity="0.75"/>
     <circle cx="5" cy="17.5" r="2.4" fill="currentColor" opacity="0.75"/>
@@ -91,24 +88,27 @@
   <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
     <path d="M4 12.5 9.5 18 20 6.5"/>
   </symbol>
+  <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+    <circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>
+  </symbol>
   <symbol id="i-github" viewBox="0 0 24 24">
     <path fill="currentColor" d="M12 1.5a10.5 10.5 0 0 0-3.32 20.47c.53.1.72-.23.72-.5v-1.8c-2.92.63-3.54-1.4-3.54-1.4-.48-1.22-1.17-1.55-1.17-1.55-.95-.65.07-.64.07-.64 1.06.07 1.62 1.09 1.62 1.09.94 1.6 2.45 1.14 3.05.87.1-.68.37-1.14.67-1.4-2.33-.27-4.78-1.17-4.78-5.2 0-1.15.41-2.09 1.08-2.82-.11-.27-.47-1.34.1-2.8 0 0 .88-.28 2.88 1.08a10.1 10.1 0 0 1 5.24 0c2-1.36 2.87-1.08 2.87-1.08.58 1.46.22 2.53.11 2.8a4.05 4.05 0 0 1 1.08 2.82c0 4.04-2.46 4.93-4.8 5.19.38.33.72.97.72 1.96v2.9c0 .28.19.61.73.5A10.5 10.5 0 0 0 12 1.5z"/>
   </symbol>
 </svg>
 
-<!-- =========================================================== 1. HEADER -->
 <header class="site-header">
   <div class="shell header-bar">
-    <a class="brand" href="#topo">
+    <a class="brand" href="/">
       <svg class="mark" aria-hidden="true"><use href="#i-mark"></use></svg>
       <span>brevis<span class="tld">.sh</span></span>
     </a>
 
     <nav class="main-nav" id="nav" aria-label="Navegação principal">
-      <a href="#produto">Produto</a>
-      <a href="#principios">Princípios</a>
-      <a href="#open-source">Open source</a>
-      <a href="#faq">FAQ</a>
+      <a href="/#produto">Produto</a>
+      <a href="/#principios">Princípios</a>
+      <a href="/docs/">Documentação</a>
+      <a href="/#open-source">Open source</a>
+      <div class="lang-switch" role="group" aria-label="Idioma"><a href="/" hreflang="pt-BR" aria-current="true">PT</a><a href="/en/" hreflang="en">EN</a></div>
       <a class="button button-secondary button-sm header-cta" href="https://github.com/AreteAcademy/brevis" target="_blank" rel="noopener">
         <svg aria-hidden="true"><use href="#i-github"></use></svg>
         Explorar open source
@@ -123,30 +123,24 @@
 
 <main id="conteudo">
 
-  <!-- ============================================================ 2. HERO -->
   <section class="hero" id="topo">
     <div class="shell hero-grid">
       <div>
         <p class="eyebrow">aretê academy apresenta · software com propósito</p>
         <h1>A vida é breve.<br>Sua arquitetura não precisa ser <em>complexa</em>.</h1>
-        <p class="lead">
-          brevis.sh é infraestrutura de dados open source para quem trata tempo, clareza
-          e responsabilidade como parte da engenharia. Um runtime Go para transformar,
-          orquestrar e operar sem inflar sua stack.
-        </p>
+        <p class="lead">brevis.sh é infraestrutura de dados open source para quem trata tempo, clareza e responsabilidade como parte da engenharia. Um runtime Go para transformar, orquestrar e operar sem inflar sua stack.</p>
         <div class="button-row">
           <a class="button button-primary" href="https://github.com/AreteAcademy/brevis" target="_blank" rel="noopener">
             <svg aria-hidden="true"><use href="#i-github"></use></svg>
             Explorar no GitHub
           </a>
-          <a class="button button-secondary" href="#principios">
-            Ler os princípios
+          <a class="button button-secondary" href="/docs/">
+            Ler a documentação
             <svg aria-hidden="true"><use href="#i-arrow"></use></svg>
           </a>
         </div>
       </div>
 
-      <!-- Visualização do runtime: as quatro etapas de um workflow em curso. -->
       <div class="runtime" data-reveal>
         <div class="runtime-bar">
           <span class="id">workflow</span>
@@ -157,34 +151,22 @@
           <ol class="stages">
             <li class="stage stage-done">
               <span class="node" aria-hidden="true"></span>
-              <span class="stage-meta">
-                <span class="name">transform</span>
-                <span class="status">concluído</span>
-              </span>
+              <span class="stage-meta"><span class="name">transform</span><span class="status">concluído</span></span>
               <span class="track" style="--p:100%"><span></span></span>
             </li>
             <li class="stage stage-done">
               <span class="node" aria-hidden="true"></span>
-              <span class="stage-meta">
-                <span class="name">queue</span>
-                <span class="status">concluído</span>
-              </span>
+              <span class="stage-meta"><span class="name">queue</span><span class="status">concluído</span></span>
               <span class="track" style="--p:100%"><span></span></span>
             </li>
             <li class="stage stage-running">
               <span class="node" aria-hidden="true"></span>
-              <span class="stage-meta">
-                <span class="name">schedule</span>
-                <span class="status">running</span>
-              </span>
+              <span class="stage-meta"><span class="name">schedule</span><span class="status">running</span></span>
               <span class="track" style="--p:64%"><span></span></span>
             </li>
             <li class="stage">
               <span class="node" aria-hidden="true"></span>
-              <span class="stage-meta">
-                <span class="name">pod</span>
-                <span class="status">na fila</span>
-              </span>
+              <span class="stage-meta"><span class="name">pod</span><span class="status">na fila</span></span>
               <span class="track" style="--p:0%"><span></span></span>
             </li>
           </ol>
@@ -194,13 +176,9 @@
     </div>
   </section>
 
-  <!-- ============================================= 3. CONTRASTE DE VISÃO -->
   <section class="contrast" aria-label="A proposta do projeto">
     <div class="shell contrast-row">
-      <p class="contrast-from">
-        filosofia sem prática<br>
-        tecnologia sem direção
-      </p>
+      <p class="contrast-from">filosofia sem prática<br>tecnologia sem direção</p>
       <span class="contrast-arrow" aria-hidden="true">
         <svg viewBox="0 0 48 20" fill="none" stroke="currentColor" stroke-width="1.2">
           <path d="M0 10h40M34 4l6 6-6 6" stroke-linecap="round" stroke-linejoin="round"/>
@@ -213,7 +191,6 @@
     </div>
   </section>
 
-  <!-- ======================================================== 4. PRODUTO -->
   <section class="section" id="produto">
     <div class="shell">
       <div class="section-head head-split" data-reveal>
@@ -221,10 +198,7 @@
           <p class="eyebrow">filosofia aplicada ao software</p>
           <h2>A melhor arquitetura devolve tempo para pensar.</h2>
         </div>
-        <p class="lead">
-          Menos colagem entre ferramentas. Mais contexto, limites claros e tempo
-          recuperado para o trabalho que só a sua equipe pode fazer.
-        </p>
+        <p class="lead">Menos colagem entre ferramentas. Mais contexto, limites claros e tempo recuperado para o trabalho que só a sua equipe pode fazer.</p>
       </div>
 
       <div class="surface-grid" data-reveal>
@@ -256,28 +230,20 @@
 
       <div class="split-code">
         <div class="code-block" data-reveal>
-          <div class="code-head">
-            <span>ingest.yaml</span>
-          </div>
+          <div class="code-head"><span>ingest.yaml</span></div>
 <pre><code><span class="t-k">name</span><span class="t-o">:</span> ingest
 
 <span class="t-k">steps</span><span class="t-o">:</span>
   <span class="t-o">-</span> <span class="t-k">id</span><span class="t-o">:</span> transform
     <span class="t-k">image</span><span class="t-o">:</span> <span class="t-s">brevis/etl:1.4</span>
     <span class="t-k">run</span><span class="t-o">:</span> transform postgres</code></pre>
-          <p class="code-note">
-            O workflow inteiro é um arquivo versionável. Revisar um pipeline vira
-            revisar um diff.
-          </p>
+          <p class="code-note">O workflow inteiro é um arquivo versionável. Revisar um pipeline vira revisar um diff.</p>
         </div>
 
         <div data-reveal>
-          <p class="lead" style="margin-top:0">
-            Declarativo por escolha, não por moda. O que o arquivo diz é o que o runtime
-            faz — e o que ele não diz, o runtime não inventa.
-          </p>
+          <p class="lead" style="margin-top:0">Declarativo por escolha, não por moda. O que o arquivo diz é o que o runtime faz — e o que ele não diz, o runtime não inventa.</p>
           <p class="button-row" style="margin-top:1.75rem">
-            <a class="text-link" href="https://github.com/AreteAcademy/brevis/tree/master/docs" target="_blank" rel="noopener">
+            <a class="text-link" href="/docs/">
               Ler a documentação
               <svg width="15" height="15" aria-hidden="true"><use href="#i-arrow"></use></svg>
             </a>
@@ -287,17 +253,12 @@
     </div>
   </section>
 
-  <!-- ===================================================== 5. PRINCÍPIOS -->
   <section class="section" id="principios">
     <div class="shell">
       <div class="section-head" data-reveal>
         <p class="eyebrow">de brevitate vitae</p>
         <h2>Não é que temos pouco tempo. É que perdemos muito dele.</h2>
-        <p class="lead">
-          A máxima de Sêneca guia a pergunta por trás do brevis.sh: quais complexidades
-          realmente merecem o tempo de uma equipe? Cada workflow executa em pods isolados
-          para que falhas, versões e dependências tenham limites claros.
-        </p>
+        <p class="lead">A máxima de Sêneca guia a pergunta por trás do brevis.sh: quais complexidades realmente merecem o tempo de uma equipe? Cada workflow executa em pods isolados para que falhas, versões e dependências tenham limites claros.</p>
       </div>
 
       <div class="flow-rule" data-reveal></div>
@@ -327,7 +288,6 @@
     </div>
   </section>
 
-  <!-- ==================================================== 6. OPEN SOURCE -->
   <section class="section" id="open-source">
     <div class="shell">
       <div class="section-head head-split" data-reveal>
@@ -335,10 +295,7 @@
           <p class="eyebrow">aberto por princípio</p>
           <h2>Código aberto. Escolha como participar.</h2>
         </div>
-        <p class="lead">
-          O brevis.sh é 100% open source. Sem licenças proprietárias, sem edição limitada,
-          sem bloqueios para usar o que você constrói.
-        </p>
+        <p class="lead">O brevis.sh é 100% open source. Sem licenças proprietárias, sem edição limitada, sem bloqueios para usar o que você constrói.</p>
       </div>
 
       <div class="paths" data-reveal>
@@ -352,9 +309,7 @@
             <li><svg aria-hidden="true"><use href="#i-check"></use></svg><span>Código auditável</span></li>
             <li><svg aria-hidden="true"><use href="#i-check"></use></svg><span>Contribuições abertas</span></li>
           </ul>
-          <p class="path-cta">
-            <a class="button button-secondary" href="https://github.com/AreteAcademy/brevis" target="_blank" rel="noopener">Ver repositório</a>
-          </p>
+          <p class="path-cta"><a class="button button-secondary" href="https://github.com/AreteAcademy/brevis" target="_blank" rel="noopener">Ver repositório</a></p>
         </article>
 
         <article class="path path-main">
@@ -368,9 +323,7 @@
             <li><svg aria-hidden="true"><use href="#i-check"></use></svg><span>Troca entre pares</span></li>
             <li><svg aria-hidden="true"><use href="#i-check"></use></svg><span>Roadmap público</span></li>
           </ul>
-          <p class="path-cta">
-            <a class="button button-primary" href="https://github.com/AreteAcademy/brevis/discussions" target="_blank" rel="noopener">Acompanhar projeto</a>
-          </p>
+          <p class="path-cta"><a class="button button-primary" href="https://github.com/AreteAcademy/brevis/discussions" target="_blank" rel="noopener">Acompanhar projeto</a></p>
         </article>
 
         <article class="path">
@@ -383,15 +336,12 @@
             <li><svg aria-hidden="true"><use href="#i-check"></use></svg><span>Formação contínua</span></li>
             <li><svg aria-hidden="true"><use href="#i-check"></use></svg><span>Canal aberto</span></li>
           </ul>
-          <p class="path-cta">
-            <a class="button button-secondary" href="https://areteacademy.com.br/" target="_blank" rel="noopener">Conhecer a Aretê</a>
-          </p>
+          <p class="path-cta"><a class="button button-secondary" href="https://areteacademy.com.br/" target="_blank" rel="noopener">Conhecer a Aretê</a></p>
         </article>
       </div>
     </div>
   </section>
 
-  <!-- ====================================================== 7. FILOSOFIA -->
   <section class="section">
     <div class="shell">
       <div class="section-head head-split" data-reveal>
@@ -399,10 +349,7 @@
           <p class="eyebrow">uma linha entre filosofia + tecnologia</p>
           <h2>Ferramentas moldam a forma como pensamos.</h2>
         </div>
-        <p class="lead">
-          O brevis.sh nasce no grupo Aretê Academy: disciplina, propósito e excelência
-          aplicados à construção de software.
-        </p>
+        <p class="lead">O brevis.sh nasce no grupo Aretê Academy: disciplina, propósito e excelência aplicados à construção de software.</p>
       </div>
 
       <div class="editorials" data-reveal>
@@ -420,7 +367,6 @@
     </div>
   </section>
 
-  <!-- ============================================================ 8. FAQ -->
   <section class="section" id="faq">
     <div class="shell">
       <div class="section-head" data-reveal>
@@ -449,20 +395,20 @@
     </div>
   </section>
 
-  <!-- ====================================================== 9. CTA FINAL -->
   <section class="final">
     <div class="shell">
       <div data-reveal>
         <p class="eyebrow">tempo é um recurso de arquitetura</p>
         <h2>Construa com clareza.<br>Contribua com propósito.</h2>
-        <p class="lead">
-          Conheça o brevis.sh, explore o código e participe de uma infraestrutura de dados
-          feita para devolver foco às equipes de engenharia.
-        </p>
+        <p class="lead">Conheça o brevis.sh, explore o código e participe de uma infraestrutura de dados feita para devolver foco às equipes de engenharia.</p>
         <div class="button-row">
           <a class="button button-primary" href="https://github.com/AreteAcademy/brevis" target="_blank" rel="noopener">
             <svg aria-hidden="true"><use href="#i-github"></use></svg>
             Explorar o projeto
+          </a>
+          <a class="button button-secondary" href="/docs/">
+            Ler a documentação
+            <svg aria-hidden="true"><use href="#i-arrow"></use></svg>
           </a>
         </div>
       </div>
@@ -470,12 +416,12 @@
   </section>
 </main>
 
-<!-- =========================================================== 10. FOOTER -->
+
 <footer class="site-footer">
   <div class="shell">
     <div class="footer-grid">
       <div class="footer-brand">
-        <a class="brand" href="#topo">
+        <a class="brand" href="/">
           <svg class="mark" aria-hidden="true"><use href="#i-mark"></use></svg>
           <span>brevis<span class="tld">.sh</span></span>
         </a>
@@ -485,19 +431,19 @@
       <div class="footer-col">
         <h2>projeto</h2>
         <ul>
-          <li><a href="#produto">Produto</a></li>
-          <li><a href="#principios">Princípios</a></li>
-          <li><a href="#open-source">Open source</a></li>
-          <li><a href="#faq">FAQ</a></li>
+          <li><a href="/#produto">Produto</a></li>
+          <li><a href="/#principios">Princípios</a></li>
+          <li><a href="/#open-source">Open source</a></li>
+          <li><a href="/#faq">FAQ</a></li>
         </ul>
       </div>
 
       <div class="footer-col">
         <h2>código</h2>
         <ul>
+          <li><a href="/docs/">Documentação</a></li>
           <li><a href="https://github.com/AreteAcademy/brevis" target="_blank" rel="noopener">Repositório</a></li>
           <li><a href="https://github.com/AreteAcademy/brevis/discussions" target="_blank" rel="noopener">Discussões</a></li>
-          <li><a href="https://github.com/AreteAcademy/brevis/tree/master/docs" target="_blank" rel="noopener">Documentação</a></li>
           <li><a href="https://areteacademy.com.br/" target="_blank" rel="noopener">Aretê Academy</a></li>
         </ul>
       </div>
@@ -510,6 +456,6 @@
   </div>
 </footer>
 
-<script src="js/main.js" defer></script>
+<script src="/js/main.js" defer></script>
 </body>
 </html>

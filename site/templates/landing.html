@@ -1,0 +1,294 @@
+<main id="conteudo">
+
+  <section class="hero" id="topo">
+    <div class="shell hero-grid">
+      <div>
+        <p class="eyebrow">{{ l.hero_eyebrow }}</p>
+        <h1>{{ l.hero_titulo }}</h1>
+        <p class="lead">{{ l.hero_lead }}</p>
+        <div class="button-row">
+          <a class="button button-primary" href="{{ repo }}" target="_blank" rel="noopener">
+            <svg aria-hidden="true"><use href="#i-github"></use></svg>
+            {{ l.hero_cta1 }}
+          </a>
+          <a class="button button-secondary" href="{{ prefixo }}/docs/">
+            {{ l.hero_cta2 }}
+            <svg aria-hidden="true"><use href="#i-arrow"></use></svg>
+          </a>
+        </div>
+      </div>
+
+      <div class="runtime" data-reveal>
+        <div class="runtime-bar">
+          <span class="id">workflow</span>
+          <span>ingest</span>
+          <span class="state">running</span>
+        </div>
+        <div class="runtime-body">
+          <ol class="stages">
+            <li class="stage stage-done">
+              <span class="node" aria-hidden="true"></span>
+              <span class="stage-meta"><span class="name">transform</span><span class="status">{{ l.st_done }}</span></span>
+              <span class="track" style="--p:100%"><span></span></span>
+            </li>
+            <li class="stage stage-done">
+              <span class="node" aria-hidden="true"></span>
+              <span class="stage-meta"><span class="name">queue</span><span class="status">{{ l.st_done }}</span></span>
+              <span class="track" style="--p:100%"><span></span></span>
+            </li>
+            <li class="stage stage-running">
+              <span class="node" aria-hidden="true"></span>
+              <span class="stage-meta"><span class="name">schedule</span><span class="status">running</span></span>
+              <span class="track" style="--p:64%"><span></span></span>
+            </li>
+            <li class="stage">
+              <span class="node" aria-hidden="true"></span>
+              <span class="stage-meta"><span class="name">pod</span><span class="status">{{ l.st_queued }}</span></span>
+              <span class="track" style="--p:0%"><span></span></span>
+            </li>
+          </ol>
+        </div>
+        <p class="runtime-foot">{{ l.runtime_foot }}</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="contrast" aria-label="{{ l.contrast_rotulo }}">
+    <div class="shell contrast-row">
+      <p class="contrast-from">{{ l.contrast_from }}</p>
+      <span class="contrast-arrow" aria-hidden="true">
+        <svg viewBox="0 0 48 20" fill="none" stroke="currentColor" stroke-width="1.2">
+          <path d="M0 10h40M34 4l6 6-6 6" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </span>
+      <p class="contrast-to">
+        <span class="name">brevis.sh</span><br>
+        <span class="claim">{{ l.contrast_claim }}</span>
+      </p>
+    </div>
+  </section>
+
+  <section class="section" id="produto">
+    <div class="shell">
+      <div class="section-head head-split" data-reveal>
+        <div>
+          <p class="eyebrow">{{ l.prod_eyebrow }}</p>
+          <h2>{{ l.prod_titulo }}</h2>
+        </div>
+        <p class="lead">{{ l.prod_lead }}</p>
+      </div>
+
+      <div class="surface-grid" data-reveal>
+        <article class="surface">
+          <p class="surface-index">01</p>
+          <h3>{{ l.f1_titulo }}</h3>
+          <p>{{ l.f1_corpo }}</p>
+          <span class="tag">{{ l.f1_tag }}</span>
+        </article>
+        <article class="surface">
+          <p class="surface-index">02</p>
+          <h3>{{ l.f2_titulo }}</h3>
+          <p>{{ l.f2_corpo }}</p>
+          <span class="tag">{{ l.f2_tag }}</span>
+        </article>
+        <article class="surface">
+          <p class="surface-index">03</p>
+          <h3>{{ l.f3_titulo }}</h3>
+          <p>{{ l.f3_corpo }}</p>
+          <span class="tag">{{ l.f3_tag }}</span>
+        </article>
+        <article class="surface">
+          <p class="surface-index">04</p>
+          <h3>{{ l.f4_titulo }}</h3>
+          <p>{{ l.f4_corpo }}</p>
+          <span class="tag">{{ l.f4_tag }}</span>
+        </article>
+      </div>
+
+      <div class="split-code">
+        <div class="code-block" data-reveal>
+          <div class="code-head"><span>ingest.yaml</span></div>
+<pre><code><span class="t-k">name</span><span class="t-o">:</span> ingest
+
+<span class="t-k">steps</span><span class="t-o">:</span>
+  <span class="t-o">-</span> <span class="t-k">id</span><span class="t-o">:</span> transform
+    <span class="t-k">image</span><span class="t-o">:</span> <span class="t-s">brevis/etl:1.4</span>
+    <span class="t-k">run</span><span class="t-o">:</span> transform postgres</code></pre>
+          <p class="code-note">{{ l.code_note }}</p>
+        </div>
+
+        <div data-reveal>
+          <p class="lead" style="margin-top:0">{{ l.code_lead }}</p>
+          <p class="button-row" style="margin-top:1.75rem">
+            <a class="text-link" href="{{ prefixo }}/docs/">
+              {{ l.code_link }}
+              <svg width="15" height="15" aria-hidden="true"><use href="#i-arrow"></use></svg>
+            </a>
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="principios">
+    <div class="shell">
+      <div class="section-head" data-reveal>
+        <p class="eyebrow">{{ l.pri_eyebrow }}</p>
+        <h2>{{ l.pri_titulo }}</h2>
+        <p class="lead">{{ l.pri_lead }}</p>
+      </div>
+
+      <div class="flow-rule" data-reveal></div>
+
+      <div class="principles" data-reveal>
+        <article class="principle">
+          <p class="num">01</p>
+          <h3 class="label">{{ l.p1_rotulo }}</h3>
+          <p class="desc">{{ l.p1_desc }}</p>
+        </article>
+        <article class="principle">
+          <p class="num">02</p>
+          <h3 class="label">{{ l.p2_rotulo }}</h3>
+          <p class="desc">{{ l.p2_desc }}</p>
+        </article>
+        <article class="principle">
+          <p class="num">03</p>
+          <h3 class="label">{{ l.p3_rotulo }}</h3>
+          <p class="desc">{{ l.p3_desc }}</p>
+        </article>
+        <article class="principle">
+          <p class="num">04</p>
+          <h3 class="label">{{ l.p4_rotulo }}</h3>
+          <p class="desc">{{ l.p4_desc }}</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="open-source">
+    <div class="shell">
+      <div class="section-head head-split" data-reveal>
+        <div>
+          <p class="eyebrow">{{ l.os_eyebrow }}</p>
+          <h2>{{ l.os_titulo }}</h2>
+        </div>
+        <p class="lead">{{ l.os_lead }}</p>
+      </div>
+
+      <div class="paths" data-reveal>
+        <article class="path">
+          <p class="path-name">{{ l.c1_nome }}</p>
+          <p class="path-value">{{ l.c1_valor }}</p>
+          <p class="path-sub">{{ l.c1_sub }}</p>
+          <p class="path-desc">{{ l.c1_desc }}</p>
+          <ul class="path-items">
+            <li><svg aria-hidden="true"><use href="#i-check"></use></svg><span>{{ l.c1_i1 }}</span></li>
+            <li><svg aria-hidden="true"><use href="#i-check"></use></svg><span>{{ l.c1_i2 }}</span></li>
+            <li><svg aria-hidden="true"><use href="#i-check"></use></svg><span>{{ l.c1_i3 }}</span></li>
+          </ul>
+          <p class="path-cta"><a class="button button-secondary" href="{{ repo }}" target="_blank" rel="noopener">{{ l.c1_cta }}</a></p>
+        </article>
+
+        <article class="path path-main">
+          <span class="path-flag">{{ l.c2_flag }}</span>
+          <p class="path-name">{{ l.c2_nome }}</p>
+          <p class="path-value">{{ l.c2_valor }}</p>
+          <p class="path-sub">{{ l.c2_sub }}</p>
+          <p class="path-desc">{{ l.c2_desc }}</p>
+          <ul class="path-items">
+            <li><svg aria-hidden="true"><use href="#i-check"></use></svg><span>{{ l.c2_i1 }}</span></li>
+            <li><svg aria-hidden="true"><use href="#i-check"></use></svg><span>{{ l.c2_i2 }}</span></li>
+            <li><svg aria-hidden="true"><use href="#i-check"></use></svg><span>{{ l.c2_i3 }}</span></li>
+          </ul>
+          <p class="path-cta"><a class="button button-primary" href="{{ repo }}/discussions" target="_blank" rel="noopener">{{ l.c2_cta }}</a></p>
+        </article>
+
+        <article class="path">
+          <p class="path-name">{{ l.c3_nome }}</p>
+          <p class="path-value">{{ l.c3_valor }}</p>
+          <p class="path-sub">{{ l.c3_sub }}</p>
+          <p class="path-desc">{{ l.c3_desc }}</p>
+          <ul class="path-items">
+            <li><svg aria-hidden="true"><use href="#i-check"></use></svg><span>{{ l.c3_i1 }}</span></li>
+            <li><svg aria-hidden="true"><use href="#i-check"></use></svg><span>{{ l.c3_i2 }}</span></li>
+            <li><svg aria-hidden="true"><use href="#i-check"></use></svg><span>{{ l.c3_i3 }}</span></li>
+          </ul>
+          <p class="path-cta"><a class="button button-secondary" href="https://areteacademy.com.br/" target="_blank" rel="noopener">{{ l.c3_cta }}</a></p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="shell">
+      <div class="section-head head-split" data-reveal>
+        <div>
+          <p class="eyebrow">{{ l.phil_eyebrow }}</p>
+          <h2>{{ l.phil_titulo }}</h2>
+        </div>
+        <p class="lead">{{ l.phil_lead }}</p>
+      </div>
+
+      <div class="editorials" data-reveal>
+        <figure class="editorial">
+          <p class="editorial-src">Aretê Academy</p>
+          <blockquote>{{ l.ed1_citacao }}</blockquote>
+          <figcaption>{{ l.ed1_legenda }}</figcaption>
+        </figure>
+        <figure class="editorial">
+          <p class="editorial-src">brevis.sh</p>
+          <blockquote>{{ l.ed2_citacao }}</blockquote>
+          <figcaption>{{ l.ed2_legenda }}</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="faq">
+    <div class="shell">
+      <div class="section-head" data-reveal>
+        <p class="eyebrow">{{ l.faq_eyebrow }}</p>
+        <h2>{{ l.faq_titulo }}</h2>
+      </div>
+
+      <div class="faq" data-reveal>
+        <details>
+          <summary>{{ l.q1 }}</summary>
+          <p class="answer">{{ l.a1 }}</p>
+        </details>
+        <details>
+          <summary>{{ l.q2 }}</summary>
+          <p class="answer">{{ l.a2 }}</p>
+        </details>
+        <details>
+          <summary>{{ l.q3 }}</summary>
+          <p class="answer">{{ l.a3 }}</p>
+        </details>
+        <details>
+          <summary>{{ l.q4 }}</summary>
+          <p class="answer">{{ l.a4 }}</p>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <section class="final">
+    <div class="shell">
+      <div data-reveal>
+        <p class="eyebrow">{{ l.final_eyebrow }}</p>
+        <h2>{{ l.final_titulo }}</h2>
+        <p class="lead">{{ l.final_lead }}</p>
+        <div class="button-row">
+          <a class="button button-primary" href="{{ repo }}" target="_blank" rel="noopener">
+            <svg aria-hidden="true"><use href="#i-github"></use></svg>
+            {{ l.final_cta }}
+          </a>
+          <a class="button button-secondary" href="{{ prefixo }}/docs/">
+            {{ l.final_cta2 }}
+            <svg aria-hidden="true"><use href="#i-arrow"></use></svg>
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>

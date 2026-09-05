@@ -1,0 +1,43 @@
+<div class="doc-shell">
+  <button class="side-toggle" type="button" id="side-toggle" aria-expanded="false" aria-controls="side">
+    <svg aria-hidden="true"><use href="#i-menu"></use></svg>
+    {{ i18n.menu_docs }}
+  </button>
+
+  <aside class="side" id="side">
+    <div class="side-inner">
+      <form class="search" role="search" onsubmit="return false">
+        <svg aria-hidden="true"><use href="#i-search"></use></svg>
+        <label class="sr-only" for="q">{{ i18n.buscar }}</label>
+        <input type="search" id="q" placeholder="{{ i18n.buscar_ph }}" autocomplete="off" spellcheck="false">
+      </form>
+      <div class="search-out" id="search-out" data-none="{{ i18n.sem_resultados }}" hidden></div>
+      <nav class="side-nav" aria-label="{{ i18n.docs }}">
+        {{ sidebar }}
+      </nav>
+    </div>
+  </aside>
+
+  <main class="doc" id="conteudo">
+    <article class="doc-body">
+      <p class="doc-kicker">{{ i18n.docs }}</p>
+      <h1>{{ titulo_pagina }}</h1>
+      <p class="doc-desc">{{ descricao_pagina }}</p>
+      {{ conteudo_md }}
+
+      <nav class="pagers" aria-label="{{ i18n.paginacao }}">
+        {{ anterior }}
+        {{ proximo }}
+      </nav>
+
+      <p class="doc-edit">
+        <a href="{{ editar }}" target="_blank" rel="noopener">{{ i18n.editar }}</a>
+      </p>
+    </article>
+
+    <aside class="toc"{{ toc_vazio }} aria-label="{{ i18n.nesta_pagina }}">
+      <p class="toc-t">{{ i18n.nesta_pagina }}</p>
+      <ul>{{ toc }}</ul>
+    </aside>
+  </main>
+</div>

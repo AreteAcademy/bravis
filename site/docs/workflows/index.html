@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#141711">
+
+<title>Workflows — Documentação</title>
+<meta name="description" content="O formato YAML completo — passos, dependências, imagens, recursos e agenda.">
+<meta name="author" content="Aretê Academy">
+<link rel="canonical" href="https://brevis.sh/docs/workflows/">
+<link rel="alternate" hreflang="pt-BR" href="https://brevis.sh/docs/workflows/"><link rel="alternate" hreflang="en" href="https://brevis.sh/en/docs/workflows/">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="brevis.sh">
+<meta property="og:locale" content="pt-BR">
+<meta property="og:title" content="Workflows — Documentação">
+<meta property="og:description" content="O formato YAML completo — passos, dependências, imagens, recursos e agenda.">
+<meta property="og:url" content="https://brevis.sh/docs/workflows/">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Workflows — Documentação">
+<meta name="twitter:description" content="O formato YAML completo — passos, dependências, imagens, recursos e agenda.">
+
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&amp;family=IBM+Plex+Mono:wght@400;500&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap">
+<link rel="stylesheet" href="/css/styles.css">
+<link rel="stylesheet" href="/css/docs.css">
+
+<script>document.documentElement.classList.add('js');</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  "headline": "Workflows",
+  "description": "O formato YAML completo — passos, dependências, imagens, recursos e agenda.",
+  "inLanguage": "pt-BR",
+  "isPartOf": {
+    "@type": "WebSite",
+    "@id": "https://brevis.sh/#site"
+  },
+  "author": {
+    "@type": "Organization",
+    "name": "Aretê Academy"
+  }
+}
+</script>
+</head>
+<body class="page-doc">
+
+<a class="skip-link" href="#conteudo">Pular para o conteúdo</a>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-mark" viewBox="0 0 24 24">
+    <path d="M5 6.5 L19 12 M5 17.5 L19 12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none" opacity="0.5"/>
+    <circle cx="5" cy="6.5" r="2.4" fill="currentColor" opacity="0.75"/>
+    <circle cx="5" cy="17.5" r="2.4" fill="currentColor" opacity="0.75"/>
+    <circle cx="19" cy="12" r="3.2" fill="currentColor"/>
+  </symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+    <path d="M4 7h16M4 12h16M4 17h16"/>
+  </symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 12h15M13 6l6 6-6 6"/>
+  </symbol>
+  <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 12.5 9.5 18 20 6.5"/>
+  </symbol>
+  <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+    <circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>
+  </symbol>
+  <symbol id="i-github" viewBox="0 0 24 24">
+    <path fill="currentColor" d="M12 1.5a10.5 10.5 0 0 0-3.32 20.47c.53.1.72-.23.72-.5v-1.8c-2.92.63-3.54-1.4-3.54-1.4-.48-1.22-1.17-1.55-1.17-1.55-.95-.65.07-.64.07-.64 1.06.07 1.62 1.09 1.62 1.09.94 1.6 2.45 1.14 3.05.87.1-.68.37-1.14.67-1.4-2.33-.27-4.78-1.17-4.78-5.2 0-1.15.41-2.09 1.08-2.82-.11-.27-.47-1.34.1-2.8 0 0 .88-.28 2.88 1.08a10.1 10.1 0 0 1 5.24 0c2-1.36 2.87-1.08 2.87-1.08.58 1.46.22 2.53.11 2.8a4.05 4.05 0 0 1 1.08 2.82c0 4.04-2.46 4.93-4.8 5.19.38.33.72.97.72 1.96v2.9c0 .28.19.61.73.5A10.5 10.5 0 0 0 12 1.5z"/>
+  </symbol>
+</svg>
+
+<header class="site-header">
+  <div class="shell header-bar">
+    <a class="brand" href="/">
+      <svg class="mark" aria-hidden="true"><use href="#i-mark"></use></svg>
+      <span>brevis<span class="tld">.sh</span></span>
+    </a>
+
+    <nav class="main-nav" id="nav" aria-label="Navegação principal">
+      <a href="/#produto">Produto</a>
+      <a href="/#principios">Princípios</a>
+      <a href="/docs/">Documentação</a>
+      <a href="/#open-source">Open source</a>
+      <div class="lang-switch" role="group" aria-label="Idioma"><a href="/docs/workflows/" hreflang="pt-BR" aria-current="true">PT</a><a href="/en/docs/workflows/" hreflang="en">EN</a></div>
+      <a class="button button-secondary button-sm header-cta" href="https://github.com/AreteAcademy/brevis" target="_blank" rel="noopener">
+        <svg aria-hidden="true"><use href="#i-github"></use></svg>
+        Explorar open source
+      </a>
+    </nav>
+
+    <button class="nav-toggle" type="button" id="nav-toggle" aria-label="Abrir menu" aria-expanded="false" aria-controls="nav">
+      <svg aria-hidden="true"><use href="#i-menu"></use></svg>
+    </button>
+  </div>
+</header>
+
+<div class="doc-shell">
+  <button class="side-toggle" type="button" id="side-toggle" aria-expanded="false" aria-controls="side">
+    <svg aria-hidden="true"><use href="#i-menu"></use></svg>
+    Menu da documentação
+  </button>
+
+  <aside class="side" id="side">
+    <div class="side-inner">
+      <form class="search" role="search" onsubmit="return false">
+        <svg aria-hidden="true"><use href="#i-search"></use></svg>
+        <label class="sr-only" for="q">Buscar na documentação</label>
+        <input type="search" id="q" placeholder="Buscar…" autocomplete="off" spellcheck="false">
+      </form>
+      <div class="search-out" id="search-out" data-none="Nada encontrado" hidden></div>
+      <nav class="side-nav" aria-label="Documentação">
+        <p class="side-group">Começar</p><ul class="side-list"><li><a href="/docs/introduction/">Introdução</a></li><li><a href="/docs/installation/">Instalação</a></li><li><a href="/docs/quickstart/">Quickstart</a></li></ul><p class="side-group">Conceitos</p><ul class="side-list"><li><a href="/docs/workflows/" aria-current="page">Workflows</a></li><li><a href="/docs/scheduler-and-queue/">Scheduler e fila</a></li><li><a href="/docs/pod-per-step/">Pod por passo</a></li></ul><p class="side-group">Referência</p><ul class="side-list"><li><a href="/docs/cli/">CLI</a></li><li><a href="/docs/parameters/">Parâmetros</a></li><li><a href="/docs/configuration/">Configuração</a></li></ul><p class="side-group">SDK</p><ul class="side-list"><li><a href="/docs/sdk/">SDK em Go</a></li></ul><p class="side-group">Operação</p><ul class="side-list"><li><a href="/docs/kubernetes/">Kubernetes</a></li><li><a href="/docs/white-label/">Marca branca</a></li></ul>
+      </nav>
+    </div>
+  </aside>
+
+  <main class="doc" id="conteudo">
+    <article class="doc-body">
+      <p class="doc-kicker">Documentação</p>
+      <h1>Workflows</h1>
+      <p class="doc-desc">O formato YAML completo — passos, dependências, imagens, recursos e agenda.</p>
+      <p>Um workflow é um arquivo YAML. Ele declara <strong>o que executar</strong>, <strong>em que ordem</strong> e <strong>com que runtime</strong> — e nada além disso.</p>
+<h2 id="estrutura-minima">Estrutura mínima<a class="anchor" href="#estrutura-minima" aria-label="link">#</a></h2>
+<div class="code-block" data-code="name: hello
+steps:
+  - id: unico
+    run: echo pronto"><div class="code-head"><span class="code-lang">yaml</span><button class="code-copy" type="button" aria-label="Copiar" data-done="Copiado">Copiar</button></div><pre><code><span class="t-k">name</span>: hello
+<span class="t-k">steps</span>:
+  - <span class="t-k">id</span>: unico
+    <span class="t-k">run</span>: echo pronto</code></pre></div>
+<p><code>name</code> é o identificador do workflow no banco e na interface. <code>steps</code> é a lista de passos, cada um com um <code>id</code> único e um <code>run</code>.</p>
+<h2 id="ordem-chain-ou-dag">Ordem: chain ou dag<a class="anchor" href="#ordem-chain-ou-dag" aria-label="link">#</a></h2>
+<div class="code-block" data-code="type: chain   # a ordem é a do arquivo
+type: dag     # a ordem vem de depends_on"><div class="code-head"><span class="code-lang">yaml</span><button class="code-copy" type="button" aria-label="Copiar" data-done="Copiado">Copiar</button></div><pre><code><span class="t-k">type</span>: chain   <span class="t-c"># a ordem é a do arquivo</span>
+<span class="t-k">type</span>: dag     <span class="t-c"># a ordem vem de depends_on</span></code></pre></div>
+<p><code>chain</code> é açúcar: o parser converte a sequência em arestas, e <strong>o motor conhece apenas DAG</strong>. Use <code>dag</code> quando a ordem não for linear:</p>
+<div class="code-block" data-code="type: dag
+
+steps:
+  - id: preparar
+    run: ./preparar.sh
+
+  # Irmãos: dependem do mesmo passo, então rodam em paralelo.
+  - id: extrair
+    run: ./extrair.sh
+    depends_on: [preparar]
+
+  - id: validar
+    run: ./validar.sh
+    depends_on: [preparar]
+
+  - id: publicar
+    run: ./publicar.sh
+    depends_on: [extrair, validar]"><div class="code-head"><span class="code-lang">yaml</span><button class="code-copy" type="button" aria-label="Copiar" data-done="Copiado">Copiar</button></div><pre><code><span class="t-k">type</span>: dag
+
+<span class="t-k">steps</span>:
+  - <span class="t-k">id</span>: preparar
+    <span class="t-k">run</span>: ./preparar.sh
+
+  <span class="t-c"># Irmãos: dependem do mesmo passo, então rodam em paralelo.</span>
+  - <span class="t-k">id</span>: extrair
+    <span class="t-k">run</span>: ./extrair.sh
+    <span class="t-k">depends_on</span>: [preparar]
+
+  - <span class="t-k">id</span>: validar
+    <span class="t-k">run</span>: ./validar.sh
+    <span class="t-k">depends_on</span>: [preparar]
+
+  - <span class="t-k">id</span>: publicar
+    <span class="t-k">run</span>: ./publicar.sh
+    <span class="t-k">depends_on</span>: [extrair, validar]</code></pre></div>
+<p>O runner percorre o grafo <strong>por níveis</strong>: tudo dentro de um nível roda em paralelo, e o nível seguinte só começa quando o anterior fecha inteiro.</p>
+<aside class="admon admon-warning"><p class="admon-t">Falha para o nível inteiro</p><p>O runner para na <strong>primeira</strong> falha do nível, sem iniciar o próximo. Continuar depois de um erro produziria resultado parcial que parece completo.</p></aside>
+<h2 id="agenda">Agenda<a class="anchor" href="#agenda" aria-label="link">#</a></h2>
+<div class="code-block" data-code="schedule: &quot;0 5 * * *&quot;   # cron de cinco campos
+concurrency: 1"><div class="code-head"><span class="code-lang">yaml</span><button class="code-copy" type="button" aria-label="Copiar" data-done="Copiado">Copiar</button></div><pre><code><span class="t-k">schedule</span>: "0 5 * * *"   <span class="t-c"># cron de cinco campos</span>
+<span class="t-k">concurrency</span>: 1</code></pre></div>
+<p>Sem <code>schedule</code>, o workflow é manual: só roda por disparo na interface, por <code>brevis run</code> ou por <code>backfill</code>.</p>
+<p><code>concurrency: 1</code> limita execuções simultâneas do mesmo workflow — é o que impede um <code>*/15</code> de se sobrepor a si mesmo quando uma execução passa dos quinze minutos.</p>
+<h2 id="imagem-e-recursos">Imagem e recursos<a class="anchor" href="#imagem-e-recursos" aria-label="link">#</a></h2>
+<div class="code-block" data-code="image: us-central1-docker.pkg.dev/exemplo/apps/dbt:1.10.3
+resources:
+  cpu: 200m
+  memory: 1Gi
+  limits: {memory: 2Gi}"><div class="code-head"><span class="code-lang">yaml</span><button class="code-copy" type="button" aria-label="Copiar" data-done="Copiado">Copiar</button></div><pre><code><span class="t-k">image</span>: us-central1-docker.pkg.dev/exemplo/apps/dbt:1.10.3
+<span class="t-k">resources</span>:
+  <span class="t-k">cpu</span>: 200m
+  <span class="t-k">memory</span>: 1Gi
+  <span class="t-k">limits</span>: {memory: 2Gi}</code></pre></div>
+<p>Declarados no topo, valem como <strong>padrão de todos os passos</strong>. Cada passo pode sobrescrever os seus:</p>
+<div class="code-block" data-code="steps:
+  - id: bronze
+    run: dbt build --select bronze+          # herda a imagem do topo
+
+  - id: notificar
+    image: ghcr.io/exemplo/notify:0.3        # outro runtime
+    shell: false                             # distroless não tem shell
+    run: /notify --canal dados
+    resources: {cpu: 25m, memory: 32Mi, limits: {memory: 64Mi}}
+    depends_on: [bronze]"><div class="code-head"><span class="code-lang">yaml</span><button class="code-copy" type="button" aria-label="Copiar" data-done="Copiado">Copiar</button></div><pre><code><span class="t-k">steps</span>:
+  - <span class="t-k">id</span>: bronze
+    <span class="t-k">run</span>: dbt build --select bronze+          <span class="t-c"># herda a imagem do topo</span>
+
+  - <span class="t-k">id</span>: notificar
+    <span class="t-k">image</span>: ghcr.io/exemplo/notify:0.3        <span class="t-c"># outro runtime</span>
+    <span class="t-k">shell</span>: <span class="t-n">false</span>                             <span class="t-c"># distroless não tem shell</span>
+    <span class="t-k">run</span>: /notify --canal dados
+    <span class="t-k">resources</span>: {cpu: 25m, memory: 32Mi, limits: {memory: 64Mi}}
+    <span class="t-k">depends_on</span>: [bronze]</code></pre></div>
+<p>É isto que faz um fetcher em Go custar 12 MB e 32Mi ao lado de um <code>dbt build</code> de 1,9 GB, em vez de os dois pagarem o tamanho do maior. Ver <a href="/docs/pod-per-step/">Pod por passo</a>.</p>
+<h2 id="campos-do-passo">Campos do passo<a class="anchor" href="#campos-do-passo" aria-label="link">#</a></h2>
+<div class="table-wrap"><table><thead><tr><th>campo</th><th></th><th></th></tr></thead><tbody><tr><td><code>id</code></td><td><strong>obrigatório</strong></td><td>único no workflow; é o nome que aparece no grafo e nos logs</td></tr><tr><td><code>run</code></td><td></td><td>o comando</td></tr><tr><td><code>image</code></td><td></td><td>a imagem do passo; sem ela, herda a do topo</td></tr><tr><td><code>shell</code></td><td><code>true</code></td><td><code>false</code> executa sem shell — necessário em distroless</td></tr><tr><td><code>depends_on</code></td><td></td><td>lista de <code>id</code> que precisam terminar antes</td></tr><tr><td><code>resources</code></td><td></td><td><code>cpu</code>, <code>memory</code> e <code>limits</code> daquele passo</td></tr></tbody></table></div>
+<h2 id="tags">Tags<a class="anchor" href="#tags" aria-label="link">#</a></h2>
+<div class="code-block" data-code="tags: [analytics, dbt, diario]"><div class="code-head"><span class="code-lang">yaml</span><button class="code-copy" type="button" aria-label="Copiar" data-done="Copiado">Copiar</button></div><pre><code><span class="t-k">tags</span>: [analytics, dbt, diario]</code></pre></div>
+<p>Servem para filtrar na interface. Não afetam a execução.</p>
+<h2 id="validacao">Validação<a class="anchor" href="#validacao" aria-label="link">#</a></h2>
+<p>A validação não precisa de banco, então roda na CI junto com os testes:</p>
+<div class="code-block" data-code="brevis validate workflows/"><div class="code-head"><span class="code-lang">bash</span><button class="code-copy" type="button" aria-label="Copiar" data-done="Copiado">Copiar</button></div><pre><code><span class="t-k">brevis</span> validate workflows/</code></pre></div>
+<div class="code-block" data-code="  ok    daily_analytics              dag  5 steps, 5 dependencias  (manual)
+  ok    daily-report                 chain  3 steps, 2 dependencias  cron 0 2 * * *"><div class="code-head"><button class="code-copy" type="button" aria-label="Copiar" data-done="Copiado">Copiar</button></div><pre><code>  ok    daily_analytics              dag  5 steps, 5 dependencias  (manual)
+  ok    daily-report                 chain  3 steps, 2 dependencias  cron 0 2 * * *</code></pre></div>
+<p>Aceita arquivo ou diretório. Num diretório, casa <code>*.y*ml</code> e ordena — dois runs produzem o mesmo log, e a diferença entre dois deploys não vira ruído.</p>
+<h2 id="publicando">Publicando<a class="anchor" href="#publicando" aria-label="link">#</a></h2>
+<div class="code-block" data-code="brevis publish workflows/
+brevis publish workflows/ --project acme --prune"><div class="code-head"><span class="code-lang">bash</span><button class="code-copy" type="button" aria-label="Copiar" data-done="Copiado">Copiar</button></div><pre><code><span class="t-k">brevis</span> publish workflows/
+<span class="t-k">brevis</span> publish workflows/ <span class="t-n">--project</span> acme <span class="t-n">--prune</span></code></pre></div>
+<p><code>--prune</code> remove do projeto os workflows ausentes da lista publicada, preservando o histórico. <strong>Não é o padrão</strong>, e a razão é prática: <code>publish um-arquivo.yaml</code> não pode apagar os outros quarenta e oito só porque não foram citados na linha de comando.</p>
+<h2 id="proximos-passos">Próximos passos<a class="anchor" href="#proximos-passos" aria-label="link">#</a></h2>
+<ul><li><a href="/docs/parameters/">Parâmetros</a> — o que muda entre dois disparos</li><li><a href="/docs/scheduler-and-queue/">Scheduler e fila</a> — como o workflow vira execução</li></ul>
+
+      <nav class="pagers" aria-label="Páginas">
+        <a class="pager pager-prev" href="/docs/quickstart/"><span>Anterior</span><strong>Quickstart</strong></a>
+        <a class="pager pager-next" href="/docs/scheduler-and-queue/"><span>Próximo</span><strong>Scheduler e fila</strong></a>
+      </nav>
+
+      <p class="doc-edit">
+        <a href="https://github.com/AreteAcademy/brevis/blob/master/site/content/pt/docs/workflows.md" target="_blank" rel="noopener">Editar esta página no GitHub</a>
+      </p>
+    </article>
+
+    <aside class="toc" aria-label="Nesta página">
+      <p class="toc-t">Nesta página</p>
+      <ul><li class="toc-2"><a href="#estrutura-minima">Estrutura mínima</a></li><li class="toc-2"><a href="#ordem-chain-ou-dag">Ordem: chain ou dag</a></li><li class="toc-2"><a href="#agenda">Agenda</a></li><li class="toc-2"><a href="#imagem-e-recursos">Imagem e recursos</a></li><li class="toc-2"><a href="#campos-do-passo">Campos do passo</a></li><li class="toc-2"><a href="#tags">Tags</a></li><li class="toc-2"><a href="#validacao">Validação</a></li><li class="toc-2"><a href="#publicando">Publicando</a></li><li class="toc-2"><a href="#proximos-passos">Próximos passos</a></li></ul>
+    </aside>
+  </main>
+</div>
+
+
+<footer class="site-footer">
+  <div class="shell">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <a class="brand" href="/">
+          <svg class="mark" aria-hidden="true"><use href="#i-mark"></use></svg>
+          <span>brevis<span class="tld">.sh</span></span>
+        </a>
+        <p>Filosofia aplicada à infraestrutura de dados.</p>
+      </div>
+
+      <div class="footer-col">
+        <h2>projeto</h2>
+        <ul>
+          <li><a href="/#produto">Produto</a></li>
+          <li><a href="/#principios">Princípios</a></li>
+          <li><a href="/#open-source">Open source</a></li>
+          <li><a href="/#faq">FAQ</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col">
+        <h2>código</h2>
+        <ul>
+          <li><a href="/docs/">Documentação</a></li>
+          <li><a href="https://github.com/AreteAcademy/brevis" target="_blank" rel="noopener">Repositório</a></li>
+          <li><a href="https://github.com/AreteAcademy/brevis/discussions" target="_blank" rel="noopener">Discussões</a></li>
+          <li><a href="https://areteacademy.com.br/" target="_blank" rel="noopener">Aretê Academy</a></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="footer-bottom">
+      <p>Um projeto open source da <a href="https://areteacademy.com.br/" target="_blank" rel="noopener">Aretê Academy</a></p>
+      <p>MIT · construído em Go</p>
+    </div>
+  </div>
+</footer>
+
+<script src="/js/docs.js" defer></script>
+</body>
+</html>

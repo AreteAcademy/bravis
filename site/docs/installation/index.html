@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#141711">
+
+<title>Instalação — Documentação</title>
+<meta name="description" content="Como obter o binário, o que ele exige e como confirmar que a instalação está correta.">
+<meta name="author" content="Aretê Academy">
+<link rel="canonical" href="https://brevis.sh/docs/installation/">
+<link rel="alternate" hreflang="pt-BR" href="https://brevis.sh/docs/installation/"><link rel="alternate" hreflang="en" href="https://brevis.sh/en/docs/installation/">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="brevis.sh">
+<meta property="og:locale" content="pt-BR">
+<meta property="og:title" content="Instalação — Documentação">
+<meta property="og:description" content="Como obter o binário, o que ele exige e como confirmar que a instalação está correta.">
+<meta property="og:url" content="https://brevis.sh/docs/installation/">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Instalação — Documentação">
+<meta name="twitter:description" content="Como obter o binário, o que ele exige e como confirmar que a instalação está correta.">
+
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&amp;family=IBM+Plex+Mono:wght@400;500&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap">
+<link rel="stylesheet" href="/css/styles.css">
+<link rel="stylesheet" href="/css/docs.css">
+
+<script>document.documentElement.classList.add('js');</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  "headline": "Instalação",
+  "description": "Como obter o binário, o que ele exige e como confirmar que a instalação está correta.",
+  "inLanguage": "pt-BR",
+  "isPartOf": {
+    "@type": "WebSite",
+    "@id": "https://brevis.sh/#site"
+  },
+  "author": {
+    "@type": "Organization",
+    "name": "Aretê Academy"
+  }
+}
+</script>
+</head>
+<body class="page-doc">
+
+<a class="skip-link" href="#conteudo">Pular para o conteúdo</a>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-mark" viewBox="0 0 24 24">
+    <path d="M5 6.5 L19 12 M5 17.5 L19 12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none" opacity="0.5"/>
+    <circle cx="5" cy="6.5" r="2.4" fill="currentColor" opacity="0.75"/>
+    <circle cx="5" cy="17.5" r="2.4" fill="currentColor" opacity="0.75"/>
+    <circle cx="19" cy="12" r="3.2" fill="currentColor"/>
+  </symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+    <path d="M4 7h16M4 12h16M4 17h16"/>
+  </symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 12h15M13 6l6 6-6 6"/>
+  </symbol>
+  <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 12.5 9.5 18 20 6.5"/>
+  </symbol>
+  <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+    <circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>
+  </symbol>
+  <symbol id="i-github" viewBox="0 0 24 24">
+    <path fill="currentColor" d="M12 1.5a10.5 10.5 0 0 0-3.32 20.47c.53.1.72-.23.72-.5v-1.8c-2.92.63-3.54-1.4-3.54-1.4-.48-1.22-1.17-1.55-1.17-1.55-.95-.65.07-.64.07-.64 1.06.07 1.62 1.09 1.62 1.09.94 1.6 2.45 1.14 3.05.87.1-.68.37-1.14.67-1.4-2.33-.27-4.78-1.17-4.78-5.2 0-1.15.41-2.09 1.08-2.82-.11-.27-.47-1.34.1-2.8 0 0 .88-.28 2.88 1.08a10.1 10.1 0 0 1 5.24 0c2-1.36 2.87-1.08 2.87-1.08.58 1.46.22 2.53.11 2.8a4.05 4.05 0 0 1 1.08 2.82c0 4.04-2.46 4.93-4.8 5.19.38.33.72.97.72 1.96v2.9c0 .28.19.61.73.5A10.5 10.5 0 0 0 12 1.5z"/>
+  </symbol>
+</svg>
+
+<header class="site-header">
+  <div class="shell header-bar">
+    <a class="brand" href="/">
+      <svg class="mark" aria-hidden="true"><use href="#i-mark"></use></svg>
+      <span>brevis<span class="tld">.sh</span></span>
+    </a>
+
+    <nav class="main-nav" id="nav" aria-label="Navegação principal">
+      <a href="/#produto">Produto</a>
+      <a href="/#principios">Princípios</a>
+      <a href="/docs/">Documentação</a>
+      <a href="/#open-source">Open source</a>
+      <div class="lang-switch" role="group" aria-label="Idioma"><a href="/docs/installation/" hreflang="pt-BR" aria-current="true">PT</a><a href="/en/docs/installation/" hreflang="en">EN</a></div>
+      <a class="button button-secondary button-sm header-cta" href="https://github.com/AreteAcademy/brevis" target="_blank" rel="noopener">
+        <svg aria-hidden="true"><use href="#i-github"></use></svg>
+        Explorar open source
+      </a>
+    </nav>
+
+    <button class="nav-toggle" type="button" id="nav-toggle" aria-label="Abrir menu" aria-expanded="false" aria-controls="nav">
+      <svg aria-hidden="true"><use href="#i-menu"></use></svg>
+    </button>
+  </div>
+</header>
+
+<div class="doc-shell">
+  <button class="side-toggle" type="button" id="side-toggle" aria-expanded="false" aria-controls="side">
+    <svg aria-hidden="true"><use href="#i-menu"></use></svg>
+    Menu da documentação
+  </button>
+
+  <aside class="side" id="side">
+    <div class="side-inner">
+      <form class="search" role="search" onsubmit="return false">
+        <svg aria-hidden="true"><use href="#i-search"></use></svg>
+        <label class="sr-only" for="q">Buscar na documentação</label>
+        <input type="search" id="q" placeholder="Buscar…" autocomplete="off" spellcheck="false">
+      </form>
+      <div class="search-out" id="search-out" data-none="Nada encontrado" hidden></div>
+      <nav class="side-nav" aria-label="Documentação">
+        <p class="side-group">Começar</p><ul class="side-list"><li><a href="/docs/introduction/">Introdução</a></li><li><a href="/docs/installation/" aria-current="page">Instalação</a></li><li><a href="/docs/quickstart/">Quickstart</a></li></ul><p class="side-group">Conceitos</p><ul class="side-list"><li><a href="/docs/workflows/">Workflows</a></li><li><a href="/docs/scheduler-and-queue/">Scheduler e fila</a></li><li><a href="/docs/pod-per-step/">Pod por passo</a></li></ul><p class="side-group">Referência</p><ul class="side-list"><li><a href="/docs/cli/">CLI</a></li><li><a href="/docs/parameters/">Parâmetros</a></li><li><a href="/docs/configuration/">Configuração</a></li></ul><p class="side-group">SDK</p><ul class="side-list"><li><a href="/docs/sdk/">SDK em Go</a></li></ul><p class="side-group">Operação</p><ul class="side-list"><li><a href="/docs/kubernetes/">Kubernetes</a></li><li><a href="/docs/white-label/">Marca branca</a></li></ul>
+      </nav>
+    </div>
+  </aside>
+
+  <main class="doc" id="conteudo">
+    <article class="doc-body">
+      <p class="doc-kicker">Documentação</p>
+      <h1>Instalação</h1>
+      <p class="doc-desc">Como obter o binário, o que ele exige e como confirmar que a instalação está correta.</p>
+      <p>O brevis.sh é distribuído como <strong>binário único</strong> e como <strong>imagem Docker</strong>. Não há runtime para instalar ao lado: as migrations, os assets da interface e as fontes vão dentro do binário.</p>
+<h2 id="requisitos">Requisitos<a class="anchor" href="#requisitos" aria-label="link">#</a></h2>
+<div class="table-wrap"><table><thead><tr><th></th><th></th></tr></thead><tbody><tr><td><strong>PostgreSQL</strong></td><td>obrigatório para <code>serve</code>, <code>scheduler</code>, <code>migrate</code>, <code>publish</code> e <code>backfill</code></td></tr><tr><td><strong>Go 1.25+</strong></td><td>apenas se você for compilar do código</td></tr><tr><td><strong>Kubernetes</strong></td><td>opcional — sem cluster, os passos rodam como processos locais</td></tr></tbody></table></div>
+<p><code>brevis run</code>, <code>validate</code>, <code>marca</code>, <code>hash</code> e <code>version</code> <strong>não</strong> precisam de banco.</p>
+<h2 id="compilando-do-codigo">Compilando do código<a class="anchor" href="#compilando-do-codigo" aria-label="link">#</a></h2>
+<p>É o caminho que produz um binário com versão e commit carimbados:</p>
+<div class="code-block" data-code="git clone https://github.com/AreteAcademy/brevis.git
+cd brevis
+make build
+./bin/brevis version"><div class="code-head"><span class="code-lang">bash</span><button class="code-copy" type="button" aria-label="Copiar" data-done="Copiado">Copiar</button></div><pre><code>git clone https://github.com/AreteAcademy/<span class="t-k">brevis</span>.git
+cd <span class="t-k">brevis</span>
+<span class="t-k">make</span> build
+./bin/<span class="t-k">brevis</span> version</code></pre></div>
+<div class="code-block" data-code="brevis 0.3.0
+  commit  bb832ff
+  build   2026-09-05T12:00:00Z
+  go      go1.25.7 darwin/arm64"><div class="code-head"><button class="code-copy" type="button" aria-label="Copiar" data-done="Copiado">Copiar</button></div><pre><code>brevis 0.3.0
+  commit  bb832ff
+  build   2026-09-05T12:00:00Z
+  go      go1.25.7 darwin/arm64</code></pre></div>
+<aside class="admon admon-warning"><p class="admon-t">O engine ainda não tem release taggeada</p><p>Todas as tags do repositório são do SDK (<code>sdk/v*</code>); o módulo raiz não tem nenhuma. Um <code>go install github.com/AreteAcademy/brevis/cmd/brevis@latest</code> resolve para o último commit do branch e produz um binário que se identifica como <code>brevis dev</code>, sem commit nem data — os <code>-ldflags</code> só entram pelo <code>make build</code> e pelo <code>docker build</code>. Para uma versão rastreável, use a imagem ou o <code>make build</code>.</p></aside>
+<h2 id="docker">Docker<a class="anchor" href="#docker" aria-label="link">#</a></h2>
+<p>Duas imagens do mesmo binário, porque os dois papéis têm exigências opostas:</p>
+<div class="table-wrap"><table><thead><tr><th>tag</th><th>base</th><th>por quê</th></tr></thead><tbody><tr><td><code>:0.3.0</code></td><td>distroless</td><td>a API só serve HTTP e não executa nada — sem shell, superfície mínima</td></tr><tr><td><code>:0.3.0-worker</code></td><td>alpine + tini</td><td>os passos <code>run:</code> precisam de shell</td></tr></tbody></table></div>
+<div class="code-block" data-code="docker run --rm daniel3843/brevis:latest version"><div class="code-head"><span class="code-lang">bash</span><button class="code-copy" type="button" aria-label="Copiar" data-done="Copiado">Copiar</button></div><pre><code><span class="t-k">docker</span> run <span class="t-n">--rm</span> daniel3843/<span class="t-k">brevis</span>:latest version</code></pre></div>
+<h2 id="ambiente-local-completo">Ambiente local completo<a class="anchor" href="#ambiente-local-completo" aria-label="link">#</a></h2>
+<p>O repositório traz um <code>docker-compose.yml</code> que sobe Postgres, API e scheduler:</p>
+<div class="code-block" data-code="make up      # Postgres + API + scheduler
+make smoke   # confere /health e /ready
+make logs
+make down"><div class="code-head"><span class="code-lang">bash</span><button class="code-copy" type="button" aria-label="Copiar" data-done="Copiado">Copiar</button></div><pre><code><span class="t-k">make</span> up      <span class="t-c"># Postgres + API + scheduler</span>
+<span class="t-k">make</span> smoke   <span class="t-c"># confere /health e /ready</span>
+<span class="t-k">make</span> logs
+<span class="t-k">make</span> down</code></pre></div>
+<p>A interface fica em <code>http://localhost:8080</code>.</p>
+<h2 id="configuracao-minima">Configuração mínima<a class="anchor" href="#configuracao-minima" aria-label="link">#</a></h2>
+<p>Uma única variável é obrigatória:</p>
+<div class="code-block" data-code="export BREVIS_DATABASE_URL=&#x27;postgres://brevis:brevis@localhost:5432/brevis?sslmode=disable&#x27;"><div class="code-head"><span class="code-lang">bash</span><button class="code-copy" type="button" aria-label="Copiar" data-done="Copiado">Copiar</button></div><pre><code>export BREVIS_DATABASE_URL='postgres://<span class="t-k">brevis</span>:<span class="t-k">brevis</span>@localhost:5432/<span class="t-k">brevis</span>?sslmode=disable'</code></pre></div>
+<p>Sem ela, os subcomandos que usam banco falham no boot — de propósito. Um processo que sobe sem credencial só descobre o problema no primeiro request, e aí o readiness já mentiu para o orquestrador.</p>
+<div class="code-block" data-code="$ brevis migrate status
+erro: BREVIS_DATABASE_URL e obrigatoria"><div class="code-head"><button class="code-copy" type="button" aria-label="Copiar" data-done="Copiado">Copiar</button></div><pre><code>$ brevis migrate status
+erro: BREVIS_DATABASE_URL e obrigatoria</code></pre></div>
+<p>A lista completa está em <a href="/docs/configuration/">Configuração</a>.</p>
+<h2 id="aplicando-o-schema">Aplicando o schema<a class="anchor" href="#aplicando-o-schema" aria-label="link">#</a></h2>
+<p>As migrations são embutidas no binário e aplicadas por subcomando próprio — <strong><code>serve</code> nunca altera schema</strong>:</p>
+<div class="code-block" data-code="brevis migrate up
+brevis migrate status"><div class="code-head"><span class="code-lang">bash</span><button class="code-copy" type="button" aria-label="Copiar" data-done="Copiado">Copiar</button></div><pre><code><span class="t-k">brevis</span> migrate up
+<span class="t-k">brevis</span> migrate status</code></pre></div>
+<h2 id="confirmando">Confirmando<a class="anchor" href="#confirmando" aria-label="link">#</a></h2>
+<div class="code-block" data-code="brevis version
+brevis validate examples/"><div class="code-head"><span class="code-lang">bash</span><button class="code-copy" type="button" aria-label="Copiar" data-done="Copiado">Copiar</button></div><pre><code><span class="t-k">brevis</span> version
+<span class="t-k">brevis</span> validate examples/</code></pre></div>
+<div class="code-block" data-code="  ok    daily_analytics              dag  5 steps, 5 dependencias  (manual)
+  ok    daily-report                 chain  3 steps, 2 dependencias  cron 0 2 * * *
+  ok    hello                        dag  4 steps, 4 dependencias  (manual)"><div class="code-head"><button class="code-copy" type="button" aria-label="Copiar" data-done="Copiado">Copiar</button></div><pre><code>  ok    daily_analytics              dag  5 steps, 5 dependencias  (manual)
+  ok    daily-report                 chain  3 steps, 2 dependencias  cron 0 2 * * *
+  ok    hello                        dag  4 steps, 4 dependencias  (manual)</code></pre></div>
+<p>Se os dois respondem, a instalação está correta. Siga para o <a href="/docs/quickstart/">Quickstart</a>.</p>
+
+      <nav class="pagers" aria-label="Páginas">
+        <a class="pager pager-prev" href="/docs/introduction/"><span>Anterior</span><strong>Introdução</strong></a>
+        <a class="pager pager-next" href="/docs/quickstart/"><span>Próximo</span><strong>Quickstart</strong></a>
+      </nav>
+
+      <p class="doc-edit">
+        <a href="https://github.com/AreteAcademy/brevis/blob/master/site/content/pt/docs/installation.md" target="_blank" rel="noopener">Editar esta página no GitHub</a>
+      </p>
+    </article>
+
+    <aside class="toc" aria-label="Nesta página">
+      <p class="toc-t">Nesta página</p>
+      <ul><li class="toc-2"><a href="#requisitos">Requisitos</a></li><li class="toc-2"><a href="#compilando-do-codigo">Compilando do código</a></li><li class="toc-2"><a href="#docker">Docker</a></li><li class="toc-2"><a href="#ambiente-local-completo">Ambiente local completo</a></li><li class="toc-2"><a href="#configuracao-minima">Configuração mínima</a></li><li class="toc-2"><a href="#aplicando-o-schema">Aplicando o schema</a></li><li class="toc-2"><a href="#confirmando">Confirmando</a></li></ul>
+    </aside>
+  </main>
+</div>
+
+
+<footer class="site-footer">
+  <div class="shell">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <a class="brand" href="/">
+          <svg class="mark" aria-hidden="true"><use href="#i-mark"></use></svg>
+          <span>brevis<span class="tld">.sh</span></span>
+        </a>
+        <p>Filosofia aplicada à infraestrutura de dados.</p>
+      </div>
+
+      <div class="footer-col">
+        <h2>projeto</h2>
+        <ul>
+          <li><a href="/#produto">Produto</a></li>
+          <li><a href="/#principios">Princípios</a></li>
+          <li><a href="/#open-source">Open source</a></li>
+          <li><a href="/#faq">FAQ</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col">
+        <h2>código</h2>
+        <ul>
+          <li><a href="/docs/">Documentação</a></li>
+          <li><a href="https://github.com/AreteAcademy/brevis" target="_blank" rel="noopener">Repositório</a></li>
+          <li><a href="https://github.com/AreteAcademy/brevis/discussions" target="_blank" rel="noopener">Discussões</a></li>
+          <li><a href="https://areteacademy.com.br/" target="_blank" rel="noopener">Aretê Academy</a></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="footer-bottom">
+      <p>Um projeto open source da <a href="https://areteacademy.com.br/" target="_blank" rel="noopener">Aretê Academy</a></p>
+      <p>MIT · construído em Go</p>
+    </div>
+  </div>
+</footer>
+
+<script src="/js/docs.js" defer></script>
+</body>
+</html>
