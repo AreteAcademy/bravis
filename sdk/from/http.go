@@ -90,6 +90,18 @@ type HTTP struct {
 	DataKey     string
 	MaxPages    int
 
+	// MoreKey e o caminho, separado por pontos, para um booleano na resposta
+	// que diz se ha proxima pagina -- "pageMeta.hasNextPage". Falso encerra.
+	//
+	// Nao e uma estrategia e sim um CRITERIO DE PARADA: combina com qualquer
+	// uma das quatro. Sem ele a parada e a pagina vazia, o que custa uma
+	// requisicao a mais por origem -- e num fan-out de centenas de origens
+	// isso e centenas de requisicoes por execucao.
+	//
+	// A parada por pagina vazia continua valendo como rede de seguranca: uma
+	// API que mente no campo nao pode virar laco infinito.
+	MoreKey string
+
 	// PageKey is the query parameter holding the page NUMBER. It advances by
 	// one page at a time and ignores PageSize.
 	//

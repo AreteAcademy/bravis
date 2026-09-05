@@ -291,6 +291,11 @@ type page struct {
 	number   int    // page number this page was fetched at, for page paging
 	release  func()
 
+	// temMais e o que MoreKey leu nesta pagina, e sabeSeTemMais distingue
+	// "a resposta disse que nao ha mais" de "ninguem perguntou".
+	temMais       bool
+	sabeSeTemMais bool
+
 	// Set when the Reading answered for this page. The records then come
 	// from the fetcher rather than the decoder, and hasRecords distinguishes
 	// "the fetcher said none" from "the fetcher was not asked".
@@ -359,6 +364,19 @@ func drainPage(ctx context.Context, source core.Source, p *page, yield func(core
 // nextPageURL resolves where the following page lives, or "" when the current
 // page was the last one.
 func nextPageURL(source core.Source, p *page, emitted int) (string, error) {
+	// A resposta dizendo que nao ha mais pagina vence todas as estrategias.
+	//
+	// Sem isso, a parada e sempre a pagina vazia -- o que custa UMA requisicao
+	// a mais por origem. Num fan-out de centenas de origens sao centenas de
+	// requisicoes desperdicadas por execucao.
+	//
+	// A parada por pagina vazia continua existindo, como rede de seguranca:
+	// uma API que mente no campo, ou que para de mandar o campo, nao pode
+	// virar um laco infinito.
+	if p.sabeSeTemMais && !p.temMais {
+		return "", nil
+	}
+
 	switch {
 	case source.FollowLinks:
 		return p.linkNext, nil
@@ -604,7 +622,7 @@ func fetchPage(ctxTotal context.Context, client *http.Client, source core.Source
 
 	// Anything that must see the whole body reads it here and hands the
 	// decoder an equivalent reader.
-	if records != nil || source.CursorKey != "" || source.DataKey != "" {
+	if records != nil || source.CursorKey != "" || source.DataKey != "" || source.MoreKey != "" {
 		buffered, err := io.ReadAll(body)
 		if err != nil {
 			p.close()
@@ -625,6 +643,17 @@ func fetchPage(ctxTotal context.Context, client *http.Client, source core.Source
 			p.hasRecords = true
 		}
 
+		if source.MoreKey != "" {
+			temMais, err := lerTemMais(buffered, source.MoreKey)
+			if err != nil {
+				p.body = nil
+				p.close()
+				return nil, err
+			}
+			p.temMais = temMais
+			p.sabeSeTemMais = true
+		}
+
 		if source.CursorKey != "" || source.DataKey != "" {
 			cursor, rows, err := unwrapPage(buffered, source.CursorKey, source.DataKey)
 			if err != nil {
@@ -640,6 +669,50 @@ func fetchPage(ctxTotal context.Context, client *http.Client, source core.Source
 	}
 
 	return p, nil
+}
+
+// lerTemMais le o booleano que diz se ha proxima pagina.
+//
+// O caminho e separado por pontos -- "pageMeta.hasNextPage" -- porque a
+// convencao larga poe esse campo dentro de um objeto de metadados, e nao na
+// raiz.
+//
+// Um campo AUSENTE nao e "nao ha mais": e a API mudou de forma, ou o caminho
+// esta errado. Tratar ausente como fim faria a paginacao parar na primeira
+// pagina em silencio -- que e pior que nao ter a otimizacao.
+func lerTemMais(body []byte, caminho string) (bool, error) {
+	var atual any
+	if err := json.Unmarshal(body, &atual); err != nil {
+		return false, fmt.Errorf("MoreKey %q precisa de uma pagina JSON: %w", caminho, err)
+	}
+
+	partes := strings.Split(caminho, ".")
+	for i, parte := range partes {
+		obj, ok := atual.(map[string]any)
+		if !ok {
+			return false, fmt.Errorf("MoreKey %q: %q nao e um objeto",
+				caminho, strings.Join(partes[:i], "."))
+		}
+		v, existe := obj[parte]
+		if !existe {
+			return false, fmt.Errorf("MoreKey %q: a pagina nao tem %q. Um campo ausente nao e "+
+				"tratado como fim da paginacao, porque isso pararia na primeira pagina em "+
+				"silencio -- confira o caminho, ou tire o MoreKey e deixe a parada por pagina "+
+				"vazia", caminho, parte)
+		}
+		atual = v
+	}
+
+	switch t := atual.(type) {
+	case bool:
+		return t, nil
+	case nil:
+		// null e a forma que varias APIs usam para "acabou".
+		return false, nil
+	default:
+		return false, fmt.Errorf("MoreKey %q levou a um %T, e precisa levar a um booleano",
+			caminho, atual)
+	}
 }
 
 // unwrapPage pulls the next cursor and, when DataKey is set, the row payload

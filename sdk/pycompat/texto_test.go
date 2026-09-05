@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"math"
 	"os/exec"
+	"sort"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -26,14 +28,17 @@ var comoOPythonRenderiza = []struct {
 	{false, "False", "False"},
 	{"", "", "''"},
 	{"ola", "ola", "'ola'"},
-	{float64(0), "0.0", "0.0"},
-	{float64(19), "19.0", "19.0"},
-	{float64(-20.04), "-20.04", "-20.04"},
-	{float64(0.1), "0.1", "0.1"},
-	{float64(1) / 3, "0.3333333333333333", "1/3"},
-	{float64(1e15), "1000000000000000.0", "1e15"},
-	{float64(9.999e15), "9999000000000000.0", "9.999e15"},
-	{float64(0.0001), "0.0001", "0.0001"},
+	// Os floats entram como json.Number, que e o caminho de verdade: um
+	// float64 cru recusa, porque a essa altura o literal ja se perdeu. Ver
+	// TestTextoRecusaFloat64.
+	{json.Number("0.0"), "0.0", "0.0"},
+	{json.Number("19.0"), "19.0", "19.0"},
+	{json.Number("-20.04"), "-20.04", "-20.04"},
+	{json.Number("0.1"), "0.1", "0.1"},
+	{json.Number("0.3333333333333333"), "0.3333333333333333", "1/3"},
+	{json.Number("1000000000000000.0"), "1000000000000000.0", "1e15"},
+	{json.Number("9999000000000000.0"), "9999000000000000.0", "9.999e15"},
+	{json.Number("0.0001"), "0.0001", "0.0001"},
 	{int64(0), "0", "0"},
 	{int64(19), "19", "19"},
 	{int64(-7), "-7", "-7"},
@@ -103,18 +108,101 @@ func TestTextoContraOPythonDeVerdade(t *testing.T) {
 // chave. O formato exato do expoente é detalhe do CPython, e apostar nele
 // produz duplicata em silêncio.
 func TestTextoRecusaAFaixaExponencial(t *testing.T) {
+	// Pela porta que aceita float: a política do expoente é sobre floats, e o
+	// Texto recusa float64 antes de chegar nela.
 	recusados := []float64{1e-5, 9.99e-5, -1e-5, 1e16, -1e16, 1e300, math.SmallestNonzeroFloat64}
 	for _, f := range recusados {
-		if got, err := Texto(f); err == nil {
-			t.Errorf("Texto(%g) devolveu %q em vez de recusar", f, got)
+		if got, err := TextoAceitandoFloat64(f); err == nil {
+			t.Errorf("TextoAceitandoFloat64(%g) devolveu %q em vez de recusar", f, got)
 		}
 	}
 
 	// E as bordas de dentro passam: a faixa é [1e-4, 1e16).
 	aceitos := []float64{0, 1e-4, -1e-4, 9.999999999999998e15, 0.1}
 	for _, f := range aceitos {
-		if _, err := Texto(f); err != nil {
-			t.Errorf("Texto(%g) recusou dentro da faixa: %v", f, err)
+		if _, err := TextoAceitandoFloat64(f); err != nil {
+			t.Errorf("TextoAceitandoFloat64(%g) recusou dentro da faixa: %v", f, err)
+		}
+	}
+}
+
+// TestTextoRecusaFloat64 é o item 11 da segunda rodada, e conserta uma
+// incoerência que era minha.
+//
+// O `default` do Texto recusava dizendo que "adivinhar numa chave produz
+// duplicata silenciosa", e o `case float64` logo acima adivinhava em silêncio.
+// A limitação estava DOCUMENTADA -- e documentar uma divergência não é o mesmo
+// que impedi-la.
+//
+// Um float64 só chega aqui quando o literal já se perdeu: o encoding/json
+// decodifica `1` e `1.0` no mesmo float64, e o Python via int num caso e float
+// no outro. Escolher uma das duas acerta metade das vezes, e a metade errada é
+// uma linha duplicada.
+func TestTextoRecusaFloat64(t *testing.T) {
+	// inf e nan ficam de fora: nenhum literal JSON produz um deles, então a
+	// ambiguidade int/float não existe ali e a regra não teria razão.
+	for _, f := range []float64{0, 1, 19.0, -20.04} {
+		got, err := Texto(f)
+		if err == nil {
+			t.Errorf("Texto(%v) devolveu %q; o literal já se perdeu e ele adivinhou", f, got)
+			continue
+		}
+		for _, quero := range []string{"PreserveNumbers", "TextoAceitandoFloat64"} {
+			if !strings.Contains(err.Error(), quero) {
+				t.Errorf("o erro não oferece a saída %q: %v", quero, err)
+			}
+		}
+	}
+}
+
+// TestTextoAceitaFloat32: um float32 nunca vem de JSON decodificado, então ele
+// é float sem ambiguidade -- é o único flutuante que dá para renderizar sem
+// adivinhar.
+func TestTextoAceitaFloat32(t *testing.T) {
+	got, err := Texto(float32(19))
+	if err != nil {
+		t.Fatalf("float32 recusado: %v", err)
+	}
+	if got != "19.0" {
+		t.Errorf("= %q, esperado \"19.0\"", got)
+	}
+}
+
+// TestTextoAceitandoFloat64CasaComOPython: a saída de escape produz o mesmo
+// texto que o str() de um float do Python.
+func TestTextoAceitandoFloat64CasaComOPython(t *testing.T) {
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("sem python3")
+	}
+	casos := map[float64]string{0: "0.0", 19: "19.0", -20.04: "-20.04", 0.1: "0.1"}
+
+	var literais []string
+	var valores []float64
+	for f := range casos {
+		valores = append(valores, f)
+	}
+	sort.Float64s(valores)
+	for _, f := range valores {
+		// float(...) explicito: str(0) do Python e "0" e str(0.0) e "0.0", e
+		// um literal sem ponto viraria int -- que e outro teste.
+		literais = append(literais, "float("+strconv.FormatFloat(f, 'f', -1, 64)+")")
+	}
+	script := "import sys\nfor v in [" + strings.Join(literais, ", ") +
+		"]:\n    sys.stdout.write(str(v) + '\\x00')\n"
+	b, err := exec.Command("python3", "-c", script).Output()
+	if err != nil {
+		t.Fatalf("python3: %v", err)
+	}
+	quero := strings.Split(strings.TrimSuffix(string(b), "\x00"), "\x00")
+
+	for i, f := range valores {
+		got, err := TextoAceitandoFloat64(f)
+		if err != nil {
+			t.Errorf("TextoAceitandoFloat64(%v): %v", f, err)
+			continue
+		}
+		if got != quero[i] {
+			t.Errorf("TextoAceitandoFloat64(%v) = %q, e str(%v) = %q", f, got, f, quero[i])
 		}
 	}
 }
@@ -147,24 +235,20 @@ func TestTextoEspeciais(t *testing.T) {
 	}
 }
 
-// TestPreserveNumbersRecuperaADistincaoQueOFloatPerde é o que torna
-// IngestionIDPython utilizável de verdade.
+// TestPreserveNumbersRecuperaADistincaoQueOFloatPerde é o que torna o pycompat
+// utilizável de verdade.
 //
 // Sem ele, {"id": 19} e {"id": 19.0} chegam idênticos como float64(19), e o
-// Python via int num caso e float no outro -- str() "19" contra "19.0". A
-// função renderiza os dois como float, e acerta metade.
+// Python via int num caso e float no outro. Desde a v0.40.0 o Texto RECUSA esse
+// float64 em vez de escolher uma das duas -- porque escolher acerta metade das
+// vezes, e a metade errada é uma duplicata.
 func TestPreserveNumbersRecuperaADistincaoQueOFloatPerde(t *testing.T) {
 	var semPreservar map[string]any
 	if err := json.Unmarshal([]byte(`{"inteiro":19,"decimal":19.0}`), &semPreservar); err != nil {
 		t.Fatal(err)
 	}
-	a, _ := Texto(semPreservar["inteiro"])
-	b, _ := Texto(semPreservar["decimal"])
-	if a != b {
-		t.Fatalf("o float64 distinguiu %q de %q, e não deveria conseguir", a, b)
-	}
-	if a != "19.0" {
-		t.Errorf("sem preservar = %q; a documentação diz que rende como float", a)
+	if _, err := Texto(semPreservar["inteiro"]); err == nil {
+		t.Error("sem preservar, o Texto adivinhou em vez de recusar")
 	}
 
 	// Preservando: o literal decide, exatamente como o json do Python decide.

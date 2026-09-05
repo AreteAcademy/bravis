@@ -8,6 +8,52 @@ A tag de um módulo aninhado leva o prefixo do diretório: `sdk/v0.2.1`.
 
 ---
 
+## [0.40.0] — 2026-09-05
+
+Itens 11 e 12 da segunda rodada da contribuição de consumidor.
+
+### BREAKING: `pycompat.Texto` recusa um `float64`
+
+Era uma incoerência minha, e o consumidor a encontrou usando: o `default` da
+função recusava dizendo que *"adivinhar numa chave produz duplicata
+silenciosa"*, e o `case float64` logo acima adivinhava em silêncio.
+
+Um `float64` só chega ali quando o literal **já se perdeu** — o `encoding/json`
+decodifica `1` e `1.0` no mesmo valor, e o Python via `int` num caso e `float`
+no outro. Escolher uma das duas acerta metade das vezes, e a metade errada é uma
+linha duplicada.
+
+A limitação estava **documentada** na `v0.36.0`. Documentar uma divergência não é
+o mesmo que impedi-la.
+
+**O que fazer:** ligue `Source.PreserveNumbers`, e o literal decide sozinho. Se a
+origem era mesmo float e não dá para ligar, diga isso —
+`pycompat.TextoAceitandoFloat64`. O nome é comprido de propósito: ele é a
+afirmação "eu conferi".
+
+`float32` continua passando: ele nunca vem de JSON decodificado, então é float
+sem ambiguidade. `inf` e `nan` também — nenhum literal JSON os produz.
+
+### `MoreKey`: parar de paginar pelo que a resposta diz
+
+```go
+from.HTTP{URL: url, PageKey: "page", DataKey: "results",
+          MoreKey: "pageMeta.hasNextPage"}
+```
+
+Sem ele a parada é sempre a página vazia, o que custa **uma requisição a mais por
+origem** — num fan-out de centenas de origens, centenas de requisições
+desperdiçadas por execução. Há teste medindo as duas: 3 requisições com, 4 sem.
+
+Não é uma estratégia e sim um **critério de parada**: combina com as quatro que
+já existem. A parada por página vazia continua como rede de segurança, e há teste
+com uma API que mente no campo.
+
+Um campo **ausente** é erro, e não "não há mais": tratá-lo como fim pararia a
+paginação na primeira página em silêncio.
+
+---
+
 ## [0.39.0] — 2026-09-05
 
 Item 2 da contribuição de consumidor — **o maior**, e o que ela diz separar

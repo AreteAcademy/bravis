@@ -439,6 +439,19 @@ type Source struct {
 	OffsetKey   string
 	DataKey     string
 
+	// MoreKey e o caminho, separado por pontos, para um booleano na resposta
+	// que diz se ha proxima pagina. Falso encerra a paginacao.
+	//
+	//	MoreKey: "pageMeta.hasNextPage"
+	//
+	// Ele nao e uma estrategia: e um CRITERIO DE PARADA, e combina com
+	// qualquer uma das quatro. Sem ele a parada e sempre a pagina vazia, o que
+	// custa uma requisicao a mais POR ORIGEM -- num fan-out de centenas de
+	// origens, centenas de requisicoes por execucao.
+	//
+	// A parada por pagina vazia continua valendo como rede de seguranca.
+	MoreKey string
+
 	// FirstPage is the number the first page carries, for PageKey. Zero
 	// means one; a zero-indexed API puts "?page=0" in the URL, and a number
 	// already in the URL wins over this field. Either way the first request

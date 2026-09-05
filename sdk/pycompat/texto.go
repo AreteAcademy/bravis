@@ -109,12 +109,40 @@ func Texto(v any) (string, error) {
 		return strconv.FormatUint(t, 10), nil
 
 	case float32:
+		// Um float32 NAO vem de JSON decodificado -- o encoding/json nunca
+		// produz um --, entao ele so chega aqui se o consumidor o pos no
+		// registro, e nesse caso ele e float sem ambiguidade. E o unico
+		// flutuante que da para renderizar sem adivinhar.
+		//
 		// Convertido para float64 antes de formatar: o Python nao tem float de
-		// 32 bits, e um float32 que virou float64 imprime os digitos do erro
-		// de conversao. Formatar a partir do float32 e o que o Python veria.
+		// 32 bits, e formatar a partir do float32 e o que o Python veria.
 		return floatPython(float64(t))
+
 	case float64:
-		return floatPython(t)
+		// inf e nan passam: nenhum literal JSON produz um deles -- o JSON nem
+		// os representa --, entao a ambiguidade int/float nao existe aqui.
+		// Recusa-los seria aplicar a regra onde ela nao tem razao.
+		if math.IsNaN(t) || math.IsInf(t, 0) {
+			return floatPython(t)
+		}
+
+		// RECUSA, pela mesma razao que o default recusa.
+		//
+		// Um float64 so chega aqui quando o literal JA SE PERDEU: o
+		// encoding/json decodifica `1` e `1.0` no mesmo float64, e o Python
+		// via int num caso e float no outro. Escolher uma das duas acerta
+		// metade das vezes, e a metade errada e uma linha duplicada semanas
+		// depois -- que e exatamente o que esta funcao existe para evitar.
+		//
+		// Ate a v0.39.0 ela escolhia "1.0" em silencio, e a limitacao estava
+		// DOCUMENTADA. Documentar uma divergencia nao e o mesmo que impedi-la,
+		// e o default logo abaixo recusava pelo mesmo motivo -- a incoerencia
+		// era minha.
+		return "", fmt.Errorf("pycompat.Texto recebeu um float64 (%v), e a essa altura o "+
+			"literal do JSON já se perdeu: `1` e `1.0` viram o mesmo float64, e o Python "+
+			"via int num caso e float no outro. Ligue Source.PreserveNumbers para o número "+
+			"chegar como json.Number com o literal intacto. Se a origem era mesmo float e "+
+			"você quer renderizar como float, diga isso: pycompat.TextoAceitandoFloat64", t)
 
 	default:
 		return "", fmt.Errorf("pycompat.Texto não sabe renderizar %T como o str() do Python "+
@@ -227,4 +255,24 @@ func falsoNoPython(v any) bool {
 	default:
 		return false
 	}
+}
+
+// TextoAceitandoFloat64 e Texto tratando float64 como o float do Python.
+//
+// Use quando voce SABE que o numero era float na origem -- e nao um int que o
+// encoding/json colapsou -- e nao pode ligar Source.PreserveNumbers.
+//
+//	Key: sdk.KeyWith(pycompat.TextoAceitandoFloat64, "lat", "lon")
+//
+// O nome e comprido de proposito. Ele e a afirmacao "eu conferi": num campo que
+// era int no Python, isto produz "19.0" onde o Python produziu "19", e o
+// resultado nao e um erro -- e uma linha duplicada depois do merge.
+//
+// Onde der para ligar PreserveNumbers, ligue: o literal decide sozinho, e nao ha
+// o que conferir.
+func TextoAceitandoFloat64(v any) (string, error) {
+	if f, ehFloat := v.(float64); ehFloat {
+		return floatPython(f)
+	}
+	return Texto(v)
 }

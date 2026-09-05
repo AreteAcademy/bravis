@@ -488,3 +488,20 @@ várias APIs REST. O SDK já cobre as outras duas convenções de parada —
 **Proposta:** um campo `MoreKey: "pageMeta.hasNextPage"` — caminho para um
 booleano na resposta, e falso encerra a paginação. **Não substitui** a parada por
 página vazia, que continua sendo a rede de segurança.
+
+
+---
+
+## Decisão da segunda rodada
+
+| # | decisão | onde |
+|---|---|---|
+| 9 | **aceito** | `v0.42.0` |
+| 10 | **aceito**, com a separação que o próprio pedido propõe | `v0.41.0` |
+| 11 | **aceito**, e a incoerência era minha | `v0.40.0` |
+| 12 | **aceito** | `v0.40.0` |
+
+O item 11 estava certo e é o que vale registrar: eu **documentei** a divergência
+na `v0.36.0` e achei que bastava. O `default` recusava adivinhar e o `case
+float64` adivinhava, na mesma função. Documentar uma divergência não é o mesmo
+que impedi-la.

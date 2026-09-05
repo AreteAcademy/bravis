@@ -2,6 +2,7 @@ package sdk_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -26,10 +27,12 @@ func TestIngestionIDComPycompatCasaComOPython(t *testing.T) {
 		t.Skip("sem python3")
 	}
 
+	// source_key entra como json.Number, que e o que PreserveNumbers entrega
+	// -- um float64 cru o Texto recusa, porque ali o literal ja se perdeu.
 	registro := func() map[string]any {
 		return map[string]any{
 			"provider": "acme", "entity": nil,
-			"source_key": float64(19), "record_ts": true,
+			"source_key": json.Number("19.0"), "record_ts": true,
 		}
 	}
 
@@ -68,7 +71,7 @@ print(uuid.uuid5(ns, chave))`
 
 // TestKeyWithCasaComOPython: o mesmo, para a chave.
 func TestKeyWithCasaComOPython(t *testing.T) {
-	registro := map[string]any{"a": nil, "b": float64(19), "c": true}
+	registro := map[string]any{"a": nil, "b": json.Number("19.0"), "c": true}
 
 	got, err := sdk.KeyWith(pycompat.Texto, "a", "b", "c")(registro)
 	if err != nil {
@@ -82,8 +85,26 @@ func TestKeyWithCasaComOPython(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if padrao != "|19|true" {
-		t.Errorf("Key = %q, esperado \"|19|true\" -- se mudou, o padrão mudou", padrao)
+	if padrao != "|19.0|true" {
+		t.Errorf("Key = %q -- se mudou, o padrão mudou", padrao)
+	}
+}
+
+// TestKeyWithRecusaFloat64NomeandoOCampo: a recusa do item 11 chega ao
+// consumidor pela porta que ele usa, e nomeia o campo -- sem o nome, quem lê o
+// erro não sabe qual dos seis é.
+func TestKeyWithRecusaFloat64NomeandoOCampo(t *testing.T) {
+	_, err := sdk.KeyWith(pycompat.Texto, "a", "b")(map[string]any{
+		"a": "ok", "b": float64(19),
+	})
+	if err == nil {
+		t.Fatal("um float64 passou; o literal já se perdeu e ele adivinhou")
+	}
+	if !strings.Contains(err.Error(), `"b"`) {
+		t.Errorf("o erro não nomeia o campo: %v", err)
+	}
+	if !strings.Contains(err.Error(), "PreserveNumbers") {
+		t.Errorf("o erro não oferece a saída: %v", err)
 	}
 }
 
@@ -110,9 +131,9 @@ func TestTextoOuVazioEOIdiomaDoPython(t *testing.T) {
 		valor   any
 		literal string
 	}{
-		{nil, "None"}, {"", "''"}, {float64(0), "0.0"}, {int64(0), "0"},
+		{nil, "None"}, {"", "''"}, {json.Number("0.0"), "0.0"}, {int64(0), "0"},
 		{false, "False"}, {[]any{}, "[]"}, {map[string]any{}, "{}"},
-		{"ola", "'ola'"}, {float64(19), "19.0"}, {true, "True"},
+		{"ola", "'ola'"}, {json.Number("19.0"), "19.0"}, {true, "True"},
 	}
 
 	var literais []string
@@ -155,11 +176,11 @@ func TestDivergenciaEntreOPadraoEOPython(t *testing.T) {
 		{nil, "", "None"},
 		{true, "true", "True"},
 		{false, "false", "False"},
-		{float64(19), "19", "19.0"},
-		{float64(0), "0", "0.0"},
+		{json.Number("19.0"), "19.0", "19.0"},
+		{json.Number("0.0"), "0.0", "0.0"},
 		// Estes NÃO divergem, e é o que torna a lista acima curta.
 		{"ola", "ola", "ola"},
-		{float64(-20.04), "-20.04", "-20.04"},
+		{json.Number("-20.04"), "-20.04", "-20.04"},
 	}
 
 	for _, c := range casos {

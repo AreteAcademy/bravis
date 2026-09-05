@@ -674,10 +674,16 @@ Transform: []sdk.Transformer{sdk.IngestionIDWith(pycompat.Texto)},
 `0` and `0.0` become `""` and not `"0"` — that is Python's truthiness, and it is
 the case a hand-written version gets wrong.
 
-**It refuses rather than diverges.** Python's `str()` switches to exponent
-notation outside `[1e-4, 1e16)` and the exact shape is a CPython implementation
-detail. Imitating it would be a bet placed inside a key, so those values return
-an error naming the field.
+**It refuses rather than diverges**, and that now includes a bare `float64`.
+A `float64` only reaches the renderer once the literal is gone — `encoding/json`
+decodes `1` and `1.0` into the same value, and Python saw an `int` in one case
+and a `float` in the other. Picking one is right half the time, and the wrong
+half is a duplicate row. Turn on `PreserveNumbers`; if the source really was a
+float and you cannot, say so with `pycompat.TextoAceitandoFloat64`.
+
+The same applies outside `[1e-4, 1e16)`, where Python's `str()` switches to
+exponent notation whose exact shape is a CPython implementation detail.
+Imitating it would be a bet placed inside a key.
 
 **`PreserveNumbers` is not optional for integer ids.** `encoding/json` decodes
 every number as `float64`, so `{"id": 19}` and `{"id": 19.0}` arrive identical —
@@ -772,6 +778,22 @@ extract.JSON(ctx, sdk.Source{URL: url, PageKey: "page", DataKey: "results"})
 // ?offset=0, ?offset=100, ... until a page comes back empty
 extract.NDJSON(ctx, sdk.Source{URL: url, OffsetKey: "offset", PageSize: 100})
 ```
+
+`MoreKey` is a **stopping criterion**, not a strategy — it combines with any of
+the four:
+
+```go
+from.HTTP{URL: url, PageKey: "page", DataKey: "results",
+          MoreKey: "pageMeta.hasNextPage"}
+```
+
+Without it the walk stops on the first empty page, which costs one extra request
+**per source** — in a fan-out of hundreds of origins, hundreds of wasted requests
+per run. The empty-page stop stays as the safety net: an API that lies in that
+field must not become an infinite loop.
+
+A **missing** field is an error, not "no more pages". Treating absence as the end
+would stop the walk on page one, silently.
 
 `PageKey` counts pages; `OffsetKey` counts rows, and `PageSize` is how many
 rows it skips ahead each time. Before `PageKey` existed the way to paginate by
