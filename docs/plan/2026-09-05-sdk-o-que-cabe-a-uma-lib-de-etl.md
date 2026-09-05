@@ -356,3 +356,135 @@ ainda não produz.
 
 Quando o item 2 estiver de pé, o banco de prova é o fan-out de 4.803 origens que
 o documento cita — e a decisão sai do número, não da suposição.
+
+---
+
+# Segunda rodada — o que os ports seguintes acharam
+
+Escrita depois da primeira leva ter sido entregue (`v0.37.0` a `v0.39.0`), com
+mais fetchers portados. **Dois dos quatro são retorno de uso do que acabou de
+sair** — o `pycompat.Texto` e o `from.Many` —, e não pedidos novos.
+
+A numeração continua a da primeira rodada. Vale o mesmo teste: *um time sem
+relação nenhuma com quem escreveu isto iria querer?*
+
+---
+
+## 9. O que acontece fora da `Source` não herda nada do SDK
+
+Dois pedidos que são o mesmo problema visto de dois lados.
+
+**Login programático.** O `Refresh` renova sessão por cookie: faz a chamada e o
+cookie jar recolhe o `Set-Cookie`. Não há como expressar *"POST com corpo, e o
+token sai de um campo do JSON da resposta"*, que é a forma que a maioria das
+APIs usa.
+
+Dá para contornar — `Credential.Value` é `func(ctx) (string, error)`, então o
+login vai ali e o SDK ainda cacheia pelo `TTL` e serializa chamadas concorrentes.
+Mas a requisição de login passa a ser a **única** do fetcher sem retry, sem rate
+limit, sem timeout por tentativa e sem redação de segredo no log.
+
+> A minha foi escrita com `http.DefaultClient`, que não tem timeout nenhum, e só
+> percebi revisando.
+
+**Descoberta de origens.** Com `from.Many`, a lista de fontes às vezes só se
+conhece em runtime — um GET que lista as partições antes de ler cada uma. Ela
+precisa acontecer **antes** do `sdk.Run`, então também fica fora do pipeline, e
+também sem nada.
+
+**Proposta**, sem levar formato de fornecedor nenhum:
+
+1. Uma credencial que troca segredos por um token vindo do **corpo** da resposta.
+   O consumidor diz o que enviar e **onde** o token está; o SDK faz a requisição
+   com o próprio cliente:
+
+   ```go
+   Auth: &from.Credential{
+       Login: &from.Login{
+           URL: ..., Method: "POST",
+           Body:  <o que enviar, do consumidor>,
+           Token: from.CampoJSON("data.accessToken"),
+       },
+       Apply: from.AsBearer,
+       TTL:   50 * time.Minute,
+   }
+   ```
+
+2. Uma forma preguiçosa de montar as origens do `from.Many` — por exemplo
+   `Sources` podendo ser `func(ctx) ([]Reader, error)` — para que a descoberta
+   rode dentro do pipeline e herde retry, timeout e log.
+
+O que se ganha não é conveniência: é que a requisição **mais sensível** do
+fetcher, a que carrega as credenciais, deixe de ser a única sem as garantias que
+todas as outras têm.
+
+---
+
+## 10. Canônico para derivar chave, com as três armadilhas resolvidas
+
+Quando a origem não tem id estável, a chave vira um hash do registro inteiro.
+Dos fetchers em porte, **5** derivam a chave de
+`json.dumps(record, sort_keys=True, separators=(",",":"), ensure_ascii=False)`.
+
+Reproduzir isso byte a byte custou ~90 linhas, e há **três armadilhas**, cada uma
+capaz de mudar a chave sem erro:
+
+1. O `encoding/json` escapa `<`, `>` e `&`; o Python não escapa nenhum dos três.
+   **O SDK já sabe disso** — `sdk/to/redshift/redshift.go` chama
+   `SetEscapeHTML(false)` — mas o conhecimento não é compartilhado.
+2. Sem `PreserveNumbers`, `1` e `1.0` chegam como o mesmo `float64`.
+3. Inteiro de precisão arbitrária perde precisão ao passar por `float64`.
+
+**Proposta:** `pycompat.JSONCanonico(v any) ([]byte, error)` — a serialização que
+aquele `json.dumps` produz, reusando a `Texto` para número (ela já é o `repr` do
+Python para float e o literal para int, que é exatamente o que o `json.dumps`
+escreve).
+
+Vale considerar **também** um canônico independente de linguagem no núcleo — o
+RFC 8785 (JCS) é o padrão — para quem está começando um ETL novo e só quer uma
+chave estável. São coisas diferentes e **não devem ser a mesma função**: uma casa
+com o Python, a outra casa com um padrão. Confundir as duas seria pior que não
+ter nenhuma.
+
+---
+
+## 11. `pycompat.Texto` recusa adivinhar, exceto num caso
+
+O `default` de `pycompat.Texto` devolve um erro dizendo que *"adivinhar numa
+chave produz duplicata silenciosa"*. Concordo — e é por isso que o `case float64`
+chama atenção:
+
+```go
+case float64:
+    return floatPython(t)    // devolve sempre "1.0"
+```
+
+Um `float64` só chega ali quando o literal **já se perdeu** — ou seja, quando
+`PreserveNumbers` está desligado. Nesse ponto é impossível saber se o Python
+escreveu `1` ou `1.0`, e a função escolhe uma das duas em silêncio. Ela acerta
+metade das vezes, e a metade errada é uma linha duplicada.
+
+**Proposta:** que `float64` siga a mesma política do `default` — erro nomeando o
+problema e a saída: *"recebi float64, então o literal já se perdeu; ligue
+`Source.PreserveNumbers` para o número chegar como `json.Number`"*.
+
+Se isso quebrar consumidor existente, um modo explícito
+(`pycompat.TextoAceitandoFloat64`) resolve — mas o padrão deveria recusar, pela
+mesma razão que o `default` recusa.
+
+---
+
+## 12. Parada de paginação por campo da resposta
+
+O SDK para de paginar quando a página volta vazia. Isso gasta **uma requisição a
+mais por origem** — num fan-out de 27 partições são 27 requisições
+desperdiçadas por execução, e a mesma coisa em todo fetcher paginado.
+
+A API que motivou isto devolve `pageMeta.hasNextPage: false` na última página, e
+essa convenção é larga: `has_more` no Stripe, `hasNextPage` no JSON:API e em
+várias APIs REST. O SDK já cobre as outras duas convenções de parada —
+`CursorKey` e `FollowLinks`.
+
+**Proposta:** um campo `MoreKey: "pageMeta.hasNextPage"` — caminho para um
+booleano na resposta, e falso encerra a paginação. **Não substitui** a parada por
+página vazia, que continua sendo a rede de segurança.
