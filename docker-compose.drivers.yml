@@ -28,7 +28,7 @@ services:
     environment:
       POSTGRES_USER: brevis
       POSTGRES_PASSWORD: brevis
-      POSTGRES_DB: bravis_it
+      POSTGRES_DB: brevis_it
     ports:
       - "55432:5432"
     healthcheck:
@@ -41,7 +41,7 @@ services:
     image: mysql:8
     environment:
       MYSQL_ROOT_PASSWORD: brevis
-      MYSQL_DATABASE: bravis_it
+      MYSQL_DATABASE: brevis_it
     ports:
       - "53306:3306"
     healthcheck:

@@ -22,7 +22,7 @@ import (
 // Run them against a real project:
 //
 //	export BREVIS_IT_PROJECT=my-project
-//	export BREVIS_IT_DATASET=bravis_it        # must already exist
+//	export BREVIS_IT_DATASET=brevis_it        # must already exist
 //	export BREVIS_IT_BUCKET=my-staging-bucket # for the GCS strategy
 //	go test ./load/... -run Integration
 //
@@ -49,7 +49,7 @@ func requireIntegration(t *testing.T) itEnv {
 
 	dataset := os.Getenv("BREVIS_IT_DATASET")
 	if dataset == "" {
-		dataset = "bravis_it"
+		dataset = "brevis_it"
 	}
 
 	return itEnv{project: project, dataset: dataset, bucket: os.Getenv("BREVIS_IT_BUCKET")}

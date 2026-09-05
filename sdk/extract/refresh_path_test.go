@@ -50,17 +50,17 @@ func TestRefreshRecebeACredencialEmOutroPrefixo(t *testing.T) {
 
 				// Como a API real: sem credencial, responde null.
 				if _, err := r.Cookie("session"); err != nil {
-					fmt.Fprint(w, `null`)
+					_, _ = fmt.Fprint(w, `null`)
 					return
 				}
 				http.SetCookie(w, &http.Cookie{Name: "session", Value: "renovado=="})
-				fmt.Fprintf(w, `{"expires":%q}`, time.Now().Add(30*24*time.Hour).Format(time.RFC3339))
+				_, _ = fmt.Fprintf(w, `{"expires":%q}`, time.Now().Add(30*24*time.Hour).Format(time.RFC3339))
 			})
 			mux.HandleFunc(c.fonte, func(w http.ResponseWriter, r *http.Request) {
 				mu.Lock()
 				cookieNasPaginas = append(cookieNasPaginas, r.Header.Get("Cookie"))
 				mu.Unlock()
-				fmt.Fprint(w, `{"ok":1}`)
+				_, _ = fmt.Fprint(w, `{"ok":1}`)
 			})
 			srv := httptest.NewServer(mux)
 			defer srv.Close()

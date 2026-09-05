@@ -8,6 +8,21 @@ A tag de um módulo aninhado leva o prefixo do diretório: `sdk/v0.2.1`.
 
 ---
 
+## [0.28.1] — 2026-09-05
+
+Sem mudança de comportamento. A `v0.27.3` e a `v0.28.0` foram marcadas com
+`errcheck` vermelho nos arquivos de teste, e o gate de publicação — que passou a
+rodar lint na `v0.27.2` — as barrou: as duas existem no proxy do Go, mas sem
+release no GitHub. Nada disso alcança quem consome, porque os testes de uma
+dependência não são compilados nem verificados por quem a importa.
+
+Esta é a mesma `v0.28.0` com os testes limpos, e é a que tem release.
+
+E as últimas sobras do rename: `bravis_it` virou `brevis_it` no
+`docker-compose.drivers.yml` e no `integration_test.go`.
+
+---
+
 ## [0.28.0] — 2026-09-05
 
 ### Adicionado

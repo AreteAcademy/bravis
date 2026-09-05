@@ -43,15 +43,15 @@ func TestSegundaExecucaoUsaOQueVeioDoVolume(t *testing.T) {
 		}
 		mu.Unlock()
 		if err != nil {
-			fmt.Fprint(w, `null`)
+			_, _ = fmt.Fprint(w, `null`)
 			return
 		}
 		geracao++
 		http.SetCookie(w, &http.Cookie{Name: "session", Value: fmt.Sprintf("rotacionado-%d", geracao)})
-		fmt.Fprintf(w, `{"expires":%q}`, time.Now().Add(30*24*time.Hour).Format(time.RFC3339))
+		_, _ = fmt.Fprintf(w, `{"expires":%q}`, time.Now().Add(30*24*time.Hour).Format(time.RFC3339))
 	})
 	mux.HandleFunc("/api/proxy/occurrences", func(w http.ResponseWriter, _ *http.Request) {
-		fmt.Fprint(w, `{"ok":1}`)
+		_, _ = fmt.Fprint(w, `{"ok":1}`)
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
@@ -115,10 +115,10 @@ func TestFalhaAoGravarNaoDerrubaAExecucao(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/auth", func(w http.ResponseWriter, _ *http.Request) {
 		http.SetCookie(w, &http.Cookie{Name: "session", Value: "novo"})
-		fmt.Fprint(w, `{"ok":1}`)
+		_, _ = fmt.Fprint(w, `{"ok":1}`)
 	})
 	mux.HandleFunc("/dados", func(w http.ResponseWriter, _ *http.Request) {
-		fmt.Fprint(w, `{"ok":1}`)
+		_, _ = fmt.Fprint(w, `{"ok":1}`)
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
@@ -177,10 +177,10 @@ func TestACredencialNuncaAparecEmLog(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/auth/session", func(w http.ResponseWriter, _ *http.Request) {
 		http.SetCookie(w, &http.Cookie{Name: "session", Value: rotacionado})
-		fmt.Fprintf(w, `{"expires":%q}`, time.Now().Add(time.Hour).Format(time.RFC3339))
+		_, _ = fmt.Fprintf(w, `{"expires":%q}`, time.Now().Add(time.Hour).Format(time.RFC3339))
 	})
 	mux.HandleFunc("/api/proxy/dados", func(w http.ResponseWriter, _ *http.Request) {
-		fmt.Fprint(w, `{"ok":1}`)
+		_, _ = fmt.Fprint(w, `{"ok":1}`)
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
