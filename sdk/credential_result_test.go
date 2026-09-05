@@ -68,3 +68,25 @@ func TestArgsOmiteCredencialQuandoNaoHa(t *testing.T) {
 		t.Errorf("Args() carrega a chave sem validade nenhuma: %s", got)
 	}
 }
+
+// TestArgsOmiteContadorZerado é o princípio "um número que é sempre zero é
+// pior que número nenhum", aplicado à linha do pipeline.
+//
+// Os drivers SQL não contam bytes, então `extract_bytes=0 bytes=0 formato=""`
+// aparecia em toda execução deles -- ensinando quem lê a pular esses campos.
+// E aí, quando um pipeline de HTTP mostrasse zero de verdade, ninguém veria.
+func TestArgsOmiteContadorZerado(t *testing.T) {
+	vazio := fmt.Sprint((&Result{Rows: 10}).Args()...)
+	for _, chave := range []string{"extract_bytes", "bytes", "formato"} {
+		if strings.Contains(vazio, chave) {
+			t.Errorf("%q aparece com valor zerado: %s", chave, vazio)
+		}
+	}
+
+	cheio := fmt.Sprint((&Result{ExtractBytes: 1, Bytes: 2, Format: "ndjson"}).Args()...)
+	for _, chave := range []string{"extract_bytes", "bytes", "formato"} {
+		if !strings.Contains(cheio, chave) {
+			t.Errorf("%q sumiu mesmo tendo valor: %s", chave, cheio)
+		}
+	}
+}

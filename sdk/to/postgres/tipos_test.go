@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // TestParaColunaLinhaALinha e o lado da ESCRITA da tabela de tipos.
@@ -44,11 +46,10 @@ func TestParaColunaLinhaALinha(t *testing.T) {
 			float64(instante.Unix()), "timestamp with time zone", instante,
 			"um JSON traz epoch como float64, e recusa-lo perderia a linha",
 		},
-		{
-			"numeric continua string",
-			"1234567890123456.78", "numeric", "1234567890123456.78",
-			"converter para float aqui desfaria a escolha que o lado da leitura fez",
-		},
+		// numeric tem caso proprio, em TestNumericVaiTipadoENaoComoTexto: ele
+		// nao sai como string nem como float, e sim como pgtype.Numeric --
+		// que preserva a precisao E evita um erro construido por linha dentro
+		// do pgx.
 		{"text passa como veio", "qualquer coisa", "text", "qualquer coisa", ""},
 		{"integer passa como veio", int64(42), "integer", int64(42), ""},
 	}
@@ -126,5 +127,64 @@ func TestParaColunaElideValorLongo(t *testing.T) {
 	}
 	if len(err.Error()) > 300 {
 		t.Errorf("a mensagem tem %d bytes; o valor devia ter sido elidido", len(err.Error()))
+	}
+}
+
+// TestNumericVaiTipadoENaoComoTexto fixa um ganho medido, para que ele não
+// volte em silêncio.
+//
+// Passando a string crua, o pgx tenta um plano de encode string->numeric, ele
+// falha, e o pgx constrói um erro só para cair no plano seguinte -- uma vez por
+// linha. Numa carga de 10 mil linhas isso era ~30% das alocações, todas em
+// newEncodeError e fmt.Errorf: trabalho para produzir um erro que ninguém lê.
+//
+// Medido contra o servidor: 290.529 alocações passaram a 190.506, a memória
+// caiu de 7,1 MB para 4,5 MB, e a vazão subiu de 352 mil para ~434 mil
+// linhas/s.
+func TestNumericVaiTipadoENaoComoTexto(t *testing.T) {
+	got, err := paraColuna("1234567890123456.78", "numeric")
+	if err != nil {
+		t.Fatal(err)
+	}
+	n, ok := got.(pgtype.Numeric)
+	if !ok {
+		t.Fatalf("paraColuna devolveu %T; o pgx encoda pgtype.Numeric direto e "+
+			"paga um erro construído por linha para qualquer outra coisa", got)
+	}
+	if !n.Valid {
+		t.Error("o número não foi lido")
+	}
+
+	// E a precisão continua exata: era esse o ponto de guardar como texto.
+	b, err := n.MarshalJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(b) != "1234567890123456.78" {
+		t.Errorf("= %s, esperado o valor exato", b)
+	}
+}
+
+// TestNumericInvalidoDizOQueRecebeu, sem despejar o valor inteiro em log.
+func TestNumericInvalidoDizOQueRecebeu(t *testing.T) {
+	if _, err := paraColuna("dez reais", "numeric"); err == nil {
+		t.Fatal("texto que não é número passou")
+	}
+	if _, err := paraColuna(strings.Repeat("9", 4000)+"x", "numeric"); err != nil {
+		if len(err.Error()) > 300 {
+			t.Errorf("a mensagem tem %d bytes; o valor devia ter sido elidido", len(err.Error()))
+		}
+	}
+}
+
+// TestNumericNaoTextualPassaComoVeio: quem recusa é o servidor, com a mensagem
+// dele, que é melhor que uma nossa adivinhando.
+func TestNumericNaoTextualPassaComoVeio(t *testing.T) {
+	got, err := paraColuna(float64(10.5), "numeric")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != float64(10.5) {
+		t.Errorf("= %#v", got)
 	}
 }

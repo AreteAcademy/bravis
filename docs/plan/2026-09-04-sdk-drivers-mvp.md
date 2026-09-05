@@ -436,7 +436,7 @@ o MySQL.
 Só depende da fase 1 (staging em S3) e da 2 (reconcile). Sai com a limitação de
 verificação do §4 escrita no README.
 
-### Fase 5 — o que um lançamento exige · `v1.0.0-rc`
+### Fase 5 — o que um lançamento exige · **entregue na `v0.33.0`, e NÃO como `v1.0.0-rc`**
 
 Não é feature, e é o que separa "compila" de "publicável":
 
@@ -492,3 +492,78 @@ e responda lendo só o `main.go` dele:
 
 As três primeiras a fase 0 já entrega. A quarta é a §1.2, e é a que diz se o
 SDK está pronto para ser importado por quem não usa BigQuery.
+
+---
+
+## 9. Fases 2 a 5: o que saiu diferente
+
+### Os drivers ficaram em subpacotes, e não em `from`/`to`
+
+A §2 desenha `sdk/from` com HTTP, Postgres, MySQL e Files, e `sdk/to` com os
+cinco destinos. Isso já foi tentado e desfeito uma vez, e a §1.2 é o argumento
+contra o próprio desenho: um consumidor só de arquivos chegou a compilar 461
+pacotes e 21 MB por causa do BigQuery, e foi por isso que ele virou
+`to/bigquery`.
+
+O mesmo vale para o pgx e o driver do MySQL. A prova agora é
+`.github/scripts/pruning-check.sh`, na CI:
+
+| consumidor | pacotes | compila driver alheio? |
+|---|---|---|
+| `from.Files` + `to.Files` | 193 | não |
+| `from/mysql` | 194 | não |
+| `from/postgres` | 219 | não |
+| `to/bigquery` | 456 | não |
+
+E a verificação foi testada proibindo algo que ele realmente compila.
+
+### O `Reconcile` compra coisas diferentes em cada destino
+
+No BigQuery ele impede o casamento posicional, que custou a `v0.12.0`. No
+Postgres **não impede** — o `CopyFrom` do pgx manda a lista de colunas junto.
+Eu tinha escrito o contrário num comentário, e o que mostrou foi uma reversão
+que não derrubou nenhum teste.
+
+O que ele compra ali é recusar **antes** do servidor: o Postgres devolveria
+`column "x" does not exist` no meio de um COPY, depois do extract inteiro, sem
+dizer o que fazer.
+
+### Dois defeitos que só a integração achou
+
+Os dois no Postgres, e nenhum visível contra valores montados em memória:
+
+1. o `COPY` binário recusa uma string RFC 3339 num `timestamptz` com "cannot
+   find encode plan" — e é exatamente assim que todo registro do SDK carrega um
+   instante;
+2. `DATE` voltava como `2026-09-05T00:00:00Z`, porque o pgx entrega DATE e
+   TIMESTAMPTZ como o mesmo `time.Time` e só o OID distingue.
+
+### Performance, medida e não prometida
+
+| destino | estratégia | linhas/s | allocs/linha |
+|---|---|---|---|
+| `postgres.Table` | `COPY FROM STDIN` | ~434 000 | ~19 |
+| `mysql.Table` | `INSERT` multi-linha | ~137 000 | ~1 |
+
+Dois ganhos vieram de olhar o profile em vez de supor:
+
+- **Postgres, +23% de vazão e −34% de alocações.** Passar a string crua numa
+  coluna `numeric` fazia o pgx tentar um plano de encode, falhar, e construir um
+  erro para cair no seguinte — uma vez por linha. `newEncodeError`, `fmt.Errorf`
+  e `fmt.Sprintf` eram ~30% das alocações da carga: trabalho para produzir um
+  erro que ninguém lê.
+- **Redshift, de ~5 alocações por linha para 13 no total** em 10 mil linhas: as
+  chaves não mudam entre registros, então são serializadas uma vez.
+
+### Por que NÃO é `v1.0.0-rc`
+
+A fase 5 tem alvo `v1.0.0-rc` no roadmap, e os cinco itens dela estão entregues.
+Ainda assim saiu como `v0.33.0`, por duas razões que não são de esforço:
+
+1. **O Redshift sai com verificação parcial.** Não existe imagem, e nenhum
+   cluster foi tocado. Chamar de release candidate um driver que nunca falou com
+   o servidor dele seria a promessa que este plano nomeia como risco.
+2. **Os três invariantes da §14 do `SDK_DECISOES.md` continuam abertos** — sem
+   inferência de tipo, validação antes do extract, e partição declarada. São
+   decisão de produto, e um `1.0` que os deixa em aberto congela a superfície
+   antes da conversa.

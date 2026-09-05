@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // paraColuna converte o valor do registro no tipo Go que o COPY binario exige.
@@ -45,9 +47,15 @@ func paraColuna(v any, tipo string) (any, error) {
 
 	case "numeric":
 		// String preserva a precisao que o lado da leitura preservou de
-		// proposito. O pgx aceita string em numeric, entao o caminho e
-		// direto -- e converter para float aqui desfaria a escolha inteira.
-		return v, nil
+		// proposito -- converter para float aqui desfaria a escolha inteira.
+		//
+		// Mas a string nao vai crua: o pgx tenta um plano de encode para
+		// string->numeric, ELE FALHA, e o pgx constroi um erro so para cair
+		// no plano seguinte. Uma vez por linha. No profile de uma carga de 10
+		// mil linhas isso era ~30% das alocacoes, todas em newEncodeError,
+		// fmt.Errorf e fmt.Sprintf -- trabalho para produzir um erro que
+		// ninguem le.
+		return paraNumeric(v)
 
 	case "json", "jsonb":
 		// Um mapa ou slice vai serializado; uma string ja e o documento.
@@ -67,6 +75,25 @@ func paraColuna(v any, tipo string) (any, error) {
 	default:
 		return v, nil
 	}
+}
+
+// paraNumeric entrega o tipo que o pgx encoda direto.
+//
+// Um valor que nao seja texto decimal passa como veio: quem recusa e o
+// servidor, com a mensagem dele, que e melhor que uma nossa adivinhando.
+func paraNumeric(v any) (any, error) {
+	texto, ehTexto := v.(string)
+	if !ehTexto {
+		return v, nil
+	}
+	var n pgtype.Numeric
+	if err := n.Scan(texto); err != nil {
+		// O erro do pgtype e NAO embrulhado: ele ecoa o valor recebido
+		// inteiro, e um campo de 4 KB numa mensagem de erro vai para log
+		// levando dado que ninguem quer la. Foi o teste do tamanho que pegou.
+		return nil, fmt.Errorf("%q is not a number this column accepts", elidir(texto))
+	}
+	return n, nil
 }
 
 // paraInstante aceita as tres formas em que um instante chega num registro.

@@ -508,6 +508,36 @@ it, then `MERGE … WHEN NOT MATCHED THEN INSERT` with the column list **named**
 Named always: the BigQuery `INSERT ROW` matches by position, and v0.12.0 shipped
 with the columns swapped because nobody had seen the generated SQL.
 
+## What each destination supports
+
+Nine drivers times four options is 36 combinations, and promising 36 without
+measuring is how a default reaches documentation that the code does not have.
+**The table below is a test** — `capabilities_test.go` checks every row against
+the code and fails if a driver accepts an option it does not implement.
+
+| destination | `Dedup` | `CreateTable` |
+|---|---|---|
+| `bigquery.Table` | `MERGE` | **yes** — BigQuery infers the types |
+| `postgres.Table` | `ON CONFLICT DO NOTHING` | **no such field** — the table must exist |
+| `mysql.Table` | `INSERT IGNORE` | **no such field** |
+| `redshift.Table` | `MERGE … WHEN NOT MATCHED` | **no such field** |
+| `to.Files` | **refused**, naming the field | **no such field** |
+
+Only BigQuery creates tables, because only BigQuery has a service that infers
+column types from the data. Guessing `NUMERIC(18,2)` from a JSON number is the
+one thing this SDK will not do, so the other three name the columns the batch
+carries and let you write the DDL.
+
+Measured throughput, 10k rows of 5 columns against the compose containers —
+useful for comparing strategies, not as a production promise:
+
+| destination | strategy | rows/s |
+|---|---|---|
+| `postgres.Table` | `COPY FROM STDIN` | ~434,000 |
+| `mysql.Table` | multi-row `INSERT` | ~137,000 |
+
+The gap is `COPY` versus `INSERT`, not care: MySQL has no reliable `COPY`.
+
 ## Pagination
 
 Four strategies, picked by which field you set. Setting two is an error, not a

@@ -48,6 +48,50 @@ perdedora seria um campo escrito que não faz nada.
 **Todo 2xx** chega ao `Records`, `204` e `206` incluídos. Não-2xx é erro com
 status e corpo, com retry onde faz sentido.
 
+## A matriz, e o que ela promete
+
+Nove drivers com `Metadata`, `Dedup`, `CreateTable` e `Preview` são 36
+combinações. **Esta tabela é um teste**, não um texto: `sdk/capabilities_test.go`
+confere cada linha contra o código, e falha se um driver aceitar uma opção sem
+implementá-la.
+
+Para cada combinação só há duas respostas aceitáveis. A terceira — "aceita e
+ignora" — é a classe de defeito que este projeto mais encontrou em si mesmo.
+
+| destino | `Dedup` | `CreateTable` | `Preview` | `Metadata` |
+|---|---|---|---|---|
+| `bigquery.Table` | `MERGE` | **sim**, o BigQuery infere os tipos | sim | transformers |
+| `postgres.Table` | `ON CONFLICT DO NOTHING` | **não existe** — a tabela precisa existir | sim | transformers |
+| `mysql.Table` | `INSERT IGNORE` | **não existe** | sim | transformers |
+| `redshift.Table` | `MERGE … WHEN NOT MATCHED` | **não existe** | sim | transformers |
+| `to.Files` | **recusado**, nomeando `Dedup` | **não existe** | sim | transformers |
+
+**Por que só o BigQuery cria tabela.** Ele tem um serviço que infere os tipos a
+partir do dado, e a `v0.16.0` usa exatamente isso, sobrepondo só as duas colunas
+do SDK. Postgres, MySQL e Redshift não têm equivalente, e deduzir
+`NUMERIC(18,2)` de um número do `encoding/json` seria adivinhar — a única coisa
+que este SDK decidiu não fazer. Nos três, o erro lista as colunas do lote para o
+DDL sair de uma leitura.
+
+**Um diretório não tem chave única nem esquema**, então `to.Files` recusa
+`Dedup` em vez de oferecer uma flag que não faz nada.
+
+## Vazão medida
+
+Números de `-bench Carga…`, contra os containers do `docker-compose.drivers.yml`,
+10 mil linhas de 5 colunas por execução. **Servem para comparar as estratégias,
+não como promessa de produção** — a máquina, a rede e a largura da linha mudam
+tudo.
+
+| destino | estratégia | linhas/s | alocações por linha |
+|---|---|---|---|
+| `postgres.Table` | `COPY FROM STDIN` | ~434 000 | ~19 |
+| `mysql.Table` | `INSERT` multi-linha | ~137 000 | ~1 |
+
+A diferença de vazão é a diferença entre `COPY` e `INSERT`, e não de cuidado: o
+MySQL não tem `COPY` confiável. A de alocações é o inverso — o caminho do pgx
+tipa cada valor, e o do `database/sql` passa `any` adiante.
+
 ### `from/postgres` e `to/postgres`, ponto a ponto
 
 | | |

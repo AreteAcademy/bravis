@@ -8,6 +8,52 @@ A tag de um módulo aninhado leva o prefixo do diretório: `sdk/v0.2.1`.
 
 ---
 
+## [0.33.0] — 2026-09-05
+
+Fase 5 do plano dos drivers: **o que um lançamento exige.** Não é feature.
+
+### A matriz de compatibilidade virou teste
+
+Nove drivers com `Metadata`, `Dedup`, `CreateTable` e `Preview` são 36
+combinações, e prometer as 36 sem medir é como um default chega à documentação
+sem estar no código. `capabilities_test.go` confere cada linha contra o código.
+
+Para cada combinação só há duas respostas aceitáveis — **suportado** ou
+**recusado nomeando o campo**. A terceira, "aceita e ignora", é a classe de
+defeito que este projeto mais encontrou em si mesmo, e agora o teste a impede.
+
+### Um exemplo executável por driver
+
+`examples/12-postgres` roda ponta a ponta contra o compose, cria o próprio DDL
+(porque o driver não cria e não infere tipo) e prova a dedup na segunda
+execução. Existe porque foi um exemplo que não rodava que achou o buraco do
+`03-basic-load`.
+
+### Vazão medida
+
+| destino | estratégia | linhas/s |
+|---|---|---|
+| `postgres.Table` | `COPY FROM STDIN` | ~434 000 |
+| `mysql.Table` | `INSERT` multi-linha | ~137 000 |
+
+10 mil linhas de 5 colunas contra os containers. Serve para comparar
+estratégias, não como promessa de produção.
+
+### Corrigido
+
+**Contador sempre zero saiu da linha do pipeline.** Os drivers SQL não contam
+bytes, então `extract_bytes=0 bytes=0 formato=""` aparecia em toda execução
+deles — ensinando quem lê a pular esses campos. E aí, quando um pipeline de HTTP
+mostrasse zero de verdade, ninguém veria. "Um número que é sempre zero é pior
+que número nenhum" é princípio escrito deste projeto, e a linha o violava.
+
+**`+23% de vazão no Postgres`, e −34% de alocações.** Passar a string crua numa
+coluna `numeric` fazia o pgx tentar um plano de encode, falhar e construir um
+erro para cair no seguinte — uma vez por linha. Era ~30% das alocações da carga:
+trabalho para produzir um erro que ninguém lê.
+
+---
+
 ## [0.32.0] — 2026-09-05
 
 Fase 4 do plano dos drivers: **Redshift no load.**

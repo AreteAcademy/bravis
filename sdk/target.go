@@ -124,16 +124,30 @@ func (r *Result) Args() []any {
 		"ignored", r.Ignored,
 		"paginas", r.Pages,
 		"attempts", r.Attempts,
-		"extract_bytes", r.ExtractBytes,
-		"bytes", r.Bytes,
 		"table", r.Table,
 		"estrategia", r.Strategy,
-		"formato", r.Format,
 		"dedup", r.Dedup,
 		"tabela_criada", r.TableCreated,
 		"extract", r.ExtractTime,
 		"load", r.LoadTime,
 		"duracao", r.Duration,
+	}
+
+	// Contadores que nem todo driver preenche saem quando estao zerados.
+	//
+	// "um numero que e sempre zero e pior que numero nenhum" e principio deste
+	// projeto, e a linha de um pipeline SQL o violava: os drivers de banco nao
+	// contam bytes, entao `extract_bytes=0 bytes=0 formato=""` aparecia em
+	// toda execucao, ensinando quem le a pular esses campos -- e quando o
+	// pipeline de HTTP mostrasse zero de verdade, ninguem veria.
+	if r.ExtractBytes > 0 {
+		args = append(args, "extract_bytes", r.ExtractBytes)
+	}
+	if r.Bytes > 0 {
+		args = append(args, "bytes", r.Bytes)
+	}
+	if r.Format != "" {
+		args = append(args, "formato", r.Format)
 	}
 	// Only when there is one: a key that is always the zero time on every
 	// line teaches people to skip it, and then it is invisible on the one
