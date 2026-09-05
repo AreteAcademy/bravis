@@ -187,38 +187,64 @@ para log, listagem e backup.
 Hoje ele não monta nada. `internal/execution/kubernetes/pod.go` tem `PodSpec` sem
 `Volumes` e `Container` sem `VolumeMounts`.
 
-O que entra, seguindo o padrão que o motor já usa para secrets
-(`BREVIS_POD_ENV_FROM_SECRETS`):
+**Sem PV e sem PVC.** O driver do GCS Fuse aceita o volume declarado **dentro do
+pod**, como CSI efêmero. Isso importa por três razões, e a primeira foi o pedido
+de quem consome:
+
+- **o volume fica isolado neste serviço**: ele existe só nos pods que o motor
+  cria para esta pipeline, e some com eles. Não há objeto compartilhado;
+- **`PersistentVolume` é recurso de CLUSTER**, não de namespace. Um PV vive fora
+  do `data`, e ainda que o `claimRef` o prenda a uma reivindicação, ele continua
+  sendo um objeto do cluster inteiro;
+- **nada fica `Pending`**. Sem PVC não há binding para falhar enquanto o resto
+  não estiver pronto.
+
+A persistência não se perde: o efêmero é o *mount*, não o dado — ele mora no
+bucket.
+
+### O motor injeta volumes, e não sabe o que é GCS Fuse
+
+A tentação é o motor ganhar `BREVIS_POD_CREDENTIAL_BUCKET` e montar o CSI do
+GKE. **Não faça** — isso põe `gcsfuse.csi.storage.gke.io` dentro de um motor que
+também roda em outro lugar.
+
+Ele ganha passagem, não conhecimento:
 
 ```
-BREVIS_POD_CREDENTIAL_PVC   nome do PersistentVolumeClaim
-BREVIS_POD_CREDENTIAL_PATH  onde montar; default /var/brevis/credentials
+BREVIS_POD_VOLUMES        JSON do array `volumes` do pod, injetado literal
+BREVIS_POD_VOLUME_MOUNTS  JSON do array `volumeMounts` do container
+BREVIS_POD_ANNOTATIONS    chave=valor,chave=valor
 ```
 
-Com os dois definidos, todo pod de passo ganha o volume e a env
-`BREVIS_CREDENTIAL_DIR` apontando para o mount. Sem eles, nada muda — e é assim
-que a feature continua sendo atalho, não requisito.
-
-**E uma anotação, que é fácil não descobrir.** O GCS Fuse no GKE injeta um
-sidecar, e ele só entra quando o pod traz:
+O que é do GKE fica na config da instalação, em `zarv-applications`:
 
 ```yaml
-metadata:
-  annotations:
-    gke-gcsfuse/volumes: "true"
+- name: BREVIS_POD_ANNOTATIONS
+  value: "gke-gcsfuse/volumes=true"
+- name: BREVIS_POD_VOLUMES
+  value: |
+    [{"name":"credenciais","csi":{"driver":"gcsfuse.csi.storage.gke.io",
+      "volumeAttributes":{"bucketName":"zarv-data-pipeline-credentials",
+      "mountOptions":"implicit-dirs,uid=65532,gid=65532,file-mode=600,dir-mode=700"}}}]
+- name: BREVIS_POD_VOLUME_MOUNTS
+  value: '[{"name":"credenciais","mountPath":"/var/brevis/credentials"}]'
+- name: BREVIS_CREDENTIAL_DIR     # repassado à task, e é o que o SDK lê
+  value: /var/brevis/credentials
 ```
 
-Sem ela o pod sobe, o volume **não** monta, e o erro aparece como
-"no such file or directory" no caminho da credencial — apontando para o SDK, que
-não tem culpa. O motor já escreve anotações próprias em
-`internal/execution/kubernetes/pod.go:372` (`brevis.dev/workflow`, `/node`,
-`/run`), então o lugar existe; o que falta é ela ser configurável, porque é
-específica do GKE e não pode ficar embutida num motor que também roda em outro
-lugar.
+Com isso o mesmo motor serve EFS na AWS, `hostPath` numa máquina, ou nada — e
+trocar de nuvem é editar um YAML de deploy, não recompilar.
 
-Sugestão: `BREVIS_POD_ANNOTATIONS` no formato `chave=valor,chave=valor`, do mesmo
-jeito que `BREVIS_POD_ENV_FROM_SECRETS` já é uma lista. Assim a anotação do
-gcsfuse é config de instalação, não código.
+Três coisas nessa config que quebram caladas:
+
+- **`uid=65532`**, porque a imagem dos passos é distroless nonroot. Sem isso o
+  diretório vem de root e a gravação falha **depois** de a carga ter acontecido;
+- **a anotação `gke-gcsfuse/volumes`**, sem a qual o sidecar não é injetado, o
+  volume não monta, e o erro aparece como "no such file or directory" apontando
+  para o SDK, que não tem culpa;
+- **`BREVIS_CREDENTIAL_DIR` precisa chegar à task**, não ao scheduler — ou seja,
+  entrar também na lista do `BREVIS_TASK_ENV`. É a mesma pegadinha que fez o
+  `GABRIEL_SESSION_COOKIE` chegar como vazio.
 
 ### O cluster é GKE, não EKS
 
@@ -269,7 +295,8 @@ repositórios e times diferentes.
 | 1 | **Consertar o §9** | `brevis/sdk` | tudo — sem ele não há o que salvar |
 | 2 | Confirmar o **GCS Fuse CSI** habilitado no cluster de dev | GKE, addon `gcsFuseCsiDriver` | o 4 |
 | 3 | Criar o **bucket** e dar `roles/storage.objectAdmin` à service account dos pods | GCP | o 4 |
-| 4 | **PVC + deploy** apontando para o bucket | `zarv-applications`, via ArgoCD | o 6 |
+|   | *(feito: `zarv-data-pipeline-credentials`, us-central1, acesso uniforme, público bloqueado, versionamento com expurgo de versões antigas em 7 dias, IAM só para `zarv-data@`)* | | |
+| 4 | **Config do volume** no deployment do scheduler | `zarv-applications`, via ArgoCD | o 6 |
 | 5 | `Volumes`/`VolumeMounts` no `PodSpec` e as duas env vars | `brevis` motor → release `0.4.0` | o 6 |
 | 6 | `Refresh.Store` e o `FileStore` | `brevis/sdk` → `v0.28.0` | o 7 |
 | 7 | Religar o `Refresh` no fetcher e provar | `zarv-data-pipeline` | — |
@@ -308,10 +335,13 @@ começou.
 
 **Motor (`0.4.0`)**
 
-10. `PodSpec.Volumes` e `Container.VolumeMounts` existem.
-11. `BREVIS_POD_CREDENTIAL_PVC` e `..._PATH` montam o volume em todo pod de passo
-    e injetam `BREVIS_CREDENTIAL_DIR`. Ausentes, nada muda.
-12. Documentado em `docs/KUBERNETES.md`, com o PVC de exemplo para GCS Fuse.
+10. `PodSpec.Volumes` e `Container.VolumeMounts` existem, e o motor os injeta
+    **literalmente** do que a config disser — sem conhecer driver nenhum.
+11. `BREVIS_POD_VOLUMES`, `BREVIS_POD_VOLUME_MOUNTS` e `BREVIS_POD_ANNOTATIONS`
+    são pass-through. Ausentes, nada muda. JSON inválido falha **na subida do
+    scheduler**, não no primeiro pod.
+12. Documentado em `docs/KUBERNETES.md`, com o bloco de config do GCS Fuse — e
+    dizendo que o motor **não** conhece o driver, só repassa o volume.
 
 **A prova**
 
