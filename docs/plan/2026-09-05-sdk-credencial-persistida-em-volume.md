@@ -191,6 +191,35 @@ risco é baixo, mas precisa estar escrito — e é mais um argumento para o lock
 
 ---
 
+## 6.1 A ordem dos passos, e quem faz cada um
+
+Nada aqui pode começar pelo meio. A ordem importa porque três dos passos são de
+repositórios e times diferentes.
+
+| # | passo | onde | bloqueia |
+|---|---|---|---|
+| 1 | **Consertar o §9** | `brevis/sdk` | tudo — sem ele não há o que salvar |
+| 2 | Confirmar o **GCS Fuse CSI** habilitado no cluster de dev | GKE, addon `gcsFuseCsiDriver` | o 4 |
+| 3 | Criar o **bucket** e dar `roles/storage.objectAdmin` à service account dos pods | GCP | o 4 |
+| 4 | **PVC + deploy** apontando para o bucket | `zarv-applications`, via ArgoCD | o 6 |
+| 5 | `Volumes`/`VolumeMounts` no `PodSpec` e as duas env vars | `brevis` motor → release `0.4.0` | o 6 |
+| 6 | `Refresh.Store` e o `FileStore` | `brevis/sdk` → `v0.28.0` | o 7 |
+| 7 | Religar o `Refresh` no fetcher e provar | `zarv-data-pipeline` | — |
+
+Os passos **2 e 3 podem ser feitos hoje**, em paralelo com o 1, e são os únicos
+que dependem de acesso a console.
+
+### Duas coisas que travam a cadeia e não são desta spec
+
+**A imagem do motor ainda se chama `bravis`.** `daniel3843/brevis` existe no
+Docker Hub **sem tags**, e a `VERSION 0.3.0` foi marcada antes da renomeação —
+então a imagem publicada ainda lê `BRAVIS_*`. O passo 5 produz uma release nova;
+é a hora de resolver isso junto, ou a env do volume nasce com o prefixo errado.
+
+**O passo 7 depende do 1 para valer.** Religar o `Refresh` sem o §9 devolve o
+erro `refresh response has no field "expires"` — que foi como esta sequência
+começou.
+
 ## 7. Critério de pronto
 
 **SDK (`v0.28.0`)**
