@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"strings"
 	"testing"
@@ -587,7 +588,9 @@ func TestDataStatsIsReadableWithoutLoad(t *testing.T) {
 
 	// Must not panic on a nil Data or one that never ran.
 	var none *Data
-	if none.Stats() != (Stats{}) {
+	// reflect.DeepEqual e nao ==: o Stats ganhou um slice na v0.39.0, e um
+	// struct com slice nao e comparavel.
+	if !reflect.DeepEqual(none.Stats(), Stats{}) {
 		t.Error("Stats() on a nil Data should be the zero value")
 	}
 }

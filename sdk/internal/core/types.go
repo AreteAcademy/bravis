@@ -310,6 +310,13 @@ type Stats struct {
 	// reads is the same failure with extra steps.
 	CredentialExpiry time.Time
 
+	// FailedSources sao as origens que falharam e foram toleradas.
+	//
+	// Vazio quando nao ha fonte composta, ou quando nenhuma falhou. Cheio, ele
+	// e a unica coisa que permite reprocessar so o que faltou -- sem ele, a
+	// proxima execucao refaz tudo.
+	FailedSources []SourceFailure
+
 	// CredentialStoreError diz que a credencial rotacionada NAO foi guardada,
 	// e por que. Vazio quando nao ha store ou quando gravou.
 	//

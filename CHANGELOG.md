@@ -8,6 +8,57 @@ A tag de um módulo aninhado leva o prefixo do diretório: `sdk/v0.2.1`.
 
 ---
 
+## [0.39.0] — 2026-09-05
+
+Item 2 da contribuição de consumidor — **o maior**, e o que ela diz separar
+"cliente HTTP com transformers" de "biblioteca de ETL".
+
+### `from.Many`
+
+```go
+From: from.Many{Sources: fontes, Workers: 8, OnError: sdk.ContinueOnError},
+```
+
+Todo ETL que lê de muitas origens escreve o mesmo laço. Este é ele.
+
+**O padrão continua abortando na primeira falha**, que é o que o SDK sempre fez:
+mudá-lo em silêncio faria uma execução que hoje falha passar a "dar certo" com
+metade do dado. O que faltava era **poder escolher**.
+
+Com `ContinueOnError`, a origem que falha vai para `Result.FailedSources` e a
+leitura segue. É a política que o load já tinha para uma linha ruim — ele a
+reporta em `ErrorRows` e continua —, e a assimetria entre os dois lados era o
+que o item apontava.
+
+**Todas falharem não é "zero linhas".** Zero registro de N origens boas é um
+resultado; zero porque as N falharam é uma execução quebrada, e as duas não
+podem parecer a mesma coisa num log.
+
+**A ordem** é determinística com `Workers` em 0 ou 1, e não é acima disso. Isso
+não afeta o `ingestion_id`, que sai dos campos e não da posição; afeta o preview
+e o que depender de ordem. Concorrência é opt-in por isso.
+
+### `Target.FlushEvery`
+
+Escreve a cada N registros em vez de acumular a leitura inteira.
+
+O que se paga está escrito no campo: **a carga deixa de ser atômica.** Uma falha
+na terceira leva deixa as duas primeiras gravadas, e a re-execução depende de
+`Dedup`. O `Result` soma as levas e volta **mesmo na falha** — esconder que 40
+mil linhas já entraram seria pior que dizer.
+
+A proposta oferecia "`Load` aceitando um iterador **ou** descarregando a cada N".
+O iterador mudaria a assinatura de `Writer.Write` e quebraria os cinco drivers;
+`FlushEvery` é aditivo e resolve o mesmo problema.
+
+### Um defeito que o teste de configuração inválida achou
+
+`Many.Describe()` estourava com uma origem `nil` — e `Describe` é chamado no
+caminho de **erro**, que é onde a mensagem mais importa. Uma configuração
+inválida derrubava o processo em vez de dizer o que estava errado.
+
+---
+
 ## [0.38.0] — 2026-09-05
 
 Itens 1 e 3 da contribuição de consumidor.

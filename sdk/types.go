@@ -53,6 +53,12 @@ type (
 	// LoadResult is the low-level load outcome. Prefer Result.
 	LoadResult = core.LoadResult
 
+	// SourceFailure diz qual origem falhou e por quê, numa fonte composta.
+	SourceFailure = core.SourceFailure
+
+	// FailurePolicy diz o que from.Many faz quando uma origem falha.
+	FailurePolicy = core.FailurePolicy
+
 	// Schema is the destination's declaration with a type on each column, and
 	// it is what a destination needs in order to CREATE the table. See
 	// Target.Schema.
@@ -143,4 +149,10 @@ const (
 	TypeDate      = core.TypeDate
 	TypeJSON      = core.TypeJSON
 	TypeBytes     = core.TypeBytes
+)
+
+// As políticas de falha de uma fonte composta. Ver from.Many.
+const (
+	AbortOnError    = core.AbortOnError
+	ContinueOnError = core.ContinueOnError
 )

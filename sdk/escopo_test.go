@@ -3,6 +3,7 @@ package sdk_test
 import (
 	"context"
 	"fmt"
+	"iter"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -185,4 +186,101 @@ func TestNamespaceEscolhidoEDeterministico(t *testing.T) {
 		}
 		anterior = got
 	}
+}
+
+// destinoQueConta registra cada leva que recebe.
+type destinoQueConta struct {
+	levas    [][]int
+	falharEm int // > 0: a leva N falha
+}
+
+func (d *destinoQueConta) Describe() string { return "destino de teste" }
+
+func (d *destinoQueConta) Write(_ context.Context, envs []sdk.Envelope, _ sdk.WriteOptions) (*sdk.LoadResult, error) {
+	var ids []int
+	for _, e := range envs {
+		ids = append(ids, e.Payload.(map[string]any)["i"].(int))
+	}
+	d.levas = append(d.levas, ids)
+	if d.falharEm > 0 && len(d.levas) == d.falharEm {
+		return &sdk.LoadResult{RowsLoaded: 0}, fmt.Errorf("a leva %d falhou", d.falharEm)
+	}
+	return &sdk.LoadResult{RowsLoaded: int64(len(envs))}, nil
+}
+
+// TestFlushEveryEscreveEmLevas: uma leitura longa não pode ter o lote inteiro
+// vivo em memória, e o destino monta uma segunda cópia dele para serializar.
+func TestFlushEveryEscreveEmLevas(t *testing.T) {
+	destino := &destinoQueConta{}
+	res, err := sdk.Load(context.Background(), dadosDe(t, 10), sdk.Target{
+		To: destino, FlushEvery: 3,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(destino.levas) != 4 {
+		t.Fatalf("%d levas, esperado 4 (3+3+3+1)", len(destino.levas))
+	}
+	if len(destino.levas[3]) != 1 {
+		t.Errorf("a última leva tem %d, esperado 1", len(destino.levas[3]))
+	}
+
+	// O Result soma as levas. Um Rows que contasse só a última mentiria para
+	// quem lê a linha do pipeline.
+	if res.Rows != 10 || res.Records != 10 {
+		t.Errorf("Rows=%d Records=%d, esperado 10 e 10", res.Rows, res.Records)
+	}
+}
+
+// TestFlushEveryZeroAcumulaTudo: o padrão não muda.
+func TestFlushEveryZeroAcumulaTudo(t *testing.T) {
+	destino := &destinoQueConta{}
+	if _, err := sdk.Load(context.Background(), dadosDe(t, 10), sdk.Target{To: destino}); err != nil {
+		t.Fatal(err)
+	}
+	if len(destino.levas) != 1 || len(destino.levas[0]) != 10 {
+		t.Errorf("levas = %v; sem FlushEvery a carga é uma só", destino.levas)
+	}
+}
+
+// TestFlushEveryFalhaNoMeioDizOQueJaEntrou: a carga deixa de ser atômica, e
+// esconder que as levas anteriores gravaram seria pior que dizer -- quem
+// reexecuta precisa saber que 6 linhas já estão lá.
+func TestFlushEveryFalhaNoMeioDizOQueJaEntrou(t *testing.T) {
+	destino := &destinoQueConta{falharEm: 3}
+	res, err := sdk.Load(context.Background(), dadosDe(t, 10), sdk.Target{
+		To: destino, FlushEvery: 3,
+	})
+	if err == nil {
+		t.Fatal("a leva falhou e o Load deu certo")
+	}
+	if res == nil {
+		t.Fatal("o Result não voltou; quem reexecuta não saberia o que já entrou")
+	}
+	if res.Rows != 6 {
+		t.Errorf("Rows = %d, esperado 6 -- as duas primeiras levas gravaram", res.Rows)
+	}
+}
+
+func dadosDe(t *testing.T, n int) *sdk.Data {
+	t.Helper()
+	dados, err := sdk.Extract(context.Background(), sdk.Source{From: fonteDeN{n}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return dados
+}
+
+type fonteDeN struct{ n int }
+
+func (fonteDeN) Describe() string { return "fonte de teste" }
+func (f fonteDeN) Read(context.Context, sdk.ReadOptions) (iter.Seq2[sdk.Envelope, error], error) {
+	return func(yield func(sdk.Envelope, error) bool) {
+		for i := 0; i < f.n; i++ {
+			if !yield(sdk.Envelope{Payload: map[string]any{"i": i}}, nil) {
+				return
+			}
+		}
+	}, nil
 }

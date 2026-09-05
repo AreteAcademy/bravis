@@ -78,6 +78,26 @@ type Target struct {
 	// DedupMerge costs, and whether a destination supports it at all, is the
 	// driver's to say.
 	Dedup core.Dedup
+
+	// FlushEvery escreve a cada N registros lidos, em vez de acumular a
+	// leitura inteira em memoria. Zero acumula tudo, que continua sendo o
+	// padrao.
+	//
+	// Uma leitura de milhares de origens nao cabe necessariamente na memoria:
+	// o lote inteiro fica vivo, e o destino monta uma SEGUNDA copia dele para
+	// serializar. Com FlushEvery, o teto e N registros mais a copia de N.
+	//
+	// O que se paga por isso, e precisa ser dito:
+	//
+	//   - a carga deixa de ser ATOMICA. Uma falha na terceira leva deixa as
+	//     duas primeiras gravadas, e a re-execucao depende de Dedup para nao
+	//     duplicar. Sem DedupMerge, uma falha no meio duplica o que ja entrou.
+	//   - com DedupMerge cada leva paga o proprio MERGE, entao N pequeno
+	//     multiplica o custo no destino.
+	//
+	// O Result soma as levas: Rows, Ignored e Bytes sao o total, e RowErrors
+	// junta as de todas.
+	FlushEvery int
 }
 
 // ValidateTarget confere o que a fachada consegue conferir sem tocar o
@@ -168,6 +188,14 @@ type Result struct {
 	// cai na semente. Vazio quando nao ha store ou quando gravou.
 	CredentialStoreError string
 
+	// FailedSources sao as origens que falharam e foram toleradas por
+	// from.Many com ContinueOnError. Vazio quando nao houve.
+	//
+	// Ele esta aqui, e nao so no log, porque e a unica coisa que permite
+	// reprocessar o que faltou. Um fan-out que perde 3.000 de 4.803 origens e
+	// nao diz quais obriga a proxima execucao a refazer tudo.
+	FailedSources []core.SourceFailure
+
 	// Diagnostics the destination reported per row, when it refused any.
 	RowErrors []string
 
@@ -217,6 +245,9 @@ func (r *Result) Args() []any {
 	}
 	if r.CredentialStoreError != "" {
 		args = append(args, "credential_not_saved", r.CredentialStoreError)
+	}
+	if n := len(r.FailedSources); n > 0 {
+		args = append(args, "fontes_falharam", n)
 	}
 	return args
 }

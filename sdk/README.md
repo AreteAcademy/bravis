@@ -508,6 +508,54 @@ it, then `MERGE … WHEN NOT MATCHED THEN INSERT` with the column list **named**
 Named always: the BigQuery `INSERT ROW` matches by position, and v0.12.0 shipped
 with the columns swapped because nobody had seen the generated SQL.
 
+## Reading from many sources
+
+```go
+From: from.Many{
+    Sources: fontes,             // one per municipality, per account, per day
+    Workers: 8,
+    OnError: sdk.ContinueOnError,
+},
+```
+
+Every ETL that reads from many origins writes the same loop: iterate, tolerate
+some failures, record which ones failed, accumulate. This is that loop, written
+once.
+
+**`AbortOnError` is the default and stays the default** — it is what the SDK has
+always done, and changing it silently would make a run that fails today start
+"succeeding" with half the data. What was missing is the choice.
+
+With `ContinueOnError`, a source that fails lands in `Result.FailedSources` and
+the read carries on. That mirrors what the load has always done for a bad row —
+it reports it in `ErrorRows` and continues — and the asymmetry between the two
+sides was the gap. In a fan-out of 4,803 origins, read 3,000 failing used to
+take down the 1,803 that had already worked, and the next run redid all 3,000.
+
+**All sources failing is not "zero rows".** Zero rows from N healthy sources is
+a result; zero because all N failed is a broken run, and the two must not read
+the same in a log — so that case is an error naming the first failure.
+
+**Order.** With `Workers` at 0 or 1 the sources are read in order and the
+sequence is deterministic. Above that it is not: records arrive as the origins
+answer. That does not affect `ingestion_id`, which comes from the record's
+fields and not its position — it affects the preview and anything else that
+depends on order. Concurrency is opt-in for that reason.
+
+### Bounded memory
+
+```go
+Target: sdk.Target{To: ..., FlushEvery: 50_000},
+```
+
+Without it the whole read stays in memory, and the destination builds a second
+copy of it to serialize. With it the ceiling is N records plus the copy of N.
+
+What it costs, and it needs saying: **the load stops being atomic.** A failure
+on the third batch leaves the first two written, and re-running depends on
+`Dedup` not to duplicate. The `Result` sums the batches and comes back even on
+failure — hiding that 40,000 rows already landed would be worse than saying it.
+
 ## Identity is yours, not the library's
 
 `ingestion_id` is a UUID v5 over `provider|entity|source_key|record_ts`. The

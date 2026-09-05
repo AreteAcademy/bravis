@@ -165,6 +165,10 @@ func loadWith(ctx context.Context, data *Data, target Target, run RunContext) (*
 		return nil, err
 	}
 
+	if target.FlushEvery > 0 {
+		return loadEmLevas(ctx, data, target, run, start)
+	}
+
 	envelopes, err := collect(data, target)
 	if err != nil {
 		return nil, err
@@ -183,6 +187,7 @@ func loadWith(ctx context.Context, data *Data, target Target, run RunContext) (*
 		res.ExtractBytes = data.stats.Bytes
 		res.CredentialExpiry = data.stats.CredentialExpiry
 		res.CredentialStoreError = data.stats.CredentialStoreError
+		res.FailedSources = data.stats.FailedSources
 	}
 
 	if len(envelopes) == 0 {
@@ -223,6 +228,84 @@ func collect(data *Data, _ Target) ([]Envelope, error) {
 		envelopes = append(envelopes, env)
 	}
 	return envelopes, nil
+}
+
+// loadEmLevas escreve a cada FlushEvery registros, para que uma leitura longa
+// tenha memoria limitada.
+//
+// A carga deixa de ser atomica, e isso esta dito no campo. Aqui esta o que o
+// codigo faz com isso: uma leva que falha PARA, e o Result devolvido carrega o
+// que as levas anteriores ja gravaram -- porque esconder que 40 mil linhas
+// entraram seria pior que dizer.
+func loadEmLevas(ctx context.Context, data *Data, target Target, run RunContext, start time.Time) (*Result, error) {
+	res := &Result{Table: target.To.Describe()}
+	opcoes := target.options(run)
+
+	leva := make([]Envelope, 0, target.FlushEvery)
+	var levas int
+
+	escrever := func() error {
+		if len(leva) == 0 {
+			return nil
+		}
+		levas++
+		inicio := time.Now()
+		lr, err := target.To.Write(ctx, leva, opcoes)
+		res.LoadTime += time.Since(inicio)
+		if lr != nil {
+			somar(res, lr)
+		}
+		leva = leva[:0]
+		return err
+	}
+
+	for env, err := range data.Records {
+		if err != nil {
+			res.ExtractTime = time.Since(data.start)
+			res.Duration = time.Since(start)
+			return res, err
+		}
+		res.Records++
+		leva = append(leva, env)
+		if len(leva) >= target.FlushEvery {
+			if err := escrever(); err != nil {
+				res.ExtractTime = time.Since(data.start)
+				res.Duration = time.Since(start)
+				return res, &TargetError{Table: res.Table, Rows: res.RowErrors, Cause: err}
+			}
+		}
+	}
+
+	erroFinal := escrever()
+
+	res.ExtractTime = time.Since(data.start)
+	res.Duration = time.Since(start)
+	if data.stats != nil {
+		res.Pages = data.stats.Pages
+		res.Attempts = data.stats.Attempts
+		res.ExtractBytes = data.stats.Bytes
+		res.CredentialExpiry = data.stats.CredentialExpiry
+		res.CredentialStoreError = data.stats.CredentialStoreError
+		res.FailedSources = data.stats.FailedSources
+	}
+	if erroFinal != nil {
+		return res, &TargetError{Table: res.Table, Rows: res.RowErrors, Cause: erroFinal}
+	}
+	return res, nil
+}
+
+// somar acumula uma leva no resultado. Diferente de apply, que substitui: com
+// levas, o total e a soma, e um Rows que so contasse a ultima leva mentiria
+// para quem le a linha do pipeline.
+func somar(res *Result, lr *core.LoadResult) {
+	res.Rows += lr.RowsLoaded
+	res.Ignored += lr.RowsIgnored
+	res.Bytes += lr.BytesStaged
+	res.Strategy = lr.Strategy
+	res.Format = lr.Format
+	res.Dedup = lr.Dedup
+	res.TableCreated = res.TableCreated || lr.TableCreated
+	res.RowErrors = append(res.RowErrors, lr.ErrorRows...)
 }
 
 func apply(res *Result, lr *core.LoadResult) {

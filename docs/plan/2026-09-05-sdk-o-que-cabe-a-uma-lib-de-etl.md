@@ -290,7 +290,7 @@ cada item.
 | # | decisão | onde |
 |---|---|---|
 | 1 | **aceito**, com ressalva sobre os nomes das colunas | `v0.38.0` |
-| 2 | **aceito**, é o maior e o mais genérico | `v0.39.0` |
+| 2 | **aceito**, com desvio no terceiro sub-item | `v0.39.0` |
 | 3 | **aceito, com desvio** | `v0.38.0` |
 | 4 | **aceito, com desvio** | `v0.37.0` |
 | 5 | **aceito, com desvio** | `v0.37.0` |
@@ -319,6 +319,12 @@ conceito de ETL, mas "casar com a identidade de um sistema que já gravou" é.
 
 O subpacote foi feito junto, e não "talvez": a estrutura diz o que a prosa
 dizia.
+
+**Item 2.3 — `FlushEvery` em vez de um `Load` que aceita iterador.** As duas
+formas estavam na proposta; o iterador mudaria a assinatura de `Writer.Write` e
+quebraria os cinco drivers, e resolve o mesmo problema. O que ele custa — a
+carga deixar de ser atômica — está escrito no campo, e o `Result` volta mesmo na
+falha dizendo o que já entrou.
 
 **Item 3 — o `Snapshot` não é um transformer.** Como transformer ele dependeria
 da POSIÇÃO na cadeia, que é exatamente a classe de erro que o item descreve. Ele
