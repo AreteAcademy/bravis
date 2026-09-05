@@ -112,7 +112,7 @@ func fetch(ctx context.Context, source core.Source, records core.Reading) (iter.
 		return nil, err
 	}
 
-	client, err := newClient(source)
+	client, credJar, err := newClient(source)
 	if err != nil {
 		return nil, err
 	}
@@ -120,7 +120,7 @@ func fetch(ctx context.Context, source core.Source, records core.Reading) (iter.
 	ctxTotal, cancelTotal := context.WithTimeout(ctx, source.TotalTimeout)
 
 	if source.Auth != nil && source.Auth.Refresh != nil {
-		if err := renew(ctxTotal, client, source, source.Stats); err != nil {
+		if err := renew(ctxTotal, client, &source, credJar, source.Stats); err != nil {
 			cancelTotal()
 			return nil, err
 		}
@@ -221,6 +221,13 @@ func fetch(ctx context.Context, source core.Source, records core.Reading) (iter.
 			if source.Stats != nil {
 				source.Stats.Pages = pages
 			}
+			// Uma API pode reemitir a sessao em QUALQUER resposta, nao so na
+			// de renovacao. Antes o jar absorvia isso sozinho; agora que a
+			// credencial mora no cabecalho, aplicar e explicito -- e sem esta
+			// linha a pagina 2 iria com o valor que a pagina 1 acabou de
+			// substituir.
+			aplicarRotacao(&source, credJar.Rotacoes())
+
 			emitted, next, err := drainPage(ctxTotal, source, page, emit)
 			rows += emitted
 			page.close()
@@ -432,28 +439,28 @@ func checkPagination(source core.Source) error {
 // The jar has no public suffix list. A walk talks to one host, and pulling
 // x/net in as a direct dependency to police cookie domains would risk the
 // go.mod floor this SDK promises (1.23) on the next tidy.
-func newClient(source core.Source) (*http.Client, error) {
+func newClient(source core.Source) (*http.Client, *credentialJar, error) {
 	jar, err := cookiejar.New(nil)
 	if err != nil {
-		return nil, fmt.Errorf("cookie jar: %w", err)
+		return nil, nil, fmt.Errorf("cookie jar: %w", err)
 	}
 
-	// A Cookie header written by the caller seeds the jar, so that from here
-	// on there is exactly one place a cookie lives and a refreshed one
-	// replaces the old by name.
+	// Os nomes que a credencial ocupa saem do proprio cabecalho Cookie, que e
+	// onde o Applier acabou de escreve-la. Eles ficam de fora do jar e vao por
+	// cabecalho em toda requisicao -- ver credentialJar.
+	var nomes []string
 	if raw := http.Header(source.Header).Get("Cookie"); raw != "" {
-		u, err := url.Parse(source.URL)
-		if err != nil {
-			return nil, fmt.Errorf("parse url: %w", err)
-		}
 		cookies, err := http.ParseCookie(raw)
 		if err != nil {
-			return nil, fmt.Errorf("Header[\"Cookie\"] is not a valid cookie header: %w", err)
+			return nil, nil, fmt.Errorf("Header[\"Cookie\"] is not a valid cookie header: %w", err)
 		}
-		jar.SetCookies(u, cookies)
+		for _, c := range cookies {
+			nomes = append(nomes, c.Name)
+		}
 	}
 
-	return &http.Client{Timeout: source.Timeout, Jar: jar}, nil
+	cj := newCredentialJar(jar, nomes)
+	return &http.Client{Timeout: source.Timeout, Jar: cj}, cj, nil
 }
 
 // firstPageURL puts the page number on the very first request. Letting the
@@ -518,11 +525,10 @@ func fetchPage(ctxTotal context.Context, client *http.Client, source core.Source
 		if source.Header != nil {
 			req.Header = http.Header(source.Header).Clone()
 		}
-		// The jar is the single place cookies live, so a Cookie header the
-		// caller wrote is seeded into it and dropped here. Keeping both would
-		// send two values for the same name once the server refreshed it, and
-		// which one the server honours is anyone's guess.
-		req.Header.Del("Cookie")
+		// O cabecalho Cookie fica: e onde a credencial mora, e o
+		// credentialJar garante que o jar nunca guarda um cookie de mesmo
+		// nome -- entao nenhum nome vai duas vezes. Os outros cookies o
+		// cliente acrescenta a partir do jar.
 
 		resp, err = client.Do(req)
 

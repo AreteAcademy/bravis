@@ -8,6 +8,42 @@ A tag de um módulo aninhado leva o prefixo do diretório: `sdk/v0.2.1`.
 
 ---
 
+## [0.27.3] — 2026-09-05
+
+### Corrigido
+
+**A renovação de credencial ia sem a credencial** — §9 do `SDK_V9.md`, e a
+execução inteira morria por causa disso, não só a renovação:
+
+```
+error="refresh …/auth/session: refresh response has no field \"expires\""
+```
+
+`AsCookie` semeava o jar a partir da URL da **fonte**, e o `cookiejar` do Go, com
+um cookie sem `Path`, usa o diretório dessa URL. Com a fonte em
+`/api/proxy/occurrences`, a credencial ficava presa a `/api/proxy` e
+`/api/auth/session` não a recebia — a API respondia `null` para não autenticado,
+`ExpiresAt` não achava `expires`, e a execução parava antes da primeira página.
+
+Um `Refresh` com `ExpiresAt` era, portanto, **inutilizável** para qualquer fonte
+cuja URL de renovação não dividisse o prefixo de path com a dos dados — que é a
+disposição normal.
+
+O teste que existia usava uma fonte na raiz (`/dados`), cujo diretório é `/` e
+casa com tudo. **Passava porque a fonte estava na raiz, e nenhuma API de verdade
+está.**
+
+A credencial deixou de ser cookie de jar e passou a ser **cabeçalho**, que vale
+para toda requisição independentemente de path. Consertar só a ida não bastava:
+o cookie reemitido pela renovação voltava a ficar preso, agora em `/api/auth`, e
+as páginas seguiam com o valor velho.
+
+O jar continua para os demais cookies, e nenhum nome vai duas vezes — a
+invariante da `v0.26.0` se mantém. A rotação também é aplicada no laço de
+páginas, porque uma API pode reemitir a sessão em qualquer resposta.
+
+---
+
 ## [0.27.2] — 2026-09-04
 
 ### Corrigido

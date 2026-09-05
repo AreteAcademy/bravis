@@ -571,7 +571,7 @@ texto ainda não está certo.
 
 ---
 
-## 9. A renovação de credencial vai sem a credencial, e a execução morre — **v0.27.2**
+## 9. A renovação de credencial vai sem a credencial, e a execução morre — **RESOLVIDO na v0.27.3**
 
 `Auth.Refresh` existe para empurrar a janela de uma sessão que expira. No
 consumidor ele **não empurra nada**, e não avisa que não empurrou.
@@ -645,6 +645,30 @@ comportamento das páginas.
 
 **Como provar:** o teste existente, com a fonte em `/api/v1/dados` e a renovação
 em `/auth/session`. Hoje ele falha.
+
+### O que foi feito, na `v0.27.3`
+
+Nenhuma das duas opções isoladamente bastava, e a razão só apareceu ao escrever
+o teste. Semear o jar com `Path=/` conserta a ida — a renovação passa a receber
+a credencial. Mas o cookie que ela **reemite** volta a ficar preso, agora em
+`/api/auth`, e as páginas seguem com o valor velho: a renovação renova para
+ninguém, e o defeito reaparece na direção oposta.
+
+Então a credencial **deixou de ser cookie de jar** e passou a ser cabeçalho, que
+vale para toda requisição independentemente de path. O jar continua existindo
+para os demais cookies, e um `credentialJar` desvia os nomes da credencial antes
+que ele os guarde — o que mantém a invariante da `v0.26.0` (cada cookie mora num
+lugar só, nenhum nome vai duas vezes) e dá de brinde o que a spec do volume
+precisa: **o valor rotacionado fica na mão**, em vez de enterrado no jar.
+
+A rotação é aplicada também no laço de páginas, e não só após a renovação: uma
+API pode reemitir a sessão em qualquer resposta, e antes o jar absorvia isso
+sozinho. Sem essa linha, a página 2 iria com o valor que a página 1 acabou de
+substituir — regressão que o teste da `v0.26.0` pegou.
+
+O teste novo cobre as quatro disposições de path, e as três reversões (apagar o
+`Cookie` da renovação, não aplicar a rotação após ela, não aplicá-la no laço)
+derrubam cada uma o seu.
 
 > Não consegui conferir contra a API real do fornecedor: a credencial vivia numa
 > tabela que foi removida — corretamente, por ser o lugar errado — e ainda não

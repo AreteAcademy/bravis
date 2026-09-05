@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/AreteAcademy/brevis/sdk/internal/core"
@@ -46,6 +47,39 @@ func authenticate(ctx context.Context, source *core.Source) error {
 	return nil
 }
 
+// aplicarRotacao reescreve o cabecalho Cookie com os valores reemitidos.
+//
+// Reescreve por NOME, preservando os cookies que a renovacao nao tocou: um
+// cabecalho com dois cookies, dos quais a API reemitiu um, tem de continuar
+// com os dois.
+func aplicarRotacao(source *core.Source, rotacoes map[string]string) {
+	if len(rotacoes) == 0 {
+		return
+	}
+
+	h := http.Header(source.Header).Clone()
+	if h == nil {
+		h = http.Header{}
+	}
+	atuais, err := http.ParseCookie(h.Get("Cookie"))
+	if err != nil {
+		// O cabecalho foi montado pelo Applier e ja passou por ParseCookie na
+		// montagem do cliente; chegar aqui invalido nao deveria acontecer, e
+		// perder a rotacao e melhor que perder a credencial inteira.
+		return
+	}
+
+	var partes []string
+	for _, c := range atuais {
+		if novo, tem := rotacoes[c.Name]; tem {
+			c.Value = novo
+		}
+		partes = append(partes, c.Name+"="+c.Value)
+	}
+	h.Set("Cookie", strings.Join(partes, "; "))
+	source.Header = h
+}
+
 // renewRequest makes the refresh call, with the same retries the pages get.
 //
 // Without them the walk is lopsided: a blip on the data endpoint costs a
@@ -66,9 +100,10 @@ func renewRequest(ctx context.Context, client *http.Client, source core.Source, 
 		if err != nil {
 			return fail("%w", err)
 		}
+		// O cabecalho vai INTEIRO, com a credencial. Era exatamente isto que
+		// faltava no §9: a renovacao dependia do jar, o jar casava por path, e
+		// /api/auth/session nao casava com a fonte em /api/proxy.
 		req.Header = http.Header(source.Header).Clone()
-		// Same rule as the pages: the jar is where cookies come from.
-		req.Header.Del("Cookie")
 
 		resp, err := client.Do(req)
 		if err != nil {
@@ -108,7 +143,7 @@ func renewRequest(ctx context.Context, client *http.Client, source core.Source, 
 // It shares the walk's client, so a Set-Cookie in the response lands in the
 // jar and applies to every page that follows -- which is the whole mechanism.
 // Nothing is written anywhere: the reissued value lives for this run only.
-func renew(ctx context.Context, client *http.Client, source core.Source, stats *core.Stats) error {
+func renew(ctx context.Context, client *http.Client, source *core.Source, jar *credentialJar, stats *core.Stats) error {
 	r := source.Auth.Refresh
 
 	method := r.Method
@@ -116,10 +151,15 @@ func renew(ctx context.Context, client *http.Client, source core.Source, stats *
 		method = "GET"
 	}
 
-	body, err := renewRequest(ctx, client, source, method, r.URL)
+	body, err := renewRequest(ctx, client, *source, method, r.URL)
 	if err != nil {
 		return err
 	}
+
+	// O que a renovacao reemitiu passa a valer para as paginas. Sem isto a
+	// renovacao renova para ninguem: o valor novo ficaria so no jar, preso ao
+	// diretorio da URL de renovacao, e as paginas seguiriam com o antigo.
+	aplicarRotacao(source, jar.Rotacoes())
 
 	if r.ExpiresAt == nil {
 		return nil
