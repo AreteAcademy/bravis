@@ -71,6 +71,20 @@ tipo Go, que não distingue `DATE` de `TIMESTAMPTZ`.
 | `Dedup: DedupMerge` | `INSERT IGNORE`, com o mesmo índice único exigido |
 | tipos | de `information_schema.data_type` — sem ele, `DECIMAL` e `INT` virariam base64 |
 
+### `to/redshift`, ponto a ponto
+
+| | |
+|---|---|
+| `redshift.Table{DSN, Name, Staging, IAMRole, Store}` | `COPY` a partir do S3; **não há caminho inline** |
+| `IAMRole` | role ARN; **chave de acesso é recusada** — ela acabaria no log de query do cluster |
+| `Dedup: DedupMerge` | temp `LIKE` destino, `COPY`, `MERGE … WHEN NOT MATCHED`, `DROP` |
+| `KeepStagedFile` | deixa o objeto no S3 para inspeção |
+
+**Verificação parcial, e está no README e não no rodapé:** não existe imagem do
+Redshift. O que é testado sem cluster é a geração do SQL como função pura, a
+escrita do staging e a ordem dos comandos; o que **não** é testado é que um
+cluster de verdade aceita esse SQL.
+
 ### `from.Files`, ponto a ponto
 
 | | |

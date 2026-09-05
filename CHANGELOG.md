@@ -8,6 +8,47 @@ A tag de um módulo aninhado leva o prefixo do diretório: `sdk/v0.2.1`.
 
 ---
 
+## [0.32.0] — 2026-09-05
+
+Fase 4 do plano dos drivers: **Redshift no load.**
+
+```go
+To: redshift.Table{
+    DSN: rsDSN, Name: "landing.pedidos",
+    Staging: "s3://meu-bucket/stage/",
+    IAMRole: "arn:aws:iam::123456789012:role/redshift-copy",
+    Store:   s3.New(cliente),
+}
+```
+
+`INSERT` linha a linha no Redshift é inviável — é colunar, e cada insert paga um
+bloco. O lote vai para o S3 e o cluster faz `COPY`, que é por que `Staging` e
+`IAMRole` não são opcionais: **não há caminho inline**.
+
+`IAMRole` é role ARN, e **chave de acesso é recusada**: ela acabaria no log de
+query do cluster, que muita gente lê.
+
+A dedup é `CREATE TEMP TABLE … (LIKE destino)`, `COPY`, `MERGE … WHEN NOT
+MATCHED THEN INSERT` com a lista de colunas **nomeada** — nomeada sempre, pelo
+motivo que custou a `v0.12.0`.
+
+### Este driver sai com verificação parcial, e isso está no README
+
+Não existe imagem do Redshift. O que é testado sem cluster é a geração do SQL
+como função pura, a escrita do staging e a ordem dos comandos. O que **não** é
+testado é que um cluster de verdade aceita esse SQL. Todo outro destino deste
+SDK é provado contra o servidor real pelo menos uma vez; este não, e o motivo é
+que esse servidor não pode ser levantado.
+
+### Performance
+
+`EncodeNDJSON` passou de ~5 alocações por linha para **13 no total** em 10 mil
+linhas: as chaves são serializadas uma vez, e o objeto é escrito direto no
+buffer em vez de passar por um `map[string]any` no `json.Encoder` a cada
+registro. O benchmark fica no repositório, e o teste tem teto por linha.
+
+---
+
 ## [0.31.0] — 2026-09-05
 
 Fase 3 do plano dos drivers: **MySQL, os dois lados.** O mesmo pipeline da fase

@@ -431,7 +431,7 @@ a forma é a mesma.
 *Pronto quando:* o mesmo pipeline da fase 2, com uma linha trocada, roda contra
 o MySQL.
 
-### Fase 4 — Redshift no load · `v0.22.0`
+### Fase 4 — Redshift no load · **entregue na `v0.32.0`**
 
 Só depende da fase 1 (staging em S3) e da 2 (reconcile). Sai com a limitação de
 verificação do §4 escrita no README.

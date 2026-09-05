@@ -468,6 +468,46 @@ The driver adds `parseTime=true` to the DSN if you leave it out. The result is
 the same either way — there is a path for the raw text, and a test proving both
 agree — but with it an instant is not re-parsed in Go once per row.
 
+## Redshift
+
+**This driver ships with partial verification, and that belongs here rather
+than in a footnote.** There is no Redshift image to run locally, so:
+
+| | |
+|---|---|
+| tested without a cluster | the generated SQL (`COPY`, `MERGE`, staging table) as pure functions, the S3 staging write, and the order the commands run in |
+| **not** tested | that a real cluster accepts that SQL |
+
+Everything else in this SDK is proved against the real server at least once.
+This one is not, and the reason is that no such server can be started.
+
+```go
+import (
+    "github.com/AreteAcademy/brevis/sdk/store/s3"
+    "github.com/AreteAcademy/brevis/sdk/to/redshift"
+)
+
+To: redshift.Table{
+    DSN:     os.Getenv("RS_DSN"),
+    Name:    "landing.pedidos",
+    Staging: "s3://my-bucket/stage/",
+    IAMRole: "arn:aws:iam::123456789012:role/redshift-copy",
+    Store:   s3.New(client),
+}
+```
+
+Row-by-row `INSERT` into Redshift is not viable — it is a columnar store, and
+every insert pays for a block. The batch goes to S3 and the cluster `COPY`s it,
+which is why `Staging` and `IAMRole` are not optional: there is no inline path.
+
+**`IAMRole` is a role ARN, and an access key is refused.** A key in the `COPY`
+statement lands in the cluster's query log, which many people can read.
+
+`Dedup: DedupMerge` runs `CREATE TEMP TABLE … (LIKE destination)`, `COPY` into
+it, then `MERGE … WHEN NOT MATCHED THEN INSERT` with the column list **named**.
+Named always: the BigQuery `INSERT ROW` matches by position, and v0.12.0 shipped
+with the columns swapped because nobody had seen the generated SQL.
+
 ## Pagination
 
 Four strategies, picked by which field you set. Setting two is an error, not a
