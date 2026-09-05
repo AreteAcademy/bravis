@@ -61,6 +61,16 @@ status e corpo, com retry onde faz sentido.
 Os tipos vêm do **OID declarado** na leitura e do `data_type` na escrita — não do
 tipo Go, que não distingue `DATE` de `TIMESTAMPTZ`.
 
+### `from/mysql` e `to/mysql`, ponto a ponto
+
+| | |
+|---|---|
+| `mysql.Query{DSN, SQL, Args}` | parâmetros são `?`; lê em fluxo |
+| `mysql.Table{DSN, Name, BatchSize}` | `INSERT` multi-linha em transação |
+| `BatchSize` | existe aqui e **não** no Postgres: não há `COPY`, e pacote grande esbarra em `max_allowed_packet` |
+| `Dedup: DedupMerge` | `INSERT IGNORE`, com o mesmo índice único exigido |
+| tipos | de `information_schema.data_type` — sem ele, `DECIMAL` e `INT` virariam base64 |
+
 ### `from.Files`, ponto a ponto
 
 | | |

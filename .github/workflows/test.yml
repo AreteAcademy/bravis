@@ -52,6 +52,7 @@ jobs:
       BREVIS_IT_S3_KEY: brevis
       BREVIS_IT_S3_SECRET: brevis-secret
       BREVIS_IT_PG_DSN: postgres://brevis:brevis@localhost:55432/brevis_it
+      BREVIS_IT_MYSQL_DSN: root:brevis@tcp(localhost:53306)/brevis_it
       GCP_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS }}
 
     steps:
@@ -87,20 +88,23 @@ jobs:
       # O Postgres sobe pelo mesmo compose que roda na máquina de quem
       # desenvolve, e não por um service container -- assim o comando que
       # conserta na CI é o mesmo que conserta local.
-      - name: Start Postgres
+      - name: Start Postgres and MySQL
         run: |
-          docker compose -f docker-compose.drivers.yml up -d postgres
-          for i in $(seq 1 40); do
-            estado=$(docker compose -f docker-compose.drivers.yml ps postgres --format '{{.Health}}')
-            if [ "$estado" = "healthy" ]; then
-              echo "Postgres no ar"
-              exit 0
+          docker compose -f docker-compose.drivers.yml up -d postgres mysql
+          for servico in postgres mysql; do
+            pronto=""
+            for i in $(seq 1 60); do
+              estado=$(docker compose -f docker-compose.drivers.yml ps "$servico" --format '{{.Health}}')
+              if [ "$estado" = "healthy" ]; then pronto=1; break; fi
+              sleep 2
+            done
+            if [ -z "$pronto" ]; then
+              echo "::error::O $servico não subiu; os testes dele não teriam rodado"
+              docker compose -f docker-compose.drivers.yml logs "$servico"
+              exit 1
             fi
-            sleep 2
+            echo "$servico no ar"
           done
-          echo "::error::O Postgres não subiu; os testes dos drivers SQL não teriam rodado"
-          docker compose -f docker-compose.drivers.yml logs postgres
-          exit 1
 
       - name: Integration - object storage (MinIO)
         run: |
@@ -110,10 +114,10 @@ jobs:
       - name: Poda de dependência por driver
         run: .github/scripts/pruning-check.sh
 
-      - name: Integration - Postgres
+      - name: Integration - Postgres e MySQL
         run: |
           cd sdk
-          go test -v -timeout 10m -run Integration ./to/postgres/
+          go test -v -timeout 10m -run Integration ./to/postgres/ ./to/mysql/
 
       # secrets não pode ser usado em if: de step, então vira variável de
       # ambiente no job e a checagem é sobre ela.

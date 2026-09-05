@@ -8,6 +8,36 @@ A tag de um módulo aninhado leva o prefixo do diretório: `sdk/v0.2.1`.
 
 ---
 
+## [0.31.0] — 2026-09-05
+
+Fase 3 do plano dos drivers: **MySQL, os dois lados.** O mesmo pipeline da fase
+2, com uma linha trocada — que era o critério de pronto, e é o teste que prova.
+
+```go
+From: frommy.Query{DSN: dsn, SQL: "SELECT … WHERE id > ? ORDER BY id LIMIT ?", Args: args}
+To:   tomy.Table{DSN: dsn, Name: "landing.pedidos"}
+```
+
+Duas diferenças em relação ao Postgres, e as duas são do banco:
+
+**Não há `COPY`.** `LOAD DATA LOCAL INFILE` costuma vir desabilitado no servidor
+e no cliente, então a carga é `INSERT` multi-linha em transação. É por isso que
+`BatchSize` existe aqui e **não** existe no driver do Postgres: pacote grande
+esbarra em `max_allowed_packet`, e o tamanho do lote é escolha de quem carrega.
+
+**Dedup é `INSERT IGNORE`**, com o mesmo índice único exigido e nunca criado.
+
+Os tipos vêm de `information_schema.data_type`, porque o `database/sql` devolve
+`[]byte` para quase tudo quando se lê em `any` — sem o tipo declarado, todo
+`DECIMAL` viraria base64 no JSON, e todo `INT` também.
+
+O driver acrescenta `parseTime=true` ao DSN. **O resultado é o mesmo sem ele** —
+há caminho para o texto cru, e há teste provando que os dois concordam. O que
+muda é o custo: sem ele, cada instante é reparseado em Go uma vez por linha,
+depois de o driver já ter feito o trabalho.
+
+---
+
 ## [0.30.0] — 2026-09-05
 
 Fase 2 do plano dos drivers: **Postgres, os dois lados.**

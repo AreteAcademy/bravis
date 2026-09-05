@@ -423,7 +423,7 @@ dedup, a tabela de tipos com teste por linha.
 dedup provada por carregar o mesmo lote duas vezes — o teste que já existe para
 o BigQuery, portado.
 
-### Fase 3 — MySQL, os dois lados · `v0.21.0`
+### Fase 3 — MySQL, os dois lados · **entregue na `v0.31.0`**
 
 Mais barato depois da fase 2: muda a lib, o dialeto e a estratégia de escrita;
 a forma é a mesma.

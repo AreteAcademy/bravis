@@ -434,6 +434,40 @@ which needs a **unique index on `ingestion_id`**. The SDK checks that it exists
 and refuses by name if it does not. It never creates one: a loader that can
 create an index can lock a production table.
 
+## MySQL
+
+The same shape as Postgres, one line changed:
+
+```go
+import (
+    frommy "github.com/AreteAcademy/brevis/sdk/from/mysql"
+    tomy   "github.com/AreteAcademy/brevis/sdk/to/mysql"
+)
+
+From: frommy.Query{DSN: dsn, SQL: "SELECT * FROM pedidos WHERE id > ? ORDER BY id LIMIT ?", Args: args}
+To:   tomy.Table{DSN: dsn, Name: "landing.pedidos"}
+```
+
+Two differences from Postgres, and both are the database's, not a design choice:
+
+**There is no `COPY`.** `LOAD DATA LOCAL INFILE` usually arrives disabled on both
+the server and the client, so the load is a multi-row `INSERT` inside a
+transaction. That is why `Table.BatchSize` exists here and does not exist on the
+Postgres driver: large packets run into `max_allowed_packet`, and the batch size
+is the caller's call. It defaults to 1000.
+
+**Dedup is `INSERT IGNORE`**, which needs the same unique index on
+`ingestion_id`, checked the same way and never created.
+
+Types come from `information_schema.data_type`, because `database/sql` hands
+back `[]byte` for nearly everything when you read into `any` — without the
+declared type every `DECIMAL` would become base64 in the JSON, and so would
+every `INT`.
+
+The driver adds `parseTime=true` to the DSN if you leave it out. The result is
+the same either way — there is a path for the raw text, and a test proving both
+agree — but with it an instant is not re-parsed in Go once per row.
+
 ## Pagination
 
 Four strategies, picked by which field you set. Setting two is an error, not a

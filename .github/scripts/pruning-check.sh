@@ -45,6 +45,11 @@ verificar "postgres" \
   "_ = postgres.Query{}" \
   "cloud.google.com aws-sdk-go"
 
+verificar "mysql" \
+  "	\"$MODULO/from/mysql\"" \
+  "_ = mysql.Query{}" \
+  "jackc/pgx cloud.google.com aws-sdk-go"
+
 verificar "bigquery" \
   "	\"$MODULO/to/bigquery\"" \
   "_ = bigquery.Table{}" \
