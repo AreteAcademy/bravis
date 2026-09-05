@@ -59,7 +59,7 @@ func (f Files) Write(ctx context.Context, records []core.Envelope, opt core.Writ
 		return nil, err
 	}
 
-	loc, err := core.ParseLocation(f.Path)
+	loc, err := core.ParseLocation(comoDiretorio(f.Path))
 	if err != nil {
 		return nil, err
 	}
@@ -98,11 +98,44 @@ func (f Files) Write(ctx context.Context, records []core.Envelope, opt core.Writ
 		Strategy:    "file",
 		Format:      string(format),
 		Dedup:       core.DedupNone,
+		// O caminho COMPLETO, e nao a chave: o que sai daqui tem de poder
+		// voltar num from.Files sem ninguem remontar o esquema e o bucket.
+		Objects: []string{referencia(loc, key)},
 	}, nil
 }
 
 // Describe satisfies core.Writer.
+//
+// Ele nomeia o DIRETORIO, que e o que foi configurado. O arquivo escrito sai
+// em Result.Objects -- e sao coisas diferentes: um Describe que mudasse a cada
+// carga deixaria de identificar o destino no log.
 func (f Files) Describe() string { return f.Path }
+
+// comoDiretorio garante que o Path seja lido como diretorio.
+//
+// O ParseLocation e escrito para LEITURA, onde o ultimo segmento sem barra e o
+// nome de um objeto -- "s3://bucket/dia=1/dados.ndjson". Aqui ele e sempre
+// diretorio, porque o nome do arquivo e deste driver: ele carrega um carimbo de
+// tempo, para uma segunda carga nao sobrescrever a primeira.
+//
+// Sem isto, `to.Files{Path: "s3://bucket/landing"}` escrevia em
+// `s3://bucket/parte-...` -- o `landing` era descartado como se fosse nome de
+// arquivo, e nada dizia. O arquivo aparecia um nivel acima, e quem fosse
+// procura-lo no lugar configurado nao acharia.
+func comoDiretorio(p string) string {
+	if p == "" || strings.HasSuffix(p, "/") {
+		return p
+	}
+	return p + "/"
+}
+
+// referencia monta o caminho que o from.Files consegue reler.
+func referencia(loc core.Location, key string) string {
+	if loc.Scheme == "" {
+		return key
+	}
+	return loc.Scheme + "://" + loc.Bucket + "/" + key
+}
 
 // refuseUnsupported says no to what a directory cannot do, naming the option
 // and the driver. A flag that is quietly ignored is worse than an error.

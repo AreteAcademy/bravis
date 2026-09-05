@@ -196,6 +196,16 @@ type Result struct {
 	// nao diz quais obriga a proxima execucao a refazer tudo.
 	FailedSources []core.SourceFailure
 
+	// Objects são os objetos que a carga escreveu e que continuam lá.
+	//
+	// Com to.Files, o arquivo. Com um destino que estagia e apaga, vazio -- um
+	// caminho reportado que já não existe é pior que nenhum.
+	//
+	// Ele existe para o caso de um passo escrever o arquivo e outro lê-lo: sem
+	// isto, quem escreveu não sabe o que escreveu, porque o nome carrega um
+	// carimbo de tempo que o driver escolhe.
+	Objects []string
+
 	// Diagnostics the destination reported per row, when it refused any.
 	RowErrors []string
 
@@ -248,6 +258,13 @@ func (r *Result) Args() []any {
 	}
 	if n := len(r.FailedSources); n > 0 {
 		args = append(args, "fontes_falharam", n)
+	}
+	if len(r.Objects) == 1 {
+		args = append(args, "objeto", r.Objects[0])
+	} else if len(r.Objects) > 1 {
+		// Com FlushEvery sao varios, e despejar cinquenta caminhos numa linha
+		// de log a torna ilegivel. A lista inteira esta em Result.Objects.
+		args = append(args, "objetos", len(r.Objects), "primeiro", r.Objects[0])
 	}
 	return args
 }

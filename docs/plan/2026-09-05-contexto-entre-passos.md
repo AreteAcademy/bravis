@@ -379,3 +379,54 @@ ele.
 - **`action:` roda em processo**, então poderia devolver o mapa direto sem passar
   por arquivo. É uma otimização e uma inconsistência ao mesmo tempo; vale medir
   se importa antes de decidir.
+
+---
+
+## 9. O que a primeira conversa sobre isto mudou
+
+Antes de construir o transporte, duas coisas apareceram e uma delas o dispensa
+para o caso que motivou o pedido.
+
+### O `BREVIS_RUN_ID` já é o token compartilhado
+
+O caso concreto era: um extract em Go escreve um arquivo, um load em Go o lê. O
+motor **já injeta `BREVIS_RUN_ID` em toda task** da execução, e o `from.Files`
+aceita glob:
+
+```go
+// pod do extract
+To: to.Files{Path: "s3://bucket/stage/" + os.Getenv("BREVIS_RUN_ID") + "/"}
+
+// pod do load
+From: from.Files{Path: "s3://bucket/stage/" + os.Getenv("BREVIS_RUN_ID") + "/*.ndjson"}
+```
+
+Nenhum mecanismo novo. E para esse caso é **melhor** que o contexto: sobrevive à
+retentativa (mesmo run, mesmo prefixo), não tem teto de tamanho porque não
+trafega nada, e um `publish.sh` faz igual com `$BREVIS_RUN_ID`.
+
+**O contexto passa a valer quando o passo seguinte precisa de algo que só foi
+descoberto na execução e não é derivável** — uma marca d'água que a fonte
+devolveu, quais das 4.803 origens falharam, a versão de schema que o fornecedor
+mandou hoje. Nenhum desses apareceu ainda.
+
+Construir o transporte antes disso custaria o motor inteiro — ler a mensagem de
+término, persistir, validar, montar o `BREVIS_INPUT` — para servir um caso que
+uma variável de ambiente já serve. E o desenho ficaria moldado por um caso
+hipotético, que é como se erra a forma.
+
+### E o `to.Files` não dizia o que escrevia
+
+Corrigido na `sdk/v0.43.0`, e vale por si: o driver escolhe o nome do arquivo, e
+o log dizia `estrategia=file` sem dizer qual.
+
+Escrever esse teste descobriu um defeito maior: `to.Files{Path: "s3://bucket/landing"}`,
+sem barra no fim, escrevia em `s3://bucket/parte-...` — descartando o `landing`
+como se fosse nome de arquivo, em silêncio.
+
+### A lib de Node e Python não é um projeto
+
+O contrato é duas variáveis de ambiente e um arquivo JSON. A "lib" para isso tem
+umas vinte linhas em qualquer linguagem. O que precisa ficar bom é o contrato;
+as libs são conveniência sobre ele — e planejá-las como entrega própria inverte
+a ordem.

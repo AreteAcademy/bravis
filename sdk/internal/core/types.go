@@ -184,6 +184,19 @@ type LoadResult struct {
 	RowsIgnored  int64         // rows MERGE matched as already present; 0 unless DedupMerge
 	TableCreated bool          // whether this load created the destination table
 	ErrorRows    []string      // error descriptions from BigQuery per row (truncated)
+
+	// Objects sao os objetos que esta carga escreveu E QUE CONTINUAM LA.
+	//
+	// O to.Files escolhe o nome do arquivo -- ele carrega um carimbo de tempo,
+	// para uma segunda carga nao sobrescrever a primeira --, e ate a v0.43.0
+	// nao dizia qual escolheu. Quem escreveu nao sabia o que escreveu, e o log
+	// dizia "estrategia=file" sem dizer qual arquivo: a informacao que falta
+	// as tres da manha.
+	//
+	// "Que continuam la" e a regra, e ela exclui o staging que o destino
+	// apaga: um caminho reportado que ja nao existe e pior que nenhum, porque
+	// alguem vai tentar le-lo.
+	Objects []string
 }
 
 // RetryConfig controls retry behavior for extract.

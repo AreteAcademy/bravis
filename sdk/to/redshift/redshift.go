@@ -130,7 +130,11 @@ func (t Table) Write(ctx context.Context, envelopes []core.Envelope, opt core.Wr
 	}
 	uri := "s3://" + local.Bucket + "/" + chave
 
-	if !t.KeepStagedFile {
+	if t.KeepStagedFile {
+		// So quando ele fica. Reportar um caminho que a limpeza vai apagar
+		// seria pior que nao reportar: alguem tentaria le-lo.
+		res.Objects = []string{uri}
+	} else {
 		defer func() {
 			// O arquivo de staging fica se a limpeza falhar: perder a carga
 			// por causa de um DELETE seria trocar um problema pequeno por um

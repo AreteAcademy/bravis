@@ -8,6 +8,46 @@ A tag de um módulo aninhado leva o prefixo do diretório: `sdk/v0.2.1`.
 
 ---
 
+## [0.43.0] — 2026-09-05
+
+### Corrigido: `to.Files` escrevia no diretório errado, sem dizer
+
+**Este é o mais sério dos dois, e apareceu ao escrever o teste do outro.**
+
+```go
+to.Files{Path: "s3://bucket/landing"}   // sem barra no fim
+```
+
+escrevia em `s3://bucket/parte-...`, **descartando o `landing` inteiro**. O
+`ParseLocation` é escrito para leitura, onde o último segmento sem barra é o
+nome de um objeto — `s3://bucket/dia=1/dados.ndjson`. No `to.Files` o nome do
+arquivo é do driver, então o `Path` é sempre diretório.
+
+Nada dizia. O arquivo aparecia um nível acima, e quem fosse procurá-lo no lugar
+configurado não acharia.
+
+### Adicionado: `Result.Objects`
+
+O `to.Files` escolhe o nome do arquivo — ele carrega um carimbo de tempo, para
+uma segunda carga não sobrescrever a primeira — e **não dizia qual escolheu**.
+Quem escreveu não sabia o que escreveu, e o log dizia `estrategia=file` sem
+dizer qual arquivo.
+
+```go
+res.Objects[0]   // "s3://bucket/landing/parte-1788639822216855000.ndjson"
+```
+
+O caminho que sai de uma escrita **volta direto numa leitura**, sem remontar
+esquema e bucket — que é o que um `extract` num pod e um `load` em outro
+precisam. Com `FlushEvery`, uma entrada por leva.
+
+`Objects` guarda só o que **continua lá**: um destino que estagia e apaga o
+deixa vazio. Um caminho reportado que já não existe é pior que nenhum, porque
+alguém vai tentar lê-lo. Por isso o BigQuery e o Redshift só o preenchem com
+`KeepStagedFile`.
+
+---
+
 ## [0.42.1] — 2026-09-05
 
 Sem mudança de código no SDK.

@@ -278,7 +278,11 @@ func (l *Loader) Load(ctx context.Context, envelopes ...core.Envelope) (*core.Lo
 	} else {
 		var bytesStaged int64
 		if result.Strategy == "gcs" {
-			bytesStaged, rowErrs, err = l.loadViaGCS(ctx, table, data, len(envelopes))
+			var objeto string
+			bytesStaged, objeto, rowErrs, err = l.loadViaGCS(ctx, table, data, len(envelopes))
+			if objeto != "" {
+				result.Objects = []string{objeto}
+			}
 		} else {
 			bytesStaged, rowErrs, err = l.loadInline(ctx, table, data)
 		}
@@ -484,10 +488,10 @@ func (l *Loader) loadInline(ctx context.Context, table *bigquery.Table, data []b
 	return int64(len(data)), nil, nil
 }
 
-func (l *Loader) loadViaGCS(ctx context.Context, table *bigquery.Table, data []byte, rowCount int) (int64, []string, error) {
+func (l *Loader) loadViaGCS(ctx context.Context, table *bigquery.Table, data []byte, rowCount int) (bytesStaged int64, objeto string, rowErrs []string, err error) {
 	format, err := sourceFormat(l.cfg.Format)
 	if err != nil {
-		return 0, nil, err
+		return 0, "", nil, err
 	}
 
 	today := time.Now().UTC().Format("2006-01-02")
@@ -499,13 +503,13 @@ func (l *Loader) loadViaGCS(ctx context.Context, table *bigquery.Table, data []b
 	if _, err := wc.Write(data); err != nil {
 		_ = wc.Close()
 		_ = obj.Delete(ctx)
-		return 0, nil, l.stagingError(err, rowCount)
+		return 0, "", nil, l.stagingError(err, rowCount)
 	}
 	// GCS reports a missing bucket on Close, not on Write: the object is only
 	// created when the writer flushes.
 	if err := wc.Close(); err != nil {
 		_ = obj.Delete(ctx)
-		return 0, nil, l.stagingError(err, rowCount)
+		return 0, "", nil, l.stagingError(err, rowCount)
 	}
 
 	gcsRef := bigquery.NewGCSReference(fmt.Sprintf("gs://%s/%s", l.cfg.StagingBucket, objName))
@@ -520,14 +524,17 @@ func (l *Loader) loadViaGCS(ctx context.Context, table *bigquery.Table, data []b
 	rows, err := runLoadJob(ctx, loader)
 	if err != nil {
 		_ = obj.Delete(ctx)
-		return 0, rows, err
+		return 0, "", rows, err
 	}
 
 	if !l.cfg.KeepStagedFile {
 		if err := obj.Delete(ctx); err != nil {
 			slog.WarnContext(ctx, "staged object left behind", "object", objName, "error", err)
 		}
+		// Apagado: nao se reporta caminho que ja nao existe, senao alguem
+		// tenta le-lo.
+		return int64(len(data)), "", nil, nil
 	}
 
-	return int64(len(data)), nil, nil
+	return int64(len(data)), fmt.Sprintf("gs://%s/%s", l.cfg.StagingBucket, objName), nil, nil
 }

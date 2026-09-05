@@ -306,6 +306,9 @@ func somar(res *Result, lr *core.LoadResult) {
 	res.Dedup = lr.Dedup
 	res.TableCreated = res.TableCreated || lr.TableCreated
 	res.RowErrors = append(res.RowErrors, lr.ErrorRows...)
+	// Acumula: com levas sao varios arquivos, e reportar so o ultimo faria o
+	// passo seguinte ler um pedaco.
+	res.Objects = append(res.Objects, lr.Objects...)
 }
 
 func apply(res *Result, lr *core.LoadResult) {
@@ -317,6 +320,7 @@ func apply(res *Result, lr *core.LoadResult) {
 	res.Dedup = lr.Dedup
 	res.TableCreated = lr.TableCreated
 	res.RowErrors = lr.ErrorRows
+	res.Objects = lr.Objects
 }
 
 // classifyExtract turns a transport or decode failure into the typed error

@@ -508,6 +508,28 @@ it, then `MERGE … WHEN NOT MATCHED THEN INSERT` with the column list **named**
 Named always: the BigQuery `INSERT ROW` matches by position, and v0.12.0 shipped
 with the columns swapped because nobody had seen the generated SQL.
 
+## Knowing what a load wrote
+
+`to.Files` picks the file name — it carries a timestamp so a second load does
+not overwrite the first — and `Result.Objects` is where it says which:
+
+```go
+res, _ := sdk.Load(ctx, dados, sdk.Target{To: to.Files{Path: "s3://bucket/landing/"}})
+res.Objects[0]   // "s3://bucket/landing/parte-1788639822216855000.ndjson"
+```
+
+The path that comes out of a write goes straight back into a read — no
+reassembling scheme and bucket:
+
+```go
+sdk.Extract(ctx, sdk.Source{From: from.Files{Path: res.Objects[0]}})
+```
+
+With `FlushEvery` there is one entry per batch. `Objects` holds only what still
+exists after the load, so a destination that stages and deletes leaves it empty —
+a reported path that is already gone is worse than none, because somebody will
+try to read it.
+
 ## Reading from many sources
 
 ```go
