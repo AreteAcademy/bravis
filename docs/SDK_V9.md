@@ -677,7 +677,71 @@ derrubam cada uma o seu.
 
 ---
 
-## 10. Critério de pronto para a `v0.10.1`
+## 10. Uma renovação que falha grava mesmo assim, e envenena o store — **v0.29.0**
+
+Achado rodando a prova do critério 11 da spec da credencial persistida.
+
+`extract/auth.go`, dentro do `renew`:
+
+```go
+if aplicarRotacao(source, jar.Rotacoes()) {
+    guardar(ctx, r.Store, http.Header(source.Header).Get("Cookie"), stats)   // GRAVA
+}
+if r.ExpiresAt == nil {
+    return nil
+}
+expires, err := r.ExpiresAt(body)
+if err != nil {
+    return fmt.Errorf("refresh %s: %w", redactURL(r.URL), err)               // falha DEPOIS
+}
+```
+
+**A gravação acontece antes da checagem de validade.** Uma renovação que responde
+sem `expires` — ou seja, uma que não autenticou — grava assim mesmo o que o
+servidor mandou de volta.
+
+### Por que isso é pior do que parece
+
+O NextAuth, para uma sessão não autenticada, devolve `Set-Cookie` limpando os
+valores. Medido: a semente tinha 1174 caracteres, e o que foi parar no store tem
+**419** — mesmos nomes de cookie, valores esvaziados. É a credencial de uma
+sessão **deslogada**.
+
+E a ordem de leitura é **store antes da semente** (`core/auth.go:127`, e está
+certa: o guardado é o resultado da última rotação). Então:
+
+1. a renovação falha e grava o cookie deslogado;
+2. da próxima vez o store vence a semente;
+3. **trocar a env por uma credencial boa deixa de resolver** — o valor ruim ganha
+   sempre, e a única saída é apagar o objeto à mão.
+
+Um erro transitório de rede numa renovação não faz isso, porque aí não há
+resposta para rotacionar. O caso que envenena é justamente o mais provável: a
+credencial venceu, a renovação volta não autenticada, e o store guarda a prova
+disso por cima do que ainda podia servir.
+
+### É a armadilha que o vendor em Python já conhecia
+
+O `seed_cookie` do vendor original verificava antes de gravar, e o comentário
+dizia por quê: *"verificar antes da escrita evita que um valor morto pouse como a
+linha mais nova, onde ele ofuscaria o que já está guardado"*. A mesma armadilha,
+num store diferente.
+
+### O conserto
+
+Gravar **depois** de a renovação ser dada por boa — mover o `guardar` para
+depois do `ExpiresAt`, e não gravar em nenhum caminho de erro.
+
+Com `ExpiresAt` nulo não há o que conferir, e aí gravar logo é o certo: o
+chamador abriu mão do sinal de validade.
+
+**Como provar:** um teste com um endpoint de renovação que devolve 200, um
+`Set-Cookie` qualquer e um corpo **sem** `expires`. Depois dele o store tem de
+continuar vazio. Hoje ele tem o cookie.
+
+---
+
+## 11. Critério de pronto para a `v0.10.1`
 
 > Os itens 1 e 2 têm spec de execução própria, com implementação e provas:
 > [`plan/2026-09-03-sdk-conserto-do-merge.md`](plan/2026-09-03-sdk-conserto-do-merge.md).
