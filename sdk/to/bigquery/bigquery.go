@@ -127,6 +127,8 @@ func (b Table) config(opt core.WriteOptions) (*core.LoadConfig, map[string]core.
 		ThresholdForGCS:        limit,
 		Format:                 "ndjson",
 		Columns:                opt.Columns,
+		Schema:                 opt.Schema,
+		PartitionBy:            opt.PartitionBy,
 		Dedup:                  opt.Dedup,
 		ClusterBy:              b.ClusterBy,
 		CreateTable:            create,

@@ -341,3 +341,51 @@ func esconderDSN(err error, dsn string) error {
 	}
 	return fmt.Errorf("%s", strings.ReplaceAll(err.Error(), dsn, "REDACTED"))
 }
+
+// CheckDestination satisfaz core.DestinationChecker: confere a declaracao
+// contra a tabela real, antes de a extracao acontecer.
+//
+// Num vendor com cota, a diferenca entre conferir aqui e conferir no Write e a
+// diferenca entre uma consulta ao information_schema e a janela inteira de
+// quota gasta para descobrir que uma coluna nao bate.
+//
+// Uma tabela que nao existe NAO e erro aqui, e sim no Write -- que e onde a
+// mensagem tambem lista as colunas do lote, para o DDL sair de uma leitura.
+func (t Table) CheckDestination(ctx context.Context, columns []string) error {
+	if len(columns) == 0 || (t.DSN == "" && t.Conn == nil) || t.Name == "" {
+		return nil
+	}
+
+	conn, fechar, err := t.conectar(ctx)
+	if err != nil {
+		return err
+	}
+	defer fechar()
+
+	esquema, tabela, err := partirNome(t.Name)
+	if err != nil {
+		return err
+	}
+	daTabela, _, err := colunasDe(ctx, conn, esquema, tabela)
+	if err != nil || len(daTabela) == 0 {
+		return err
+	}
+
+	tem := make(map[string]bool, len(daTabela))
+	for _, c := range daTabela {
+		tem[c] = true
+	}
+	var ausentes []string
+	for _, c := range columns {
+		if !tem[c] {
+			ausentes = append(ausentes, c)
+		}
+	}
+	if len(ausentes) == 0 {
+		return nil
+	}
+	sort.Strings(ausentes)
+	return fmt.Errorf("the declaration lists %s, which %s does not have. The table has: %s. "+
+		"Caught before the extract, so no source quota was spent",
+		strings.Join(ausentes, ", "), t.Name, strings.Join(daTabela, ", "))
+}

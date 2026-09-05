@@ -63,7 +63,20 @@ type WriteOptions struct {
 	// Columns declares the destination's columns, in DDL order, including the
 	// two the ingestion transformers write. Nil declares nothing. See
 	// sdk.Target.Columns.
+	//
+	// Quando Schema esta preenchido, isto sao os nomes dele: um driver que so
+	// confere nomes nao precisa saber qual das duas o consumidor escreveu.
 	Columns []string
+
+	// Schema e a declaracao COM tipo, e e o que um destino precisa para
+	// CRIAR a tabela. Vazio significa que o consumidor declarou so os nomes,
+	// ou nada -- e nesse caso um destino que criaria a tabela tem de recusar
+	// em vez de inferir.
+	Schema Schema
+
+	// PartitionBy nomeia a coluna de particionamento de uma tabela criada.
+	// Vazio deixa o destino usar o padrao dele.
+	PartitionBy string
 
 	// Dedup selects deduplication. What it costs, and whether it is supported
 	// at all, is the driver's to say -- a directory of files has no key to

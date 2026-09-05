@@ -1,11 +1,9 @@
 package load
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"regexp"
 	"strings"
 	"time"
@@ -21,9 +19,16 @@ import (
 // The SDK does not know your schema -- the payload is yours -- so it cannot
 // write a CREATE for you. Two ways to get one anyway:
 //
+//   - Schema: the columns with a type on each one, and the SDK writes the DDL
 //   - CreateSQL: your DDL, run once when the table is absent
-//   - CreateTable alone: the load job creates it, inferring the schema from
-//     the data (BigQuery's own autodetect)
+//
+// CreateTable with neither is an error naming what is missing. It used to fall
+// back to BigQuery's autodetect, and that was the last place in this SDK where
+// a type came from the data instead of from a declaration -- the invariant I2
+// of plan/2026-09-03-sdk-schema-declarado.md. What it cost is not theoretical:
+// the type of a column came from the FIRST batch, so a field that arrived whole
+// today and fractional tomorrow changed the column's type with nobody writing
+// anything.
 //
 // It never alters a table that already exists. A loader that can ALTER or
 // DROP is a loader that can erase history.
@@ -41,34 +46,97 @@ func (l *Loader) prepareTable(ctx context.Context, table *bigquery.Table, data [
 			"create it, or create it yourself", nameOf(table))
 	}
 
-	if l.cfg.CreateSQL != "" {
+	comoCriar, err := PlanoDeCriacao(l.cfg, nameOf(table))
+	if err != nil {
+		return false, err
+	}
+	if comoCriar == CriarPorSQL {
 		return false, l.createFromSQL(ctx, table)
 	}
+	return false, l.createFromSchema(ctx, table, prov)
+}
 
-	// The SDK types a column only when the caller declared it. Columns is
-	// where the destination's shape is written, so a declaration that names
-	// ingestion_id is the fetcher asking for the SDK's column -- not a default
-	// deciding the table's shape behind its back.
-	//
-	// Nothing declared, nothing to type: the load job infers every column.
-	if !typesAnything(l.cfg.Columns) {
-		return false, nil
+// ComoCriar diz de onde sai a forma da tabela.
+type ComoCriar int
+
+const (
+	// CriarPorSQL roda o DDL do consumidor.
+	CriarPorSQL ComoCriar = iota
+	// CriarPorSchema monta o DDL a partir da declaracao tipada.
+	CriarPorSchema
+)
+
+// PlanoDeCriacao decide como criar a tabela, ou recusa.
+//
+// Funcao PURA, e exportada, pelo motivo que este SDK ja pagou uma vez: uma
+// decisao tomada dentro de um metodo com cliente nunca e vista por um teste.
+// O mergeSQL e o reconcile existem por isso, e o invariante I2 -- "o SDK nunca
+// infere schema" -- so vira propriedade verificavel se der para exercita-lo
+// sem um projeto do BigQuery.
+func PlanoDeCriacao(cfg *core.LoadConfig, tabela string) (ComoCriar, error) {
+	if cfg.CreateSQL != "" {
+		return CriarPorSQL, nil
+	}
+	if len(cfg.Schema) > 0 {
+		return CriarPorSchema, nil
+	}
+	return 0, fmt.Errorf("table %s does not exist and CreateTable is set, but nothing says "+
+		"what type each column is. Declare Target.Schema -- the same list as Columns, with a "+
+		"Type on each entry -- or pass CreateSQL with your own DDL. The SDK does not infer: a "+
+		"type taken from the first batch changes the day a field arrives whole instead of "+
+		"fractional, and nobody writes anything", tabela)
+}
+
+// createFromSchema cria a tabela a partir da declaracao, e de nada mais.
+func (l *Loader) createFromSchema(ctx context.Context, table *bigquery.Table, prov provenance) error {
+	esquema, err := bigquerySchema(l.cfg.Schema)
+	if err != nil {
+		return err
+	}
+	meta := typedTable(l.cfg, esquema, prov)
+	if err := table.Create(ctx, meta); err != nil {
+		return fmt.Errorf("creating %s: %w", nameOf(table), err)
+	}
+	return nil
+}
+
+// bigquerySchema traduz a declaracao para o dialeto do BigQuery.
+//
+// A tabela e curta e escrita, e nao um mapeamento esperto: quem precisa de
+// NUMERIC(18,2), de um REPEATED ou de um RECORD escreve o DDL em CreateSQL,
+// que continua existindo exatamente para isso.
+func bigquerySchema(s core.Schema) (bigquery.Schema, error) {
+	tipos := map[core.ColumnType]bigquery.FieldType{
+		core.TypeString:    bigquery.StringFieldType,
+		core.TypeInt64:     bigquery.IntegerFieldType,
+		core.TypeFloat64:   bigquery.FloatFieldType,
+		core.TypeNumeric:   bigquery.NumericFieldType,
+		core.TypeBool:      bigquery.BooleanFieldType,
+		core.TypeTimestamp: bigquery.TimestampFieldType,
+		core.TypeDate:      bigquery.DateFieldType,
+		core.TypeJSON:      bigquery.JSONFieldType,
+		core.TypeBytes:     bigquery.BytesFieldType,
 	}
 
-	// Two of the declared columns are the SDK's, and they have a shape:
-	//
-	//	ingestion_id         STRING    NOT NULL
-	//	ingestion_loaded_at  TIMESTAMP NOT NULL
-	//
-	// Autodetect cannot produce that -- it infers both as NULLABLE, and
-	// BigQuery refuses to tighten a NULLABLE column afterwards. So the table
-	// is created here instead, from a schema BigQuery itself inferred over
-	// the caller's columns, with the SDK's two overridden.
-	//
-	// The SDK still infers no type of its own. Guessing that a float64 out of
-	// encoding/json means FLOAT64 would put the inference back through a side
-	// door, on the columns least suited to it.
-	return false, l.createTyped(ctx, table, data, prov)
+	out := make(bigquery.Schema, 0, len(s))
+	for _, c := range s {
+		// As duas colunas do SDK tem forma propria, e ela vence a declaracao:
+		// ingestion_id e ingestion_loaded_at sao dele, e um NULLABLE ali
+		// deixaria a dedup casar com nulo.
+		if propria, minha := metadataSchema[c.Name]; minha {
+			out = append(out, propria)
+			continue
+		}
+		t, conhecido := tipos[c.Type]
+		if !conhecido {
+			return nil, fmt.Errorf("column %q has type %q, which BigQuery has no equivalent for",
+				c.Name, c.Type)
+		}
+		out = append(out, &bigquery.FieldSchema{
+			Name: c.Name, Type: t, Required: c.Required,
+		})
+	}
+	return out, nil
 }
 
 // createFromSQL runs the caller's DDL and confirms it produced the table the
@@ -273,33 +341,6 @@ func typesAnything(columns []string) bool {
 	return false
 }
 
-// createTyped creates the destination with ingestion_id and
-// ingestion_loaded_at declared NOT NULL, and the caller's columns typed by
-// BigQuery.
-//
-// It costs one extra load job, on the run that creates the table and never
-// again. The alternative was to guess the caller's types in Go, which is the
-// one thing this SDK will not do.
-func (l *Loader) createTyped(ctx context.Context, table *bigquery.Table, data []byte, prov provenance) error {
-	inferred, err := l.inferSchema(ctx, data)
-	if err != nil {
-		return err
-	}
-
-	meta := typedTable(l.cfg, inferred, prov)
-
-	if err := table.Create(ctx, meta); err != nil {
-		// Two loads racing to create the same table is normal, and the loser
-		// wants the table, not the error.
-		if isConflict(err) {
-			return nil
-		}
-		return fmt.Errorf("creating %s: %w", nameOf(table), err)
-	}
-
-	return nil
-}
-
 // typedTable is the destination's declaration: the caller's columns as
 // BigQuery typed them, with the SDK's two overridden to their declared shape,
 // plus the layout.
@@ -321,8 +362,11 @@ func typedTable(cfg *core.LoadConfig, inferred bigquery.Schema, prov provenance)
 		Description: tableDescription(cfg, prov),
 		Labels:      tableLabels(prov),
 		TimePartitioning: &bigquery.TimePartitioning{
-			Type:                   bigquery.DayPartitioningType,
-			Field:                  core.MetadataLoadedAt,
+			Type: bigquery.DayPartitioningType,
+			// Declarada quando o consumidor declara; senao, a coluna que diz
+			// quando a linha foi escrita -- que e por onde uma landing e lida
+			// quase sempre, e a unica que o SDK sabe que existe.
+			Field:                  particaoDe(cfg),
 			Expiration:             cfg.PartitionExpiration,
 			RequirePartitionFilter: cfg.RequirePartitionFilter,
 		},
@@ -333,52 +377,10 @@ func typedTable(cfg *core.LoadConfig, inferred bigquery.Schema, prov provenance)
 	return meta
 }
 
-// inferSchema asks BigQuery what the caller's columns are, by loading the
-// batch into a throwaway table with autodetect on.
-func (l *Loader) inferSchema(ctx context.Context, data []byte) (bigquery.Schema, error) {
-	format, err := sourceFormat(l.cfg.Format)
-	if err != nil {
-		return nil, err
+// particaoDe resolve a coluna de particionamento.
+func particaoDe(cfg *core.LoadConfig) string {
+	if cfg.PartitionBy != "" {
+		return cfg.PartitionBy
 	}
-
-	tmp := l.bq.Dataset(l.cfg.Dataset).Table(fmt.Sprintf("_brevis_schema_%d", time.Now().UnixNano()))
-	// The expiration matters: an interrupted run must not leave a table
-	// behind forever.
-	if err := tmp.Create(ctx, &bigquery.TableMetadata{
-		ExpirationTime: time.Now().Add(6 * time.Hour),
-	}); err != nil {
-		return nil, fmt.Errorf("creating the schema probe table: %w", err)
-	}
-	defer func() {
-		if err := tmp.Delete(context.WithoutCancel(ctx)); err != nil {
-			// Not fatal: the expiration collects it.
-			_ = err
-		}
-	}()
-
-	source := bigquery.NewReaderSource(bytes.NewReader(data))
-	source.SourceFormat = format
-	source.AutoDetect = true
-
-	if rows, err := runLoadJob(ctx, tmp.LoaderFrom(source)); err != nil {
-		return nil, fmt.Errorf("inferring the schema: %w%s", err, firstRow(rows))
-	}
-
-	md, err := tmp.Metadata(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("reading the inferred schema: %w", err)
-	}
-	return md.Schema, nil
-}
-
-func firstRow(rows []string) string {
-	if len(rows) == 0 {
-		return ""
-	}
-	return ": " + rows[0]
-}
-
-func isConflict(err error) bool {
-	var apiErr *googleapi.Error
-	return errors.As(err, &apiErr) && apiErr.Code == http.StatusConflict
+	return core.MetadataLoadedAt
 }

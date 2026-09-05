@@ -420,7 +420,11 @@ func TestTargetRefusesNoDriver(t *testing.T) {
 	if err == nil {
 		t.Fatal("a Target with no To has nowhere to write to")
 	}
-	for _, want := range []string{"Target.To", "to.BigQuery"} {
+	// "to.BigQuery" saiu da mensagem porque esse tipo não existe desde a
+	// v0.19.0, quando o BigQuery virou to/bigquery.Table. Uma sugestão de erro
+	// que aponta para uma API removida manda o consumidor procurar o que não
+	// há -- e este teste estava fixando exatamente isso.
+	for _, want := range []string{"Target.To", "bigquery.Table"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("the error should say what to pass (%q): %v", want, err)
 		}

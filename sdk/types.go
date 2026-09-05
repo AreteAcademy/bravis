@@ -53,6 +53,19 @@ type (
 	// LoadResult is the low-level load outcome. Prefer Result.
 	LoadResult = core.LoadResult
 
+	// Schema is the destination's declaration with a type on each column, and
+	// it is what a destination needs in order to CREATE the table. See
+	// Target.Schema.
+	Schema = core.Schema
+
+	// Column is one entry of a Schema.
+	Column = core.Column
+
+	// ColumnType is the type of a declared column. The list is short on
+	// purpose: it is not any database's type system, and whoever needs
+	// NUMERIC(18,2) writes the DDL in CreateSQL.
+	ColumnType = core.ColumnType
+
 	// Format names the wire format of a response.
 	Format = core.Format
 
@@ -109,10 +122,25 @@ var (
 	WithFormat                 = core.WithFormat
 	WithThresholdForGCS        = core.WithThresholdForGCS
 	WithColumns                = core.WithColumns
+	WithSchema                 = core.WithSchema
+	WithPartitionBy            = core.WithPartitionBy
 	WithClusterBy              = core.WithClusterBy
 	WithCreateTable            = core.WithCreateTable
 	WithCreateSQL              = core.WithCreateSQL
 	WithPartitionExpiration    = core.WithPartitionExpiration
 	WithRequirePartitionFilter = core.WithRequirePartitionFilter
 	WithDedup                  = core.WithDedup
+)
+
+// Os tipos de coluna. Ver Schema.
+const (
+	TypeString    = core.TypeString
+	TypeInt64     = core.TypeInt64
+	TypeFloat64   = core.TypeFloat64
+	TypeNumeric   = core.TypeNumeric
+	TypeBool      = core.TypeBool
+	TypeTimestamp = core.TypeTimestamp
+	TypeDate      = core.TypeDate
+	TypeJSON      = core.TypeJSON
+	TypeBytes     = core.TypeBytes
 )

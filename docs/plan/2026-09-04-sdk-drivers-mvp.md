@@ -567,3 +567,6 @@ Ainda assim saiu como `v0.33.0`, por duas razões que não são de esforço:
    inferência de tipo, validação antes do extract, e partição declarada. São
    decisão de produto, e um `1.0` que os deixa em aberto congela a superfície
    antes da conversa.
+
+   > Fechados depois disto, na `sdk/v0.35.0`. O motivo 1 — a verificação parcial
+   > do Redshift — continua de pé.

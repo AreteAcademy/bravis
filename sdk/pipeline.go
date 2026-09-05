@@ -8,6 +8,8 @@ import (
 	"log/slog"
 	"os"
 	"time"
+
+	"github.com/AreteAcademy/brevis/sdk/internal/core"
 )
 
 // Pipeline is a whole fetcher as a value. Run takes it from here: flags,
@@ -150,6 +152,16 @@ func Execute(ctx context.Context, p *Pipeline, args []string) error {
 // that replaces the logger first. The log line here is the whole of a
 // fetcher's observability, so it is the part that most needs a test.
 func runPipeline(ctx context.Context, p *Pipeline) error {
+	// A declaracao e conferida contra o destino ANTES da extracao.
+	//
+	// A mesma conferencia roda de novo no Load, e nao e desperdicio: entre uma
+	// e outra a tabela pode mudar, e a do Load e a que decide. O que esta
+	// primeira compra e a quota do fornecedor -- descobrir no Load que uma
+	// coluna nao bate significa ter gasto a janela inteira para isso.
+	if err := checkDestination(ctx, p.Target); err != nil {
+		return err
+	}
+
 	data, err := Extract(ctx, p.Source)
 	if err != nil {
 		return err
@@ -175,6 +187,22 @@ func runPipeline(ctx context.Context, p *Pipeline) error {
 		}
 	}
 	return err
+}
+
+// checkDestination pergunta ao destino, se ele souber responder.
+//
+// Opcional de proposito: um diretorio de arquivos nao tem esquema para
+// conferir, e o Redshift precisaria de um cluster de pe. Um destino que nao
+// pode conferir cedo nao deve ser obrigado a fingir que pode.
+func checkDestination(ctx context.Context, t Target) error {
+	if err := t.validate(); err != nil {
+		return err
+	}
+	verificador, sabe := t.To.(core.DestinationChecker)
+	if !sabe {
+		return nil
+	}
+	return verificador.CheckDestination(ctx, t.colunas())
 }
 
 // runDryRun extracts and maps without writing, printing the first n

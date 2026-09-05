@@ -236,6 +236,14 @@ type LoadConfig struct {
 	// See sdk.Target.Columns for what it checks and when.
 	Columns []string
 
+	// Schema e a declaracao COM tipo. Quando presente, e dela que a tabela
+	// criada tira os tipos -- e nao de autodetect nenhum.
+	Schema Schema
+
+	// PartitionBy nomeia a coluna de particionamento da tabela criada. Vazio
+	// usa o padrao: diaria em ingestion_loaded_at.
+	PartitionBy string
+
 	// ClusterBy names the columns the created table is clustered on. The SDK
 	// cannot guess: it does not know your payload. Ignored when the table
 	// already exists.
@@ -498,6 +506,20 @@ func WithKeepStagedFile(keep bool) LoadOption {
 }
 
 // WithColumns declares the destination's columns. See LoadConfig.Columns.
+// WithSchema declara as colunas COM tipo, que e o que o destino precisa para
+// criar a tabela. Ver sdk.Target.Schema.
+func WithSchema(s Schema) LoadOption {
+	return func(cfg *LoadConfig) {
+		cfg.Schema = s
+		cfg.Columns = s.Names()
+	}
+}
+
+// WithPartitionBy nomeia a coluna de particionamento da tabela criada.
+func WithPartitionBy(coluna string) LoadOption {
+	return func(cfg *LoadConfig) { cfg.PartitionBy = coluna }
+}
+
 func WithColumns(columns []string) LoadOption {
 	return func(cfg *LoadConfig) {
 		cfg.Columns = columns

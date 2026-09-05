@@ -508,6 +508,46 @@ it, then `MERGE … WHEN NOT MATCHED THEN INSERT` with the column list **named**
 Named always: the BigQuery `INSERT ROW` matches by position, and v0.12.0 shipped
 with the columns swapped because nobody had seen the generated SQL.
 
+## Declaring the destination
+
+`Columns` names the destination's columns. `Schema` names them **with a type**,
+and it is what a destination needs in order to *create* the table:
+
+```go
+Target: sdk.Target{
+    To: bigquery.Table{Dataset: "bronze", Name: "pedidos", CreateTable: sdk.Bool(true)},
+    Schema: sdk.Schema{
+        {Name: "ingestion_id",        Type: sdk.TypeString,    Required: true},
+        {Name: "ingestion_loaded_at", Type: sdk.TypeTimestamp, Required: true},
+        {Name: "provider",            Type: sdk.TypeString,    Required: true},
+        {Name: "temperatura",         Type: sdk.TypeFloat64},
+    },
+    PartitionBy: "ingestion_loaded_at",
+}
+```
+
+Setting both `Columns` and `Schema` is an error: two lists of the same thing,
+and the one that loses does so silently.
+
+**`CreateTable` needs `Schema` or `CreateSQL`, and refuses without either.**
+Until v0.35.0 BigQuery fell back to its own autodetect — the last place in this
+SDK where a type came from the data instead of from a declaration. The cost is
+not theoretical: the type came from the *first batch*, so a field that arrived
+whole today and fractional tomorrow changed the column's type with nobody
+writing anything.
+
+The type list is short on purpose. It is not any database's type system: it is
+the set a JSON record produces, with one name for each thing. Whoever needs
+`NUMERIC(18,2)`, a `REPEATED`, or a type only one destination has writes the DDL
+in `CreateSQL`, which exists for exactly that.
+
+**The declaration is checked against the real table before the extract runs.**
+The same check ran at load time before; what changed is the moment, and against
+a vendor with a quota that is the difference between one metadata query and the
+whole window spent to discover a column does not match. Destinations that cannot
+check early — a directory of files has no schema, Redshift would need a live
+cluster — simply do not, rather than pretending to.
+
 ## The record belongs to the chain
 
 `Transform` hands each `Transformer` a copy it made for that record, and

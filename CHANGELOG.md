@@ -8,6 +8,68 @@ A tag de um módulo aninhado leva o prefixo do diretório: `sdk/v0.2.1`.
 
 ---
 
+## [0.35.0] — 2026-09-05
+
+Os três invariantes que estavam abertos desde a spec do schema declarado, sob o
+título "onde a discussão continua" — que é onde um invariante vai morrer.
+
+### I2 — o SDK nunca infere schema
+
+**`CreateTable` agora exige `Schema` ou `CreateSQL`.** Sem um dos dois é erro
+nomeando o que falta.
+
+```go
+Target: sdk.Target{
+    To: bigquery.Table{Dataset: "bronze", Name: "pedidos", CreateTable: sdk.Bool(true)},
+    Schema: sdk.Schema{
+        {Name: "ingestion_id",        Type: sdk.TypeString,    Required: true},
+        {Name: "ingestion_loaded_at", Type: sdk.TypeTimestamp, Required: true},
+        {Name: "temperatura",         Type: sdk.TypeFloat64},
+    },
+},
+```
+
+O BigQuery era o **único destino que ainda inferia** — Postgres, MySQL e
+Redshift já recusavam. O custo não era teórico: o tipo da coluna saía do
+**primeiro lote**, então um campo que chegava inteiro hoje e fracionário amanhã
+mudava o tipo sem ninguém escrever nada. O `inferSchema` foi apagado.
+
+`Columns` continua valendo para quem **não** cria tabela. Declarar os dois é
+erro: duas listas da mesma coisa, e a que perde perde em silêncio.
+
+A lista de tipos é curta de propósito — `TypeString`, `TypeInt64`,
+`TypeFloat64`, `TypeNumeric`, `TypeBool`, `TypeTimestamp`, `TypeDate`,
+`TypeJSON`, `TypeBytes`. Ela não é o sistema de tipos de nenhum banco: quem
+precisa de `NUMERIC(18,2)` escreve o DDL em `CreateSQL`.
+
+### I3 — a divergência aparece antes do extract
+
+A conferência declarado-contra-tabela rodava no `Load`, com o lote na mão. Num
+fornecedor com cota, chegar até ali significa ter gasto a **janela inteira de
+quota** para descobrir que uma coluna não bate.
+
+Agora ela roda **antes do `Extract`**, e a mensagem diz isso: *"Caught before
+the extract, so no source quota was spent"*. Implementada por BigQuery, Postgres
+e MySQL; opcional, porque um diretório não tem esquema e o Redshift precisaria
+de um cluster de pé.
+
+A conferência do `Load` continua, e não é desperdício: entre uma e outra a
+tabela pode mudar, e a do `Load` é a que decide.
+
+### I4 — a partição é declarada
+
+`Target.PartitionBy`. Particionar por uma coluna que o `Schema` não declara é
+erro nomeando a coluna. Vazio mantém o padrão de antes — diária em
+`ingestion_loaded_at` — e a §14 do `SDK_DECISOES.md` registra por que a
+alternativa mais estrita foi considerada e não feita.
+
+### Quem precisa mudar alguma coisa
+
+Só quem usa `CreateTable` e deixava o BigQuery inferir. Troque `Columns` por
+`Schema` com um `Type` em cada entrada — é a mesma lista.
+
+---
+
 ## [0.34.0] — 2026-09-05
 
 **Mudança de contrato no `Transformer`**, e é ela que paga tudo o que vem

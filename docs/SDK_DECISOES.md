@@ -283,21 +283,80 @@ ela, N goroutines fazem N logins, que é exatamente o que essas APIs bloqueiam.
 
 ---
 
-## 14. Onde a discussão continua
+## 14. Os três invariantes, fechados
 
-Três invariantes que o consumidor pediu em
-[`plan/2026-09-03-sdk-schema-declarado.md`](plan/2026-09-03-sdk-schema-declarado.md)
-e que **não estão implementados**:
+A [`plan/2026-09-03-sdk-schema-declarado.md`](plan/2026-09-03-sdk-schema-declarado.md)
+pediu cinco invariantes. Três ficaram abertos por meses, sob o título "onde a
+discussão continua" — que é onde um invariante vai morrer. Fechados na
+`sdk/v0.35.0`.
 
-- **I2** — o SDK ainda infere pelos tipos: `CreateTable` no BigQuery usa
-  autodetect, então os *tipos* das colunas saem do dado, não de uma declaração.
-- **I3** — a conferência declarado-contra-real acontece no `Load`, com o extract
-  já feito. Num vendor com cota, é quota gasta para descobrir que a coluna não
-  bate.
-- **I4** — a partição continua escolhida pelo SDK (diária em
-  `ingestion_loaded_at`), não declarada.
+### I2 — o SDK nunca infere schema
 
-A `v0.18.0` entregou o objetivo mais profundo daquela spec — ler o `main.go` e
-saber quais colunas a tabela tem — por um caminho diferente do que ela propõe
-(`Columns` em vez de um bloco `Schema{}` com `From` por coluna). Os três acima
-seguem em aberto e são decisão de produto, não técnica.
+O BigQuery era o único destino que ainda inferia: `CreateTable` criava a tabela
+com o autodetect dele. Postgres, MySQL e Redshift já recusavam.
+
+O custo não era teórico. O tipo da coluna saía do **primeiro lote**, então um
+campo que chegava inteiro hoje e fracionário amanhã mudava o tipo da coluna sem
+ninguém escrever nada.
+
+Fechado com `Target.Schema` — a mesma lista de `Columns`, com um `Type` em cada
+entrada. `CreateTable` sem `Schema` e sem `CreateSQL` é **erro nomeando o que
+falta**. O `inferSchema` foi apagado.
+
+A decisão vive em `load.PlanoDeCriacao`, **função pura**, pelo motivo que este
+SDK já pagou uma vez: uma decisão tomada dentro de um método com cliente nunca é
+vista por um teste. Um invariante que só dá para exercitar com um projeto do
+BigQuery de pé é um invariante que ninguém exercita.
+
+### I3 — a divergência aparece antes do extract
+
+A conferência declarado-contra-tabela já existia; ela rodava no `Load`, com o
+lote na mão. Num fornecedor com cota, chegar até ali significa ter gasto a
+**janela inteira de quota** para descobrir que uma coluna não bate.
+
+Fechado com `core.DestinationChecker`, chamado pelo `runPipeline` **antes** do
+`Extract`. Implementado por BigQuery, Postgres e MySQL.
+
+É opcional de propósito: um diretório de arquivos não tem esquema para conferir,
+e o Redshift precisaria de um cluster de pé. Um destino que não pode conferir
+cedo não deve ser obrigado a fingir que pode.
+
+A conferência do `Load` **continua**, e não é desperdício: entre uma e outra a
+tabela pode mudar, e a do `Load` é a que decide. O que a primeira compra é a
+quota.
+
+### I4 — a partição é declarada
+
+Era diária em `ingestion_loaded_at`, escolhida pelo SDK. Agora é
+`Target.PartitionBy`, e particionar por uma coluna que o `Schema` não declara é
+erro nomeando a coluna.
+
+**Fechado com uma ressalva escrita:** vazio mantém o padrão de antes. O
+invariante como escrito diz "o SDK não escolhe layout", e um padrão é uma
+escolha. A alternativa — exigir `PartitionBy` sempre que `CreateTable` estiver
+ligado — foi considerada e não feita: uma tabela de landing sem partição custa
+uma varredura completa em cada `MERGE` do bronze, e um erro que empurra alguém a
+escrever `PartitionBy` sem pensar produz a mesma partição com mais passos.
+
+### I1 e I5 já estavam fechados, por outro caminho
+
+**I1** ("nenhuma coluna existe no destino sem estar escrita no fetcher") veio na
+`v0.18.0`, com `Columns` em vez do bloco `Schema{}` que a spec propunha.
+
+**I5** ("como cada coluna é preenchida é declarado") veio na `v0.24.0`, quando o
+metadado virou transformer: *como* cada coluna é preenchida está na cadeia de
+`Transform`, e não num campo `From` por coluna. É mais simples que a proposta, e
+foi pedido exatamente por isso.
+
+---
+
+## 15. Onde a discussão continua
+
+Nada em aberto da spec do schema declarado. O que segue sem resposta é de outro
+lugar:
+
+- **`v1.0.0`** — o roadmap dos drivers aponta para `v1.0.0-rc` na fase 5, e ela
+  saiu como `v0.33.x`. Os dois motivos estão escritos na §9 daquele plano: o
+  Redshift sai com verificação parcial, e um `1.0` congela a superfície.
+- **O `Execute` instala o logger padrão do processo**, o que é decisão de
+  aplicação e não de biblioteca. Marcado para revisão antes do `1.0`.

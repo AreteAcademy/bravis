@@ -44,9 +44,35 @@ type Target struct {
 	// the field. Checked again against the real destination,
 	// where a declared column it lacks is an error naming both sides.
 	//
-	// Nil declares nothing and checks nothing. There is no fallback: this
-	// list is the only place the destination's columns are declared.
+	// Nil declares nothing and checks nothing.
+	//
+	// Use Schema instead when the destination has to CREATE the table: names
+	// alone cannot say what type each column is, and the SDK does not guess.
+	// Setting both is an error.
 	Columns []string
+
+	// Schema is Columns with a type on each column, and it is what a
+	// destination needs in order to create the table.
+	//
+	//	Schema: sdk.Schema{
+	//		{Name: "ingestion_id",        Type: sdk.TypeString,    Required: true},
+	//		{Name: "ingestion_loaded_at", Type: sdk.TypeTimestamp, Required: true},
+	//		{Name: "temperatura",         Type: sdk.TypeFloat64},
+	//	}
+	//
+	// Everything Columns does, Schema does -- it is the same declaration
+	// carrying more. Setting both is an error: two lists of columns are two
+	// sources of truth, and the one that loses does so silently.
+	Schema core.Schema
+
+	// PartitionBy names the column a created table is partitioned on.
+	//
+	// Empty keeps the SDK's default, which is daily on ingestion_loaded_at --
+	// the column that says when the row was written, and the one a landing
+	// table is almost always read by. Declaring it is how you say otherwise.
+	//
+	// Only consulted when the destination creates the table.
+	PartitionBy string
 
 	// Dedup selects deduplication. Zero value appends, which is free. What
 	// DedupMerge costs, and whether a destination supports it at all, is the
@@ -54,22 +80,54 @@ type Target struct {
 	Dedup core.Dedup
 }
 
+// ValidateTarget confere o que a fachada consegue conferir sem tocar o
+// destino: a declaracao consigo mesma.
+//
+// Exportada porque um fetcher pode querer falhar cedo, num teste ou num
+// -dry-run, sem cliente de nuvem nenhum -- e porque um invariante que so da
+// para exercitar com servidor de pe e um invariante que ninguem exercita.
+func ValidateTarget(t Target) error { return t.validate() }
+
 // validate checks what the facade owns. What the destination needs is the
 // destination's to check, and it does so in Write.
 func (d Target) validate() error {
 	if d.To == nil {
 		return fmt.Errorf("Target.To is required: pass a destination, such as " +
-			"to.BigQuery{Dataset: \"bronze\", Table: \"pedidos\"}")
+			"bigquery.Table{Dataset: \"bronze\", Name: \"pedidos\"}")
+	}
+	if len(d.Columns) > 0 && len(d.Schema) > 0 {
+		return fmt.Errorf("Target declares both Columns and Schema, and they are two " +
+			"lists of the same thing -- the one that loses would do so silently. " +
+			"Schema is Columns with a type on each column: keep it and drop Columns")
+	}
+	if err := d.Schema.Check(); err != nil {
+		return err
+	}
+	if d.PartitionBy != "" && len(d.Schema) > 0 {
+		if !d.Schema.Has(d.PartitionBy) {
+			return fmt.Errorf("Target.PartitionBy names %q, which Schema does not declare. "+
+				"A table cannot be partitioned on a column it does not have", d.PartitionBy)
+		}
 	}
 	return nil
+}
+
+// colunas devolve a declaracao efetiva, venha de Columns ou de Schema.
+func (d Target) colunas() []string {
+	if len(d.Schema) > 0 {
+		return d.Schema.Names()
+	}
+	return d.Columns
 }
 
 // options folds the Target into what every driver receives.
 func (d Target) options(run RunContext) core.WriteOptions {
 	return core.WriteOptions{
-		Columns: d.Columns,
-		Dedup:   d.Dedup,
-		Run:     run,
+		Columns:     d.colunas(),
+		Schema:      d.Schema,
+		PartitionBy: d.PartitionBy,
+		Dedup:       d.Dedup,
+		Run:         run,
 	}
 }
 

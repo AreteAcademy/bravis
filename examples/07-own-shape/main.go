@@ -81,28 +81,26 @@ func main() {
 				ClusterBy:   []string{"provider", "entity"},
 			},
 
-			// The table, in the order of its DDL:
+			// The table, in the order of its DDL -- and this IS the DDL:
+			// with CreateTable set, the SDK writes the CREATE from this list
+			// and from nothing else. It does not infer a type from the data,
+			// because the type would then come from the first batch and
+			// change the day a field arrives whole instead of fractional.
 			//
-			//	CREATE TABLE ... (
-			//	  ingestion_id        STRING NOT NULL,
-			//	  ingestion_loaded_at TIMESTAMP NOT NULL,
-			//	  provider            STRING NOT NULL,
-			//	  entity              STRING NOT NULL,
-			//	  source_key          STRING,
-			//	  payload             JSON   NOT NULL
-			//	)
-			//
-			// One list, and it names the two the SDK fills in too. Put this
-			// next to the DDL and the question "do these describe the same
-			// table?" is answered by reading, not by tracing.
-			Columns: []string{
-				"ingestion_id",        // from Metadata
-				"ingestion_loaded_at", // from Metadata
-				"provider",
-				"entity",
-				"source_key",
-				"payload",
+			// One list, and it names the two the SDK fills in too.
+			Schema: sdk.Schema{
+				{Name: "ingestion_id", Type: sdk.TypeString, Required: true},
+				{Name: "ingestion_loaded_at", Type: sdk.TypeTimestamp, Required: true},
+				{Name: "provider", Type: sdk.TypeString, Required: true},
+				{Name: "entity", Type: sdk.TypeString, Required: true},
+				{Name: "source_key", Type: sdk.TypeString},
+				{Name: "payload", Type: sdk.TypeJSON, Required: true},
 			},
+
+			// A partição é declarada, e não escolhida pelo SDK. Vazio mantém
+			// o padrão -- diária em ingestion_loaded_at -- e escrevê-la é
+			// como se diz outra coisa.
+			PartitionBy: "ingestion_loaded_at",
 
 			// Re-running the same window is a no-op. Costs one scan of the
 			// destination per load, which is why it is never on by default.

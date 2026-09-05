@@ -1,6 +1,7 @@
 package load
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strings"
@@ -37,4 +38,34 @@ func checkDeclaredAgainstTable(declared []string, schema bigquery.Schema, table 
 	sort.Strings(absent)
 	return fmt.Errorf("the Columns declaration lists %s, which %s does not have. The table has: %s",
 		strings.Join(absent, ", "), table, namesOf(schema))
+}
+
+// CheckDestination confere a declaracao contra a tabela real, sem carregar
+// nada.
+//
+// A mesma conferencia ja roda no Load. O que muda e o MOMENTO: chamada antes
+// da extracao, ela custa uma consulta de metadados; chamada no Load, ela custa
+// a janela inteira de quota do fornecedor -- que e o invariante I3 do
+// plan/2026-09-03-sdk-schema-declarado.md.
+//
+// Uma tabela que ainda nao existe nao e erro: criar tabela e decisao do Load,
+// e recusar aqui tiraria o CreateTable do caminho.
+func (l *Loader) CheckDestination(ctx context.Context, columns []string) error {
+	if len(columns) == 0 {
+		return nil
+	}
+
+	table := l.bq.Dataset(l.cfg.Dataset).Table(l.cfg.Table)
+	meta, err := table.Metadata(ctx)
+	if err != nil {
+		if isNotFound(err) {
+			return nil
+		}
+		return fmt.Errorf("checking %s before the extract: %w", nameOf(table), err)
+	}
+
+	if err := checkDeclaredAgainstTable(columns, meta.Schema, nameOf(table)); err != nil {
+		return fmt.Errorf("%w. Caught before the extract, so no source quota was spent", err)
+	}
+	return nil
 }

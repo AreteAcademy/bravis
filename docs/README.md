@@ -40,7 +40,7 @@ de fato saiu — **não** como descrição do estado atual.
 |---|---|
 | [`2026-09-03-sdk-recebe-contexto-do-engine.md`](plan/2026-09-03-sdk-recebe-contexto-do-engine.md) | `v0.10.0` |
 | [`2026-09-03-sdk-conserto-do-merge.md`](plan/2026-09-03-sdk-conserto-do-merge.md) | `v0.12.0` |
-| [`2026-09-03-sdk-schema-declarado.md`](plan/2026-09-03-sdk-schema-declarado.md) | **parcial** — veja §14 de `SDK_DECISOES.md` |
+| [`2026-09-03-sdk-schema-declarado.md`](plan/2026-09-03-sdk-schema-declarado.md) | I1 = `v0.18.0`, I5 = `v0.24.0`, I2/I3/I4 = `v0.35.0` — veja §14 de `SDK_DECISOES.md` |
 | [`2026-09-03-sdk-validacao-do-consumidor.md`](plan/2026-09-03-sdk-validacao-do-consumidor.md) | `v0.17.0` |
 | [`2026-09-04-sdk-uma-declaracao-de-colunas.md`](plan/2026-09-04-sdk-uma-declaracao-de-colunas.md) | `v0.18.0` |
 | [`2026-09-04-sdk-drivers-mvp.md`](plan/2026-09-04-sdk-drivers-mvp.md) | fase 0 = `v0.19.0`, fase 1 = `v0.20.0`; **fases 2–5 em aberto** |

@@ -305,3 +305,42 @@ func comParseTime(dsn string) string {
 	}
 	return dsn + "?parseTime=true"
 }
+
+// CheckDestination satisfaz core.DestinationChecker. Mesmo motivo do Postgres:
+// conferir antes custa uma consulta ao information_schema; conferir no Write
+// custa a janela inteira de quota do fornecedor.
+func (t Table) CheckDestination(ctx context.Context, columns []string) error {
+	if len(columns) == 0 || (t.DSN == "" && t.DB == nil) || t.Name == "" {
+		return nil
+	}
+
+	db, fechar, err := t.abrir()
+	if err != nil {
+		return err
+	}
+	defer fechar()
+
+	banco, tabela := partirNome(t.Name)
+	daTabela, _, err := colunasDe(ctx, db, banco, tabela)
+	if err != nil || len(daTabela) == 0 {
+		return err
+	}
+
+	tem := make(map[string]bool, len(daTabela))
+	for _, c := range daTabela {
+		tem[c] = true
+	}
+	var ausentes []string
+	for _, c := range columns {
+		if !tem[c] {
+			ausentes = append(ausentes, c)
+		}
+	}
+	if len(ausentes) == 0 {
+		return nil
+	}
+	sort.Strings(ausentes)
+	return fmt.Errorf("the declaration lists %s, which %s does not have. The table has: %s. "+
+		"Caught before the extract, so no source quota was spent",
+		strings.Join(ausentes, ", "), t.Name, strings.Join(daTabela, ", "))
+}

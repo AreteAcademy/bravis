@@ -36,7 +36,18 @@ func main() {
 		sdk.WithProjectID(*project),
 		sdk.WithDataset(*dataset),
 		sdk.WithTable(*table),
-		sdk.WithCreateTable(true), // so this example runs against an empty dataset
+		// so this example runs against an empty dataset. CreateTable needs the
+		// types: the SDK writes the CREATE from this list and infers nothing.
+		sdk.WithCreateTable(true),
+		sdk.WithSchema(sdk.Schema{
+			{Name: "ingestion_id", Type: sdk.TypeString, Required: true},
+			{Name: "ingestion_loaded_at", Type: sdk.TypeTimestamp, Required: true},
+			{Name: "provider", Type: sdk.TypeString, Required: true},
+			{Name: "entity", Type: sdk.TypeString, Required: true},
+			{Name: "source_key", Type: sdk.TypeString},
+			{Name: "record_ts", Type: sdk.TypeString},
+			{Name: "payload", Type: sdk.TypeJSON, Required: true},
+		}),
 	)
 	if err != nil {
 		log.Fatalf("loader: %v", err)
